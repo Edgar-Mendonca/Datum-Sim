@@ -90,7 +90,9 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
     else u.setData([t, ...ys]);
   };
 
-  createEffect(on([liveTick, idx, range, themeTick, () => results()?.sweep], () => { if (!isXY()) draw(); }));
+  createEffect(on([liveTick, idx, range, () => results()?.sweep], () => { if (!isXY()) draw(); }));
+  // A new theme needs new axis and grid colours: build the plot again.
+  createEffect(on(themeTick, () => { if (u) { u.destroy(); u = null; } if (!isXY()) draw(); }, { defer: true }));
   onMount(() => {
     const ro = new ResizeObserver(() => { if (u) u.setSize({ width: Math.max(200, host.clientWidth), height: plotH() }); });
     ro.observe(host);

@@ -27,16 +27,33 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "Edgar Mendonca",
     "copyright": "© 2026 Edgar Mendonca",
     "category": "Productivity",
     "shortDescription": "Model and simulate dynamic systems",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
-    "fileAssociations": [
-      { "ext": ["dsim"], "name": "Datum Sim model", "description": "Datum Sim model", "role": "Editor" }
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
     ],
-    "resources": { "../py/worker.py": "py/worker.py", "../py/datum_sim/": "py/datum_sim/" },
+    "fileAssociations": [
+      {
+        "ext": [
+          "dsim"
+        ],
+        "name": "Datum Sim model",
+        "description": "Datum Sim model",
+        "role": "Editor"
+      }
+    ],
+    "resources": {
+      "../py/worker.py": "py/worker.py",
+      "../py/datum_sim/*.py": "py/datum_sim/"
+    },
     "windows": {
       "nsis": {
         "installMode": "currentUser",

@@ -1,0 +1,15 @@
+Datum Sim
+Copyright (c) 2026 Edgar Mendonca. MIT licence.
+
+The window bundles SolidJS (MIT), uPlot (MIT, https://github.com/leeoniya/uPlot) and the IBM Plex
+fonts (SIL Open Font Licence 1.1). The desktop shell uses Tauri (MIT or Apache-2.0) and the Rust
+crates listed in Cargo.lock, each under MIT, Apache-2.0, BSD, ISC, Zlib, MPL-2.0 or Unicode
+licences (checked by cargo deny, deny.toml).
+
+The installer carries a Python runtime: CPython (PSF licence), NumPy (BSD-3-Clause), SciPy
+(BSD-3-Clause) and python-control (BSD-3-Clause). No GPL, LGPL or AGPL code is linked into or
+bundled with Datum Sim.
+
+The family workflow, ribbon, File page, updater and printing are taken from Datum Plan and the
+Python runtime pack from Datum Plot (both MIT, same author). The engineering practices in
+docs/MEMORY.md ("How we build") draw on morluto/rea (MIT); no code from it is used.

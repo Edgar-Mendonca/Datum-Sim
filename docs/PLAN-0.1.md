@@ -206,3 +206,22 @@ That is a little over 25. The rest of the brief's list follows its own release p
 8. **Updates with Python (when it arrives).** Plot re-downloads its whole runtime (~100 MB) on every update. Keep that simple rule, or allow a small app-only update when the runtime has not changed?
 9. **Default branch and deployment.** The repo is empty. Our first push (`claude/dreamy-babbage-dyf9nr`) becomes the default branch, as in the other apps. Is that fine, or would you like a `main` branch? Code signing waits for 1.0, as in the other apps. Agree?
 10. **0.1 split.** Ship 0.1 as four small releases (0.1.0 shell → 0.1.1 editor → 0.1.2 blocks and solvers → 0.1.3 results and examples), as in §5?
+
+---
+
+## 10. Answers and outcome (session 2, 2026-10-27)
+
+| Question | Answer | What was done |
+| --- | --- | --- |
+| 1 Accent | Orange `#C2410C` | Applied (styles, icon, File sidebar, site.json) |
+| 2 Python | From the start, small | numpy, SciPy and python-control only; the engine starts on the first analysis |
+| 3 Examples | The four proposed, plus motor simulation | Seven examples: mass–spring–damper, DC motor speed (motor in a subsystem), DC motor position, PMSM speed (field-oriented), pump–tank, cruise control, thermostat |
+| 4 Physical modelling | Agreed in principle | Unchanged: own equation-based components in 0.4 |
+| 5 Priority after 0.1 | Agreed in principle | Unchanged: 0.2, then 0.3, then 0.4 |
+| 6 Ribbon | Same family style | Model · Simulate · Analyze · View · Help + contextual Format |
+| 7 Scopes | uPlot | Done |
+| 8 Updates with Python | Not answered | Family default: one installer per release |
+| 9 Branch and signing | Not answered | Family default: this branch is the default; signing at 1.0 |
+| 10 0.1 split | "A little bigger build", push bit by bit | 0.1.0 holds the shell, editor, blocks, solvers, results, subsystems, motors and Python analysis together; pushed in four commits |
+
+Changes from §4 made while building: the stiff solver is our own Rosenbrock 2(3), not diffsol's BDF (see MEMORY Decisions); signals are vectors from 0.1; subsystems and the zero-order hold and unit delay arrived in 0.1 instead of 0.2.

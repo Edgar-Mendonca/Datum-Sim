@@ -18,18 +18,20 @@ User preferences:
 
 How we build (see PLAN-0.1 §2):
 - Layers point inward: `crates/core` ← `src-tauri` ← `ui`. One owner per meaning (block registry, units, sizes). Expected failures are typed errors, never panics.
-- Every block and solver has a test against a known answer. Solvers also pass the shared conformance contract in `crates/core/src/verify/`.
+- Every block and solver has a test against a known answer: solver conformance in `crates/core/src/solve.rs`, blocks and models in `crates/core/src/verify.rs`, and a dated record in `docs/verification/`.
 - Report only checks that actually ran; say what was not verified.
 
 Checks before pushing:
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace` (includes the `hardening` and verification tests)
-- `npm run check:ui`, then `npm run build:ui` and the UI tests (`node tests_ui/run.cjs`)
+- `python -m unittest discover -s py/tests` (needs `pip install -r py/requirements.txt`)
+- `npm run check:ui`, then `npm run test:ui` (dumps the engine fixture, builds the window, runs the Playwright checks)
 - `cargo deny check` (licences, advisories, sources; CI runs it)
-- Python tests, once Python is in the app
+- A change you can see: check it in the real app (`cargo build -p datum-sim && tests_ui/realapp.sh steps.sh shots/`, see the script) and add a UI check for every bug
 
 Releasing:
 1. Bump the version in `src-tauri/Cargo.toml` and `crates/core/Cargo.toml`.
 2. Add a CHANGELOG section (`## x.y.z — date`).
 3. Push the tag `vX.Y.Z`, or run `release.yml` with workflow_dispatch when tag pushes are blocked. The workflow creates the tag and publishes `DatumSim-x.y.z-setup.exe` and `SHA256SUMS.txt`.
-4. After the first release: tell the user to add Datum Sim to the hub's `apps.json` (in the hub chat).
+4. After the first release: tell the user to add Datum Sim to the hub's `apps.json` and its icon to the hub's `brand/` (in the hub chat).
+5. A change to `py/requirements.txt` needs `py/runtime.txt` bumped, so installed apps unpack the new runtime.
