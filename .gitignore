@@ -1,0 +1,7 @@
+/target
+/node_modules
+/ui/dist
+/src-tauri/gen
+/src-tauri/runtime.zip
+/tests_ui/fixture.json
+__pycache__/

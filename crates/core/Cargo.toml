@@ -1,0 +1,10 @@
+[package]
+name = "datum-core"
+version = "0.1.0"
+license = "MIT"
+edition = "2021"
+description = "Datum Sim engine: model, edit operations, block library, compiler, solvers and results."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

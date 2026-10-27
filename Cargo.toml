@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/core"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Solvers are slow without optimisation; keep tests and dev runs usable.
+[profile.dev.package.datum-core]
+opt-level = 2
