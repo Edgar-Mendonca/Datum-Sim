@@ -130,7 +130,7 @@
 | plan | The user answers PLAN-0.1 §9 | ✅ (session 2: 1, 2, 3, 6, 7, 10; 4, 5 agreed in principle; 8, 9 left as the family default) |
 | 0.1.0 | Engine: model, edits, 45 blocks, compiler, five solvers, events, routing, sweeps, examples, verification and hardening tests | ✅ |
 | 0.1.0 | Shell and window: family ribbon, File page, Options, Help, Roadmap, editor, inspector, scopes, subsystems, Python analyses, print, updater | ✅ |
-| 0.1.0 | CI, release workflow with the Python runtime, cargo deny, UI tests | ✅ (CI not yet seen green on GitHub) |
+| 0.1.0 | CI, release workflow with the Python runtime, cargo deny, UI tests | ✅ (CI green on Linux, Windows and macOS, run 1) |
 | 0.1.0 | First release through the updater | 🔜 (the user starts it: tag `v0.1.0` or run Release) |
 | 0.1.x | Check on a Windows PC: installer, Python first start, printing to PDF, updater | 🔜 |
 | 0.1.x | Wire branch points and labels; faster drawing of very large diagrams; print preview polish; more examples (heat exchanger, compressor anti-surge) | ⬜ |
