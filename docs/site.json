@@ -1,0 +1,27 @@
+{
+  "id": "sim",
+  "name": "Datum Sim",
+  "accent": "#C2410C",
+  "logo": "docs/brand/datum-sim-icon.svg",
+  "tagline": "Model and simulate dynamic systems: block diagrams, control and motors.",
+  "for": "Control, mechanical, electrical, process and mechatronics engineers, researchers and students.",
+  "highlights": [
+    "Draw a model as blocks and wires, press Run and watch live scopes",
+    "About 45 blocks: sources, math, transfer functions, state space, PID, delays, discontinuities, lookup tables",
+    "DC motor and permanent-magnet synchronous motor blocks, with worked speed and position control examples",
+    "Subsystems: group blocks into one, open them, nest them",
+    "Five solvers, from fixed-step Euler to variable-step and stiff, with exact switching times",
+    "Parameter sweeps, step-response specifications, and Bode plots from the built-in Python engine",
+    "Every solver and block checked against known answers"
+  ],
+  "screenshots": ["docs/images/diagram.png"],
+  "roadmap": [
+    { "v": "0.1.x", "title": "First releases", "when": "Next", "items": ["Signed releases through the in-app updater", "More worked examples and a printable verification report", "Wire branch points and labels on wires", "Faster drawing of very large diagrams"] },
+    { "v": "0.2", "title": "Bigger models", "when": "Soon", "items": ["Masks: a subsystem with its own parameter dialog", "Buses and goto/from", "Discrete and multi-rate blocks: discrete transfer functions and PID", "Integrator reset and more event blocks", "Solving algebraic loops", "Induction motor block"] },
+    { "v": "0.3", "title": "Control design", "when": "Soon", "items": ["Operating points (trim) and linearisation of whole models", "Bode, Nyquist and root locus", "PID auto-tuning", "Step-response specifications on any signal"] },
+    { "v": "0.4", "title": "Physical components", "when": "Later", "items": ["Mechanical, rotational, electrical, hydraulic and thermal components you connect by ports", "The app writes and solves the equations (DAEs)"] },
+    { "v": "0.5", "title": "Exchange", "when": "Later", "items": ["FMU import and export (FMI standard)", "Modelica models through an external compiler"] },
+    { "v": "0.6", "title": "Studies", "when": "Later", "items": ["State machines", "Python blocks", "Monte Carlo and sensitivity analysis", "Fitting model parameters to measured data", "Report builder"] },
+    { "v": "1.0", "title": "Validated", "when": "Goal", "items": ["Validation suite and report", "User guide", "Signed installer"] }
+  ]
+}

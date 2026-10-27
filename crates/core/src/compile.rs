@@ -646,3 +646,133 @@ pub fn decimate(t: &[f64], y: &[f64], t0: f64, t1: f64, buckets: usize) -> (Vec<
     }
     (ot, oy)
 }
+
+/// A block's linear system, for analysis (Bode, step, poles and zeros, margins).
+#[derive(Clone, Debug, Serialize)]
+pub struct LinSys {
+    pub name: String,
+    pub a: Vec<Vec<f64>>,
+    pub b: Vec<Vec<f64>>,
+    pub c: Vec<Vec<f64>>,
+    pub d: Vec<Vec<f64>>,
+}
+
+fn rows(m: &Mat) -> Vec<Vec<f64>> {
+    (0..m.r).map(|i| (0..m.c).map(|j| m.at(i, j)).collect()).collect()
+}
+
+/// The linear model of one block: transfer function, zero-pole-gain, state space, PID, gain,
+/// integrator, or the DC motor (voltage to speed).
+pub fn linear(m: &Model, id: u32) -> Result<LinSys, String> {
+    let b = m.block(id).ok_or("Select a block first.")?.clone();
+    let vars = eval_vars(m, &BTreeMap::new()).map_err(|e| e.into_iter().map(|i| i.msg).collect::<Vec<_>>().join("; "))?;
+    let f = Flat { id, name: b.name.clone(), kind: b.kind.clone(), block: b.clone(), inputs: vec![], nout: 1, out_names: vec![] };
+    let p = params(&f, &vars, None).map_err(|e| format!("{}: {e}", b.name))?;
+    let s = |k: &str| p.m.get(k).and_then(|v| v.s().ok()).ok_or_else(|| format!("{}: {k} must be a single number", b.name));
+    let lin = match b.kind.as_str() {
+        "TransferFcn" | "ZPK" | "StateSpace" => {
+            // Build once to get the block's own checks and messages.
+            rt::build(&b.kind, &p, &[p.m.get("B").map_or(1, |m| m.c)]).map_err(|e| format!("{}: {e}", b.name))?;
+            match b.kind.as_str() {
+                "TransferFcn" => rt::tf2ss(&p.m["num"].d, &p.m["den"].d)?,
+                "ZPK" => {
+                    let z = rt::poly(&rt::parse_roots(&p.t["zeros"])?)?;
+                    let k = s("k")?;
+                    rt::tf2ss(&z.iter().map(|v| v * k).collect::<Vec<_>>(), &rt::poly(&rt::parse_roots(&p.t["poles"])?)?)?
+                }
+                _ => {
+                    let mut d = p.m["D"].clone();
+                    let (bm, cm) = (p.m["B"].clone(), p.m["C"].clone());
+                    if d.is_scalar() && d.d[0] == 0.0 {
+                        d = Mat { r: cm.r, c: bm.c, d: vec![0.0; cm.r * bm.c] };
+                    }
+                    rt::Lin { a: p.m["A"].clone(), b: bm, c: cm, d, x0: vec![] }
+                }
+            }
+        }
+        "PID" => {
+            let (kp, ki, kd, n) = (s("P")?, s("I")?, s("D")?, s("N")?);
+            if kd != 0.0 {
+                rt::tf2ss(&[kp + kd * n, kp * n + ki, ki * n], &[1.0, n, 0.0])?
+            } else if ki != 0.0 {
+                rt::tf2ss(&[kp, ki], &[1.0, 0.0])?
+            } else {
+                rt::tf2ss(&[kp], &[1.0])?
+            }
+        }
+        "Gain" => rt::tf2ss(&[s("k")?], &[1.0])?,
+        "Integrator" => rt::tf2ss(&[1.0], &[1.0, 0.0])?,
+        "DCMotor" => {
+            let (r, l, ke, kt, j, bf) = (s("R")?, s("L")?, s("Ke")?, s("Kt")?, s("J")?, s("b")?);
+            rt::Lin {
+                a: Mat { r: 2, c: 2, d: vec![-r / l, -ke / l, kt / j, -bf / j] },
+                b: Mat { r: 2, c: 1, d: vec![1.0 / l, 0.0] },
+                c: Mat { r: 1, c: 2, d: vec![0.0, 1.0] },
+                d: Mat::scalar(0.0),
+                x0: vec![],
+            }
+        }
+        k => return Err(format!("Linear analysis works on transfer functions, zero-pole-gain, state space, PID, gain, integrator and DC motor blocks, not on '{k}'. Linearising whole models arrives in 0.3.")),
+    };
+    Ok(LinSys { name: b.name, a: rows(&lin.a), b: rows(&lin.b), c: rows(&lin.c), d: rows(&lin.d) })
+}
+
+/// Reduce several series sampled at the same times, keeping each one's peaks: the union of the
+/// points `decimate` would keep for every series, so they still share one time axis.
+pub fn decimate_multi(t: &[f64], ys: &[&[f64]], t0: f64, t1: f64, buckets: usize) -> (Vec<f64>, Vec<Vec<f64>>) {
+    let i0 = t.partition_point(|v| *v < t0).saturating_sub(1);
+    let i1 = (t.partition_point(|v| *v <= t1) + 1).min(t.len());
+    if i1 <= i0 {
+        return (vec![], vec![vec![]; ys.len()]);
+    }
+    let idx: Vec<usize> = if i1 - i0 <= buckets * 4 {
+        (i0..i1).collect()
+    } else {
+        let span = (t1 - t0).max(1e-300);
+        let mut keep = Vec::with_capacity(buckets * (2 + 2 * ys.len()));
+        let mut i = i0;
+        for b in 0..buckets {
+            let end_t = t0 + span * (b + 1) as f64 / buckets as f64;
+            let st = i;
+            while i < i1 && (t[i] <= end_t || b == buckets - 1) {
+                i += 1;
+            }
+            if i == st {
+                continue;
+            }
+            keep.push(st);
+            keep.push(i - 1);
+            for y in ys {
+                let (mut lo, mut hi) = (st, st);
+                for k in st..i {
+                    if y[k] < y[lo] {
+                        lo = k;
+                    }
+                    if y[k] > y[hi] {
+                        hi = k;
+                    }
+                }
+                keep.push(lo);
+                keep.push(hi);
+            }
+        }
+        keep.sort_unstable();
+        keep.dedup();
+        keep
+    };
+    (idx.iter().map(|i| t[*i]).collect(), ys.iter().map(|y| idx.iter().map(|i| y[*i]).collect()).collect())
+}
+
+#[cfg(test)]
+mod decimate_tests {
+    #[test]
+    fn keeps_peaks_on_a_shared_axis() {
+        let t: Vec<f64> = (0..100_000).map(|i| i as f64 * 1e-3).collect();
+        let a: Vec<f64> = t.iter().map(|x| if (*x - 37.0).abs() < 1e-9 { 9.0 } else { x.sin() }).collect();
+        let b: Vec<f64> = t.iter().map(|x| if (*x - 61.5).abs() < 1e-9 { -7.0 } else { x.cos() }).collect();
+        let (tt, ys) = super::decimate_multi(&t, &[&a, &b], 0.0, 100.0, 200);
+        assert!(tt.len() < 2000 && ys[0].len() == tt.len() && ys[1].len() == tt.len());
+        assert!(ys[0].contains(&9.0) && ys[1].contains(&-7.0), "peaks of both series are kept");
+        assert!(tt.windows(2).all(|w| w[0] < w[1]));
+    }
+}

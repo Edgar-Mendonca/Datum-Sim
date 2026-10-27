@@ -1,0 +1,20 @@
+[package]
+name = "datum-sim"
+version = "0.1.0"
+edition = "2021"
+description = "Datum Sim: model and simulate dynamic systems."
+license = "MIT"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+datum-core = { path = "../crates/core" }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+serde.workspace = true
+serde_json.workspace = true
+ureq = { version = "2", features = ["json", "native-certs"] }
+sha2 = "0.10"
+zip = { version = "2", default-features = false, features = ["deflate"] }
