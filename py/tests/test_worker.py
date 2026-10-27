@@ -43,6 +43,10 @@ class Analyses(unittest.TestCase):
         self.assertAlmostEqual(re[0], -1.0, places=6)
         self.assertAlmostEqual(abs(r["poles"][0][1]), math.sqrt(3), places=6)
 
+    def test_integrator_is_marginally_stable(self):
+        r = linear.analyse({"A": [[0]], "B": [[1]], "C": [[1]], "D": [[0]], "what": "bode"})
+        self.assertTrue(dict(r["facts"])["Stable"].startswith("marginally"))
+
     def test_unstable_step_is_refused(self):
         with self.assertRaises(ValueError):
             linear.analyse({"A": [[1]], "B": [[1]], "C": [[1]], "D": [[0]], "what": "step"})

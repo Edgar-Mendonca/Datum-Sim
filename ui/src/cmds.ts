@@ -3,7 +3,7 @@ import { batch } from "solid-js";
 import { invoke, listen, Out, Started, Live, Done, ResultsInfo, Issue, Pt } from "./api";
 import {
   out, setOut, act, call, sel, setSel, selBlocks, parent, refreshView, setBackstage, loadOut, toast, setView, View, setIssues, setRunning, running, setPaused, paused,
-  setProgress, setResults, setChans, live, setLiveTick, chans, scopes, setScopes, dview, setLastStatus, openDialog, enter, issues,
+  setProgress, setResults, setChans, live, setLiveTick, scopes, setScopes, dview, setLastStatus, openDialog, enter, issues,
 } from "./store";
 import { fit, zoomBy, viewCenter, quickInsert } from "./canvas";
 import * as D from "./dialogs";
@@ -56,6 +56,9 @@ export const C = {
         if (!scopes().length) setScopes([...new Set(st.chans.filter(c => ["Scope", "XY"].includes(dview()?.blocks.find(b => b.id === c.sink)?.kind ?? "Scope")).map(c => c.sink))].slice(0, 4));
         setLiveTick(t => t + 1);
       });
+      // A short run can finish before this call returns: handle its end now.
+      const early = earlyDone.get(st.gen);
+      if (early) { earlyDone.delete(st.gen); finish(early); }
     } catch (e) {
       const list = e as Issue[] | string;
       if (Array.isArray(list)) { setIssues(list); const first = list.find(i => !i.warn) ?? list[0]; toast(first?.msg ?? "The model has errors."); setLastStatus(`${list.filter(i => !i.warn).length} error(s): see Issues`); if (first?.id) C.reveal(first.id); }
@@ -116,21 +119,26 @@ export const wireRunEvents = () => {
     setProgress(l.progress);
     setLiveTick(t => t + 1);
   });
-  listen("sim-done", async (d: Done) => {
-    if (d.gen !== live.gen) return;
-    batch(() => { setRunning(false); setPaused(false); setProgress(d.ok ? 1 : 0); });
-    if (!d.ok) { toast(d.error ?? "The run failed."); setLastStatus("Run failed"); setIssues([...issues(), { id: 0, msg: d.error ?? "The run failed.", warn: false }]); return; }
-    const r = await invoke<ResultsInfo | null>("results");
-    batch(() => {
-      setResults(r); setLiveTick(t => t + 1);
-      if (d.issues.length) setIssues([...issues(), ...d.issues]);
-      const s = d.stats!;
-      setLastStatus(`${s.stopped ? "Stopped" : "Done"} · ${s.steps.toLocaleString()} steps · ${s.events ? `${s.events} events · ` : ""}${s.ms < 1000 ? `${Math.round(s.ms)} ms` : `${(s.ms / 1000).toFixed(1)} s`}${d.truncated ? " · results cut at 2 million points" : ""}`);
-    });
-    if (d.files.length) toast(`Wrote ${d.files.join(", ")}`, true);
-    refreshView();
-    void chans;
+  listen("sim-done", (d: Done) => {
+    if (d.gen > live.gen) { earlyDone.set(d.gen, d); return; }
+    if (d.gen === live.gen) finish(d);
   });
+};
+
+/** Ends of runs that arrived before the run's own start call returned. */
+const earlyDone = new Map<number, Done>();
+const finish = async (d: Done) => {
+  batch(() => { setRunning(false); setPaused(false); setProgress(d.ok ? 1 : 0); });
+  if (!d.ok) { toast(d.error ?? "The run failed."); setLastStatus("Run failed"); setIssues([...issues(), { id: 0, msg: d.error ?? "The run failed.", warn: false }]); return; }
+  const r = await invoke<ResultsInfo | null>("results");
+  batch(() => {
+    setResults(r); setLiveTick(t => t + 1);
+    if (d.issues.length) setIssues([...issues(), ...d.issues]);
+    const s = d.stats!;
+    setLastStatus(`${s.stopped ? "Stopped" : "Done"} · ${s.steps.toLocaleString()} steps · ${s.events ? `${s.events} events · ` : ""}${s.ms < 1000 ? `${Math.round(s.ms)} ms` : `${(s.ms / 1000).toFixed(1)} s`}${d.truncated ? " · results cut at 2 million points" : ""}`);
+  });
+  if (d.files.length) toast(`Wrote ${d.files.join(", ")}`, true);
+  refreshView();
 };
 
 export const ALL_CMDS: [string, () => void, string?][] = [

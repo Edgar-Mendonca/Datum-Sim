@@ -207,7 +207,11 @@ fn new_model(st: State<St>, example: Option<String>) -> R<Out> {
     if a.run.running {
         return Err("Stop the running simulation first.".into());
     }
-    let m = example.as_deref().and_then(examples::get).unwrap_or_else(Model::new);
+    // Model::new (named, ids from 1), not Model::default.
+    let m = match example.as_deref().and_then(examples::get) {
+        Some(m) => m,
+        None => Model::new(),
+    };
     let m = fresh(&a, m);
     a.doc = Doc::new(m);
     a.run.results = None;

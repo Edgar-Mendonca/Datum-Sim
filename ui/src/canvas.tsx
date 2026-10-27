@@ -1,6 +1,6 @@
 // The block diagram editor: draw blocks and wires, select, move, connect, pan and zoom.
 // Geometry (ports, routed wires) comes from the engine; the window only draws and sends edits.
-import { For, Show, JSX, createSignal, createMemo, onMount, onCleanup, batch } from "solid-js";
+import { For, Show, JSX, createSignal, createMemo, createEffect, onMount, onCleanup, batch, on } from "solid-js";
 import { BlockView, WireView, Pt, num } from "./api";
 import { dview, sel, setSel, act, parent, enter, out, opts, issues, results, chans, openMenu, defOf, lib, openDialog, closeDialog, setScopes, scopes, Item, running, setView, setBackstage } from "./store";
 import { C } from "./cmds";
@@ -272,6 +272,9 @@ export const Canvas = () => {
     }
   };
   const keyup = (e: KeyboardEvent) => { if (e.key === " ") setSpace(false); };
+  // A newly opened diagram (a model or a subsystem) is fitted to the window once it arrives.
+  let fitted = -1;
+  createEffect(on(dview, d => { if (d && d.parent !== fitted) { fitted = d.parent; requestAnimationFrame(fit); } }));
   onMount(() => { addEventListener("mousemove", move); addEventListener("mouseup", up); addEventListener("keyup", keyup); });
   onCleanup(() => { removeEventListener("mousemove", move); removeEventListener("mouseup", up); removeEventListener("keyup", keyup); });
 

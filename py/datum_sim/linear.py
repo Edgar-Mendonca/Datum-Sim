@@ -47,8 +47,11 @@ def analyse(q):
         sys_ = sys_[0, 0]
     note = "The analysis uses the block's first input and first output." if (q.get("B") and len(q["B"][0]) > 1) else ""
     poles = control.poles(sys_)
-    stable = bool(np.all(np.real(poles) < 0)) if len(poles) else True
-    facts = [["Order", str(len(poles))], ["Stable", "yes" if stable else "no (a pole in the right half-plane or on the axis)"]]
+    re = np.real(poles)
+    tol = 1e-9 * max(1.0, float(np.max(np.abs(poles)))) if len(poles) else 0
+    stable = bool(np.all(re < -tol)) if len(poles) else True
+    verdict = "yes" if stable else "no: a pole in the right half-plane" if np.any(re > tol) else "marginally: a pole on the imaginary axis (an integrator or an undamped mode)"
+    facts = [["Order", str(len(poles))], ["Stable", verdict]]
     dc = control.dcgain(sys_)
     facts.append(["Steady-state gain", _f(float(np.real(dc)))])
     out = {"what": what, "control": control.__version__, "note": note}
@@ -63,12 +66,13 @@ def analyse(q):
         out["w"] = _clean(w)
         try:
             gm, pm, wcg, wcp = control.margin(sys_)
-            facts += [["Gain margin", f"{_f(20 * math.log10(gm)) if gm and np.isfinite(gm) and gm > 0 else '∞'} dB at {_f(wcg)} rad/s"],
-                      ["Phase margin", f"{_f(pm)}° at {_f(wcp)} rad/s"]]
+            gm_t = f"{_f(20 * math.log10(gm))} dB at {_f(wcg)} rad/s" if gm and np.isfinite(gm) and gm > 0 and np.isfinite(wcg) else "∞ (the phase never reaches −180°)"
+            pm_t = f"{_f(pm)}° at {_f(wcp)} rad/s" if np.isfinite(pm) and np.isfinite(wcp) else "∞ (the gain never crosses 0 dB)"
+            facts += [["Gain margin", gm_t], ["Phase margin", pm_t]]
         except Exception:  # margins are undefined for some systems (e.g. a pure gain)
             facts.append(["Margins", "not defined for this system"])
         bw = control.bandwidth(sys_) if stable and np.isfinite(dc) and dc != 0 else float("nan")
-        facts.append(["Bandwidth (−3 dB)", f"{_f(bw)} rad/s"])
+        facts.append(["Bandwidth (−3 dB)", f"{_f(bw)} rad/s" if np.isfinite(bw) else "not defined (needs a stable system with a finite, non-zero gain)"])
     elif what == "step":
         if not stable:
             raise ValueError("The step response of an unstable system grows without bound; look at its poles instead.")

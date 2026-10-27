@@ -65,7 +65,7 @@ export const TitleBar = (p: { update: string | null }) => (
     <nav class="tabs">
       <button class="file" onClick={() => setBackstage("home")}>File</button>
       <For each={[["model", "Model"], ["simulate", "Simulate"], ["analyze", "Analyze"], ["view", "View"], ["help", "Help"]]}>{([k, l]) => <button classList={{ on: tab() === k }} onClick={() => setTab(k)}>{l}</button>}</For>
-      <Show when={selBlocks().length}><div class="ctxgrp"><small>Block Tools</small><button classList={{ on: tab() === "format" }} onClick={() => setTab("format")}>Format</button></div></Show>
+      <div class="ctxgrp" style={{ visibility: selBlocks().length ? "visible" : "hidden" }}><small>Block Tools</small><button classList={{ on: tab() === "format" }} onClick={() => setTab("format")}>Format</button></div>
     </nav>
   </header>
 );
