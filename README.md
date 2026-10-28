@@ -29,10 +29,10 @@ Draw a model as blocks and wires, press Run, and see how the system behaves over
 - **Block diagrams**: about 45 blocks (sources, math, transfer functions, state space, PID, delays, discontinuities, lookup tables, scopes). Wires find their own way around the blocks.
 - **Motors**: DC motor and permanent-magnet synchronous motor blocks, with worked speed and position control examples.
 - **Subsystems**: group blocks into one, open them, nest them.
-- **Five solvers**: from fixed-step Euler to variable-step and stiff, with exact switching times.
+- **Five solvers**: from fixed-step Euler to variable-step and stiff; the variable-step solvers find switching times exactly.
 - **Live scopes**, parameter sweeps, results as CSV for Datum Plot.
 - **Analysis** from the built-in Python engine: Bode plots and stability margins, step responses, poles and zeros, rise time, overshoot and settling time.
-- **Checked**: every solver and block is tested against a known answer. See [the verification record](docs/verification/2026-10-27.md).
+- **Checked**: the solvers and main blocks are tested against known answers. See [the verification record](docs/verification/2026-10-27.md).
 
 ![Scopes of a permanent-magnet motor's speed control](docs/images/scopes.png)
 
@@ -46,6 +46,6 @@ python -m pip install -r py/requirements.txt && python -m unittest discover -s p
 npx tauri dev            # run the app
 ```
 
-Datum Sim is part of [Datum](https://edgar-mendonca.github.io/Datum/), a family of free and open-source desktop tools for engineers, scientists, researchers and analysts. Its design guide is [FAMILY.md](https://github.com/Edgar-Mendonca/Datum/blob/HEAD/FAMILY.md); this repo's memory and roadmap are in [docs/MEMORY.md](docs/MEMORY.md).
+Datum Sim is part of [Datum](https://edgar-mendonca.github.io/Datum/apps/sim), a family of free and open-source desktop tools for engineers, scientists, researchers and analysts. Its design guide is [FAMILY.md](https://github.com/Edgar-Mendonca/Datum/blob/HEAD/FAMILY.md); this repo's memory and roadmap are in [docs/MEMORY.md](docs/MEMORY.md).
 
 Licence: [MIT](LICENSE). Third-party notices: [NOTICE](NOTICE).

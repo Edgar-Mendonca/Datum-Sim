@@ -122,6 +122,7 @@
 | 0.1.1 | Library drag uses plain mouse events with a ghost, and the window's `dragDropEnabled` is off | On Windows Tauri catches drags for file drops, so HTML drag-and-drop never reached the diagram (the user's Windows test); mouse events behave the same everywhere and can be tested |
 | 0.1.1 | User libraries (0.2) will be **copied** into models, not linked | The user: "whichever is simpler, safer and faster" |
 | 0.1.1 | Order: motors (0.1.2), discrete control (0.1.3), then wires and scopes; live tuning moves to 0.3 | The user's answers in PLAN-0.1.x §5 |
+| 0.1.1 | `site.json` has `about` and `steps` for the family site's app page (`/apps/sim`), kept true with every release (CLAUDE.md release step 6); README links to that page | The user's request; FAMILY §10. Checking found three overclaims, corrected: sweeps run in Rust (not Python), only the variable-step solvers locate switching exactly, and not every block has its own test yet |
 
 ## 3. Roadmap
 

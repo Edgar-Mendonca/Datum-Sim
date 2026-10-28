@@ -35,3 +35,4 @@ Releasing:
 3. Push the tag `vX.Y.Z`, or run `release.yml` with workflow_dispatch when tag pushes are blocked. The workflow creates the tag and publishes `DatumSim-x.y.z-setup.exe` and `SHA256SUMS.txt`.
 4. After the first release: tell the user to add Datum Sim to the hub's `apps.json` and its icon to the hub's `brand/` (in the hub chat).
 5. A change to `py/requirements.txt` needs `py/runtime.txt` bumped, so installed apps unpack the new runtime.
+6. Keep `docs/site.json` true with each release: `about` and `steps` (the Overview on the family site's app page, FAMILY §10), `highlights` and `roadmap`. Check every sentence against what the app really does; never name or compare with commercial products (FAMILY §13).

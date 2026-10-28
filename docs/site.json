@@ -5,14 +5,32 @@
   "logo": "docs/brand/datum-sim-icon.svg",
   "tagline": "Model and simulate dynamic systems: block diagrams, control and motors.",
   "for": "Control, mechanical, electrical, process and mechatronics engineers, researchers and students.",
+  "about": [
+    "Datum Sim models and simulates dynamic systems. You draw the system as blocks and wires: sources, transfer functions, state space, PID controllers, motors and lookup tables. Then press Run and watch the signals on live scopes.",
+    "Five solvers cover everything from simple fixed-step runs to stiff systems; the variable-step solvers find switching times exactly. Parameter sweeps run in the app's own engine, step-response specifications and Bode plots come from a built-in Python engine, and the solvers and main blocks are checked against known answers."
+  ],
+  "steps": [
+    {
+      "title": "Draw the model",
+      "text": "Drag blocks from the library, wire them together and set their parameters."
+    },
+    {
+      "title": "Run",
+      "text": "Choose a solver and a stop time, press Run and watch the scopes live."
+    },
+    {
+      "title": "Analyse and tune",
+      "text": "Sweep parameters, read the step-response specifications and tune the controller."
+    }
+  ],
   "highlights": [
     "Draw a model as blocks and wires, press Run and watch live scopes",
     "About 45 blocks: sources, math, transfer functions, state space, PID, delays, discontinuities, lookup tables",
     "DC motor and permanent-magnet synchronous motor blocks, with worked speed and position control examples",
     "Subsystems: group blocks into one, open them, nest them",
-    "Five solvers, from fixed-step Euler to variable-step and stiff, with exact switching times",
-    "Parameter sweeps, step-response specifications, and Bode plots from the built-in Python engine",
-    "Every solver and block checked against known answers"
+    "Five solvers, from fixed-step Euler to variable-step and stiff; the variable-step solvers find switching times exactly",
+    "Parameter sweeps, plus step-response specifications and Bode plots from the built-in Python engine",
+    "The solvers and main blocks checked against known answers"
   ],
   "screenshots": [
     "docs/images/diagram.png"
