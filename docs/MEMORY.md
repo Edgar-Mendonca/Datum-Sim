@@ -6,7 +6,7 @@
 | | |
 | --- | --- |
 | **Product** | Datum Sim: model and simulate dynamic systems (block diagrams, control design, motors; physical components later) |
-| **Current version** | 0.1.0 (released 2026-10-28) |
+| **Current version** | 0.1.1 (2026-10-28) |
 | **Repo** | `Edgar-Mendonca/Datum-Sim` · branch `claude/dreamy-babbage-dyf9nr` (the first branch pushed, so the default branch) |
 | **Stack** | Rust engine (`crates/core`), Tauri 2, SolidJS + strict TypeScript, uPlot for scopes; bundled CPython 3.13 with numpy, SciPy and python-control for analysis |
 | **Identifier** | `com.edgarmendonca.datumsim` · files `.dsim` · installer `DatumSim-x.y.z-setup.exe` |
@@ -119,6 +119,9 @@
 | 0.1.0 | The branch `claude/dreamy-babbage-dyf9nr` is the default branch, as in the other apps; signing waits for 1.0 | Question 9 left open; the family's way |
 | 0.1.0 | Send to Datum Plot = a CSV Plot can open (time first, named columns) | Plot opens only `.dplot` files from the command line; a direct hand-over needs a change in Plot |
 | 0.1.0 | `zip` 9 (not 2 as in Plot) in the shell | cargo deny: three advisories in zip 2.x (RUSTSEC-2026-0367/0368/0369) |
+| 0.1.1 | Library drag uses plain mouse events with a ghost, and the window's `dragDropEnabled` is off | On Windows Tauri catches drags for file drops, so HTML drag-and-drop never reached the diagram (the user's Windows test); mouse events behave the same everywhere and can be tested |
+| 0.1.1 | User libraries (0.2) will be **copied** into models, not linked | The user: "whichever is simpler, safer and faster" |
+| 0.1.1 | Order: motors (0.1.2), discrete control (0.1.3), then wires and scopes; live tuning moves to 0.3 | The user's answers in PLAN-0.1.x §5 |
 
 ## 3. Roadmap
 
@@ -132,10 +135,14 @@
 | 0.1.0 | Shell and window: family ribbon, File page, Options, Help, Roadmap, editor, inspector, scopes, subsystems, Python analyses, print, updater | ✅ |
 | 0.1.0 | CI, release workflow with the Python runtime, cargo deny, UI tests | ✅ (CI green on Linux, Windows and macOS, run 1) |
 | 0.1.0 | First release through the updater | ✅ (2026-10-28; Release run from the Actions tab: tag pushes are blocked from Claude sessions) |
-| 0.1.x | Check on a Windows PC: installer, Python first start, printing to PDF, updater | 🔜 |
-| 0.1.x | Wire branch points and labels; faster drawing of very large diagrams; print preview polish; more examples (heat exchanger, compressor anti-surge) | ⬜ |
-| 0.2 | Masks, buses, goto/from, discrete TF and PID, multi-rate, integrator reset, algebraic-loop solving, induction motor | ⬜ |
-| 0.3 | Control design: trim, linearise whole models, Nyquist, root locus, PID tuning | ⬜ |
+| 0.1.x | Check on a Windows PC: installer, Python first start, printing to PDF, updater | ✅ (the user: "it works"; library drag-and-drop did not) |
+| 0.1.1 | Library drag-and-drop fixed on Windows; live parameter checks; dock re-fit; branch dots | ✅ |
+| 0.1.2 | Motor library: all DC, induction and synchronous types, BLDC, stepper, drive pieces, LV/MV/HV presets (PLAN-0.1.x §6) | 🔜 |
+| 0.1.3 | Discrete control: discrete TF, integrator, PID, rate transition, sample-time colours; integrator reset; Goto/From | ⬜ |
+| 0.1.4 | Wires and diagram: segments, signal names, notes, find | ⬜ |
+| 0.1.5 | Scopes: cursors, y-zoom, stacked plots, compare runs, SVG | ⬜ |
+| 0.2 | Masks, copied user libraries, buses, algebraic-loop solving, signal probe | ⬜ |
+| 0.3 | Control design: trim, linearise whole models, Nyquist, root locus, PID tuning, live tuning | ⬜ |
 | 0.4 | Physical components (mechanical, rotational, electrical, hydraulic, thermal), DAEs | ⬜ |
 | 0.5 | FMU import and export; Modelica through an external compiler | ⬜ |
 | 0.6 | State machines, Python blocks, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
@@ -164,6 +171,11 @@
 ### 2026-10-28: Session 4 (plan for 0.1.x)
 - Gave the user the zip 9 and deny.toml fix for Datum Plot (tested on a copy of Plot 0.2.12: all checks pass; BSL-1.0 added to the allow-list for Plot's clipboard crates).
 - Wrote `docs/PLAN-0.1.x.md`: brainstorm and small releases 0.1.1 (first-use fixes) → 0.1.2 (wires) → 0.1.3 (scopes) → 0.1.4 (blocks) → 0.1.5 (motors and drives) → 0.1.6 (live tuning, command line) → 0.2.0 (masks, user libraries, buses). Waiting for the user's answers.
+
+### 2026-10-28: Session 4 (0.1.1)
+- The user tested 0.1.0 on Windows: it works; drag-and-drop from the library did not. Answers: order as I choose; all motor types (LV, MV, HV, synchronous, asynchronous, AC, DC); live tuning later; copied libraries; discrete blocks needed.
+- Fixed the drag (mouse-event drag with a ghost; `dragDropEnabled` off), added live parameter checks, re-fit when the dock opens, and branch dots. 27 UI checks (5 new), checked in the real app under Xvfb. `tests_ui/realapp.sh` now waits 12 s (a fresh WebView profile is slow to start).
+- Planned the motor library (PLAN-0.1.x §6) and reordered the 0.1.x steps.
 
 ## 5. Known limits and next steps
 

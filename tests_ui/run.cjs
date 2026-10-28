@@ -59,6 +59,19 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   check("ribbon tabs", JSON.stringify(await p.$$eval(".tabs > button:not(.file)", els => els.map(e => e.textContent))) === JSON.stringify(["Model", "Simulate", "Analyze", "View", "Help"]));
   check("library lists categories with planned blocks dimmed", (await p.$$(".libc")).length >= 8 && (await p.$$(".libi.off")).length >= 3);
 
+  // 2b. Dragging a block from the library onto the diagram adds it there (0.1.0 bug on Windows: HTML drag and drop never reached the diagram).
+  const libItem = await p.$('.libi:has-text("Gain")');
+  const lb = await libItem.boundingBox();
+  await p.mouse.move(lb.x + 30, lb.y + lb.height / 2); await p.mouse.down();
+  await p.mouse.move(lb.x + 120, lb.y + 40, { steps: 4 });
+  check("a ghost follows the pointer while dragging from the library", (await p.$$(".libghost")).length === 1);
+  await p.mouse.move(800, 300, { steps: 8 }); await p.mouse.up();
+  await p.waitForTimeout(200);
+  const dropped = (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).find(o => o.Add && o.Add.kind === "Gain");
+  check("dragging from the library onto the diagram adds the block", !!dropped && dropped.Add.x % 10 === 0 && dropped.Add.y % 10 === 0, JSON.stringify(dropped));
+  check("the ghost goes away after the drop", (await p.$$(".libghost")).length === 0);
+  check("wires that split show a branch dot", (await p.$$(".wdot")).length >= 1);
+
   // 3. Selecting a block shows its parameters; the contextual tab appears without moving the ribbon (0.1 bug).
   const ribbonTop = await p.$eval(".ribbon", el => el.getBoundingClientRect().top);
   const pid = fix.diagram.blocks.find(b => b.kind === "PID");
@@ -69,6 +82,13 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   check("inspector shows the block's parameters", (await p.textContent(".insp header")).includes("PID controller") && (await p.$$(".insp .iprow")).length >= 7);
   check("Block Tools tab shows for a selection", await p.$eval(".ctxgrp", el => getComputedStyle(el).visibility === "visible"));
   check("the ribbon does not move when the contextual tab appears", Math.abs((await p.$eval(".ribbon", el => el.getBoundingClientRect().top)) - ribbonTop) < 0.5);
+
+  // 3b. Changing a parameter checks the model at once (errors show before Run).
+  const nChecks = await p.evaluate(() => window.__calls.filter(c => c[0] === "check").length);
+  await p.fill(".insp .iprow:nth-of-type(3) input", "Kp*2");
+  await p.keyboard.press("Enter");
+  await p.waitForTimeout(250);
+  check("a parameter change runs a quiet check", (await p.evaluate(() => window.__calls.filter(c => c[0] === "check").length)) > nChecks);
 
   // 4. Dragging a block sends one Move with grid-snapped offsets.
   await p.mouse.move(pc.x, pc.y); await p.mouse.down(); await p.mouse.move(pc.x + 37, pc.y + 23, { steps: 5 }); await p.mouse.up();
@@ -88,7 +108,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(200);
   await p.keyboard.type("integr"); await p.keyboard.press("Enter");
   await p.waitForTimeout(200);
-  const add = (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).find(o => o.Add);
+  const add = (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).find(o => o.Add && o.Add.kind !== "Gain");
   check("quick insert adds the block typed", add && add.Add.kind === "Integrator", JSON.stringify(add));
 
   // 7. Delete removes the selection.

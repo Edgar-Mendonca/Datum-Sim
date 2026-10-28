@@ -29,6 +29,12 @@ export const fit = () => {
   const z = Math.min(2, Math.max(0.2, Math.min(r.width / (x1 - x0), r.height / (y1 - y0))));
   batch(() => { setZoom(z); setPan([(r.width - (x1 - x0) * z) / 2 - x0 * z, (r.height - (y1 - y0) * z) / 2 - y0 * z]); });
 };
+/** Add a block where it was dropped (screen coordinates), centred on the pointer and on the grid. */
+export const dropBlock = (kind: string, cx: number, cy: number) => {
+  if (!svgEl) return;
+  const p = toDiagram(cx, cy), d = defOf(kind);
+  C.addBlock(kind, [snap(p[0] - (d?.w ?? 60) / 2), snap(p[1] - (d?.h ?? 40) / 2)]);
+};
 export const zoomBy = (f: number, at?: Pt) => {
   const r = svgEl?.getBoundingClientRect(); if (!r) return;
   const [cx, cy] = at ?? [r.width / 2, r.height / 2];
@@ -275,15 +281,38 @@ export const Canvas = () => {
   // A newly opened diagram (a model or a subsystem) is fitted to the window once it arrives.
   let fitted = -1;
   createEffect(on(dview, d => { if (d && d.parent !== fitted) { fitted = d.parent; requestAnimationFrame(fit); } }));
+  // When the scopes dock opens, the diagram gets shorter: fit it again so nothing is hidden.
+  createEffect(on(() => scopes().length > 0, (open, was) => { if (open && !was) setTimeout(fit, 60); }, { defer: true }));
+  /** Where a wire splits: the last point that wires from the same output share. */
+  const branchDots = createMemo(() => {
+    const groups = new Map<string, Pt[][]>();
+    for (const w of v()?.wires ?? []) { const k = `${w.from[0]}:${w.from[1]}`; groups.set(k, [...(groups.get(k) ?? []), w.path]); }
+    const dots: Pt[] = [];
+    for (const paths of groups.values()) {
+      if (paths.length < 2) continue;
+      // Walk each path segment by segment; a branch leaves the trunk where the paths stop agreeing.
+      const seen = new Set<string>();
+      for (const a of paths) for (const b of paths) {
+        if (a === b) continue;
+        let i = 0;
+        while (i + 1 < a.length && i + 1 < b.length && a[i + 1][0] === b[i + 1][0] && a[i + 1][1] === b[i + 1][1]) i++;
+        // Shared direction after the last common point: the branch point is on the segment.
+        let p = a[i];
+        if (i + 1 < a.length && i + 1 < b.length) {
+          const [ax, ay] = a[i + 1], [bx, by] = b[i + 1], [px, py] = p;
+          if (ay === py && by === py && Math.sign(ax - px) === Math.sign(bx - px)) p = [Math.abs(ax - px) < Math.abs(bx - px) ? ax : bx, py];
+          else if (ax === px && bx === px && Math.sign(ay - py) === Math.sign(by - py)) p = [px, Math.abs(ay - py) < Math.abs(by - py) ? ay : by];
+        }
+        const key = `${p[0]},${p[1]}`;
+        if (!seen.has(key)) { seen.add(key); dots.push(p); }
+      }
+    }
+    return dots;
+  });
   onMount(() => { addEventListener("mousemove", move); addEventListener("mouseup", up); addEventListener("keyup", keyup); });
   onCleanup(() => { removeEventListener("mousemove", move); removeEventListener("mouseup", up); removeEventListener("keyup", keyup); });
 
-  const drop = (e: DragEvent) => {
-    e.preventDefault();
-    const kind = e.dataTransfer?.getData("text/datum-block"); if (!kind) return;
-    const p = toDiagram(e.clientX, e.clientY), d = defOf(kind);
-    C.addBlock(kind, [snap(p[0] - (d?.w ?? 60) / 2), snap(p[1] - (d?.h ?? 40) / 2)]);
-  };
+
 
   const ctx = (e: MouseEvent) => {
     e.preventDefault();
@@ -321,7 +350,7 @@ export const Canvas = () => {
   return (
     <div class="canvas" classList={{ grid: opts().grid, panning: space() || drag()?.k === "pan" }} tabindex="0" onKeyDown={keys}
       style={{ "background-size": `${GRID * 2 * zoom()}px ${GRID * 2 * zoom()}px`, "background-position": `${pan()[0]}px ${pan()[1]}px` }}
-      onDragOver={e => e.preventDefault()} onDrop={drop}>
+>
       <Crumbs />
       <svg ref={svgEl} class="dsvg" onMouseDown={down} onDblClick={dbl} onWheel={wheel} onContextMenu={ctx}>
         <defs>
@@ -336,6 +365,7 @@ export const Canvas = () => {
               <path d={pv() ?? pathD(w.path)} class="wline" marker-end={s() ? "url(#arrs)" : "url(#arr)"} />
             </g>;
           }}</For>
+          <Show when={drag()?.k !== "move"}><For each={branchDots()}>{p => <circle cx={p[0]} cy={p[1]} r={3.2} class="wdot" />}</For></Show>
           <For each={v()?.blocks ?? []}>{b => {
             const o = () => off(b.id);
             return <g transform={`translate(${b.x + o()[0]} ${b.y + o()[1]})`} class="blk" classList={{ sel: selSet().has(b.id), err: errSet().has(b.id), warn: warnSet().has(b.id), hover: hover() === b.id }}

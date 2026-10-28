@@ -14,14 +14,116 @@
     "Parameter sweeps, step-response specifications, and Bode plots from the built-in Python engine",
     "Every solver and block checked against known answers"
   ],
-  "screenshots": ["docs/images/diagram.png"],
+  "screenshots": [
+    "docs/images/diagram.png"
+  ],
   "roadmap": [
-    { "v": "0.1.x", "title": "First releases", "when": "Next", "items": ["Signed releases through the in-app updater", "More worked examples and a printable verification report", "Wire branch points and labels on wires", "Faster drawing of very large diagrams"] },
-    { "v": "0.2", "title": "Bigger models", "when": "Soon", "items": ["Masks: a subsystem with its own parameter dialog", "Buses and goto/from", "Discrete and multi-rate blocks: discrete transfer functions and PID", "Integrator reset and more event blocks", "Solving algebraic loops", "Induction motor block"] },
-    { "v": "0.3", "title": "Control design", "when": "Soon", "items": ["Operating points (trim) and linearisation of whole models", "Bode, Nyquist and root locus", "PID auto-tuning", "Step-response specifications on any signal"] },
-    { "v": "0.4", "title": "Physical components", "when": "Later", "items": ["Mechanical, rotational, electrical, hydraulic and thermal components you connect by ports", "The app writes and solves the equations (DAEs)"] },
-    { "v": "0.5", "title": "Exchange", "when": "Later", "items": ["FMU import and export (FMI standard)", "Modelica models through an external compiler"] },
-    { "v": "0.6", "title": "Studies", "when": "Later", "items": ["State machines", "Python blocks", "Monte Carlo and sensitivity analysis", "Fitting model parameters to measured data", "Report builder"] },
-    { "v": "1.0", "title": "Validated", "when": "Goal", "items": ["Validation suite and report", "User guide", "Signed installer"] }
+    {
+      "v": "0.1.2",
+      "title": "Motor library",
+      "when": "Next",
+      "items": [
+        "DC motors: separately excited, shunt, series, compound",
+        "Induction motors: squirrel-cage, double-cage, wound-rotor",
+        "Synchronous motors: interior PMSM, wound-field salient-pole with dampers, reluctance",
+        "BLDC and stepper motors",
+        "Clarke and Park transforms, inverter, PWM, encoder",
+        "Ratings presets for low, medium and high voltage machines, and new motor examples"
+      ]
+    },
+    {
+      "v": "0.1.3",
+      "title": "Discrete control",
+      "when": "Soon",
+      "items": [
+        "Discrete transfer function, integrator and PID",
+        "Rate transition and sample-time colours",
+        "Integrator reset",
+        "Goto / From"
+      ]
+    },
+    {
+      "v": "0.1.4",
+      "title": "Wires and diagram",
+      "when": "Soon",
+      "items": [
+        "Move wire segments and remove bends",
+        "Signal names on wires and in scope legends",
+        "Text notes on the diagram",
+        "Find a block"
+      ]
+    },
+    {
+      "v": "0.1.5",
+      "title": "Scopes",
+      "when": "Soon",
+      "items": [
+        "Two measuring cursors",
+        "Y-zoom and auto-scale; stacked plots",
+        "Keep and compare runs",
+        "SVG and high-resolution pictures"
+      ]
+    },
+    {
+      "v": "0.2",
+      "title": "Reusable models",
+      "when": "Later",
+      "items": [
+        "Masks: a subsystem with its own parameters",
+        "My blocks: your own library",
+        "Buses",
+        "Solving algebraic loops",
+        "Read any signal by hovering its wire"
+      ]
+    },
+    {
+      "v": "0.3",
+      "title": "Control design",
+      "when": "Later",
+      "items": [
+        "Operating points and linearisation of whole models",
+        "Nyquist and root locus",
+        "PID auto-tuning",
+        "Live tuning while the model runs"
+      ]
+    },
+    {
+      "v": "0.4",
+      "title": "Physical components",
+      "when": "Later",
+      "items": [
+        "Mechanical, rotational, electrical, hydraulic and thermal components you connect by ports"
+      ]
+    },
+    {
+      "v": "0.5",
+      "title": "Exchange",
+      "when": "Later",
+      "items": [
+        "FMU import and export (FMI standard)",
+        "Modelica models through an external compiler"
+      ]
+    },
+    {
+      "v": "0.6",
+      "title": "Studies",
+      "when": "Later",
+      "items": [
+        "State machines",
+        "Python blocks",
+        "Monte Carlo and sensitivity analysis",
+        "Fitting model parameters to measured data"
+      ]
+    },
+    {
+      "v": "1.0",
+      "title": "Validated",
+      "when": "Goal",
+      "items": [
+        "Validation suite and report",
+        "User guide",
+        "Signed installer"
+      ]
+    }
   ]
 }

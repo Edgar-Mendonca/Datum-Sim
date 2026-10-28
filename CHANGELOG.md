@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.1 — 2026-10-28
+
+Dragging blocks from the library works on Windows, and small fixes from first use.
+
+**Fixed**
+- Blocks can be dragged from the Library onto the diagram again on Windows: a ghost of the block follows the pointer and the block lands where you drop it.
+
+**Better**
+- A wrong parameter shows its error in the Inspector as soon as you change it, before you press Run.
+- When the scopes open under the diagram for the first time, the diagram fits itself into the smaller space.
+- Dots show where a wire splits to several inputs.
+
 ## 0.1.0 — 2026-10-28
 
 The first version: draw a model as blocks and wires, press Run and watch the scopes.

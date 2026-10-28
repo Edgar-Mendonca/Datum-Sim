@@ -87,3 +87,42 @@ Then 0.3 control design (linearise whole models, Nyquist, root locus, PID auto-t
 4. **Live tuning** (sliders while running): worth it in 0.1.x, or later?
 5. **Masks and user libraries**: should library blocks be **linked** (change the library, every model updates) or **copied** (each model keeps its own copy)? Linked is more powerful; copied is simpler and safer.
 6. **Discrete blocks** (0.1.4): do you need them soon for real controller work (sample times, discrete PID), or can they wait for 0.2?
+
+---
+
+## 5. Answers (session 4, 2026-10-28) and the new order
+
+| Question | Answer | Effect |
+| --- | --- | --- |
+| 1 Windows test | "It works, very simple, nothing much to do, but there is no drag and drop from the library to the workspace" | 0.1.1 now: the library drag fixed (see below) plus the known first-use fixes |
+| 2 Order | "As you please" | Motors move up (the user's main interest), then discrete blocks (needed) |
+| 3 Motors | "All motors: LV, MV, HV, synchronous, asynchronous, AC, DC, all types" | 0.1.2 becomes a full motor library (§6) |
+| 4 Live tuning | Later | Moves after 0.2 |
+| 5 User libraries | "Whichever is simpler, safer and faster" | **Copied**: a library block is copied into the model; changing the library later does not change saved models |
+| 6 Discrete blocks | Needed | 0.1.3 |
+
+**Cause of the drag bug**: on Windows, Tauri's window catches drag-and-drop for dropping files (`dragDropEnabled`, on by default), so HTML drag-and-drop from the library never reached the diagram. Linux (where 0.1.0 was checked) does not do this. Fixed both ways: the setting is off, and the library drag now uses plain mouse events with a ghost block, which behaves the same on every system and is covered by a UI test.
+
+| Release | Theme |
+| --- | --- |
+| **0.1.1** | Library drag and drop fixed; parameter errors shown while editing; the diagram re-fits when the scopes dock opens; dots where wires split |
+| **0.1.2** | Motor library (§6) with examples |
+| **0.1.3** | Discrete control: discrete transfer function, integrator, PID, rate transition, sample-time colours; integrator reset; Goto/From |
+| **0.1.4** | Wires and diagram (segments, signal names, notes, find) |
+| **0.1.5** | Scopes (cursors, y-zoom, stacked plots, compare runs, SVG) |
+| **0.2.0** | Masks and copied user libraries, buses, algebraic loops, signal probe |
+
+## 6. The motor library (0.1.2), first draft
+
+All motors as d–q (or equivalent) models with mechanical outputs and a common load-torque input, parameters in SI or per unit, with **rating presets** (low, medium and high voltage examples, e.g. 400 V / 11 kW, 3.3 kV / 500 kW, 11 kV / 5 MW) that fill in typical values the user can change.
+
+| Family | Blocks |
+| --- | --- |
+| DC | Permanent-magnet (exists), separately excited (field circuit), shunt, series, compound |
+| Induction (asynchronous) | Squirrel-cage (d–q, with saturation-free magnetising branch), double-cage, wound-rotor / doubly fed (rotor voltages as inputs) |
+| Synchronous | Surface and interior PMSM (exists, add Ld ≠ Lq presets), wound-field salient-pole with damper windings (MV/HV machines, field voltage input), synchronous reluctance |
+| Other | BLDC (trapezoidal back-EMF, Hall outputs), stepper (hybrid), switched reluctance (later) |
+| Drive pieces | Clarke and Park transforms (and inverses), three-phase sine source, average-model inverter, PWM, DC link, encoder, current sensor |
+| Examples | V/f induction motor start, induction motor direct-on-line start (current and torque transients), PMSM FOC with three-phase signals, BLDC six-step, a large synchronous motor on a stiff grid with a load step |
+
+Verification: steady-state torque–speed curves against the equivalent-circuit formulas, no-load speed, locked-rotor current, and power balance (input electrical power = mechanical power + losses) for every machine.

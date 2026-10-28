@@ -18,7 +18,7 @@ import { C, wireRunEvents } from "./cmds";
 import { TitleBar, Ribbon, palette } from "./ribbon";
 import { Backstage, update, checkUpdate } from "./backstage";
 import { Canvas, fit, zoom } from "./canvas";
-import { LibraryPanel, Inspector } from "./panels";
+import { LibraryPanel, Inspector, LibGhost } from "./panels";
 import { Dock, ScopesPage, ResultsPage } from "./scope";
 import { Menu, Toast, Icon } from "./ui";
 import * as D from "./dialogs";
@@ -118,7 +118,7 @@ const App = () => {
       <Status />
       <Show when={backstage()}><Backstage /></Show>
       <For each={dialogs()}>{d => d()}</For>
-      <Menu /><Toast />
+      <LibGhost /><Menu /><Toast />
     </div>
   );
 };

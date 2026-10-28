@@ -1,14 +1,39 @@
 // The Library panel (blocks to drag in) and the Inspector (the selected block's parameters, or the
 // model's settings when nothing is selected).
 import { For, Show, createSignal, createMemo, createEffect, on } from "solid-js";
-import { Def, BlockView, num } from "./api";
-import { lib, selBlocks, selWires, act, out, defOf, issues, results, chans, setView, sel, enter } from "./store";
+import { Def, BlockView, Issue, num, invoke } from "./api";
+import { lib, selBlocks, selWires, act, out, defOf, issues, results, chans, setView, sel, enter, setIssues } from "./store";
 import { C } from "./cmds";
+import { dropBlock } from "./canvas";
 import { Help, helpCard } from "./help";
 import { Icon } from "./ui";
 
 /** A small picture of each block kind for the library. */
 const LIB_ICON: Record<string, string> = { Scope: "scope", XY: "scope", Subsystem: "sub", Inport: "wire", Outport: "wire", DCMotor: "motor", PMSM: "motor", ToFile: "csv", FromFile: "csv", ToPlot: "plot", PyBlock: "py" };
+
+/** Dragging a block from the library: plain mouse events (HTML drag and drop does not reach the
+ *  diagram in every WebView). The drag starts after 4 px, so click and double-click still work. */
+const [ghost, setGhost] = createSignal<{ d: Def; x: number; y: number; over: boolean } | null>(null);
+const startDrag = (e: MouseEvent, d: Def) => {
+  e.preventDefault();
+  const x0 = e.clientX, y0 = e.clientY;
+  let on = false;
+  const overCanvas = (x: number, y: number) => !!document.elementFromPoint(x, y)?.closest(".canvas");
+  const mv = (m: MouseEvent) => {
+    if (!on && Math.hypot(m.clientX - x0, m.clientY - y0) < 4) return;
+    on = true;
+    setGhost({ d, x: m.clientX, y: m.clientY, over: overCanvas(m.clientX, m.clientY) });
+  };
+  const up = (m: MouseEvent) => {
+    removeEventListener("mousemove", mv); removeEventListener("mouseup", up);
+    setGhost(null);
+    if (on && overCanvas(m.clientX, m.clientY)) dropBlock(d.kind, m.clientX, m.clientY);
+  };
+  addEventListener("mousemove", mv); addEventListener("mouseup", up);
+};
+export const LibGhost = () => (
+  <Show when={ghost()}>{g => <div class="libghost" classList={{ over: g().over }} style={{ left: `${g().x - g().d.w / 2}px`, top: `${g().y - g().d.h / 2}px`, width: `${g().d.w}px`, height: `${g().d.h}px` }}><span>{g().d.name}</span></div>}</Show>
+);
 
 export const LibraryPanel = () => {
   const [q, setQ] = createSignal("");
@@ -27,8 +52,8 @@ export const LibraryPanel = () => {
             <button class="libc" onClick={() => setShut(shut().includes(cat) ? shut().filter(x => x !== cat) : [...shut(), cat])}><b class="car">{shut().includes(cat) && !q() ? "▸" : "▾"}</b>{cat}</button>
             <Show when={!shut().includes(cat) || q()}>
               <For each={defs}>{d => (
-                <div class="libi" classList={{ off: !!d.planned }} draggable={!d.planned} title={d.planned ? `Planned for ${d.planned}: ${d.what}` : d.what}
-                  onDragStart={e => { e.dataTransfer?.setData("text/datum-block", d.kind); e.dataTransfer!.effectAllowed = "copy"; }}
+                <div class="libi" classList={{ off: !!d.planned }} title={d.planned ? `Planned for ${d.planned}: ${d.what}` : d.what}
+                  onMouseDown={e => !d.planned && e.button === 0 && !(e.target as HTMLElement).closest(".help") && startDrag(e, d)}
                   onDblClick={() => !d.planned && C.addBlock(d.kind)}>
                   <Icon n={LIB_ICON[d.kind] ?? "block"} /><span>{d.name}</span>
                   <Show when={d.planned} fallback={<button class="help" title={`About ${d.name}`} onClick={e => { e.stopPropagation(); helpCard(`block:${d.kind}`); }}>?</button>}><small class="pill">{d.planned}</small></Show>
@@ -45,7 +70,8 @@ export const LibraryPanel = () => {
 /** One parameter: an expression box (or a choice), with its unit and hint. */
 const Param = (p: { b: BlockView; def: Def; k: number }) => {
   const pd = () => p.def.params[p.k];
-  const set = (value: string) => { if (value !== p.b.params[pd().key]) act({ SetParam: { id: p.b.id, key: pd().key, value } }); };
+  // Check the model quietly after each change, so a bad value shows here before Run.
+  const set = (value: string) => { if (value !== p.b.params[pd().key]) act({ SetParam: { id: p.b.id, key: pd().key, value } }).then(o => o && invoke<Issue[]>("check").then(setIssues).catch(() => {})); };
   return (
     <div class="iprow">
       <label title={pd().hint}>{pd().label}{pd().unit && <small class="unit">{pd().unit}</small>}</label>

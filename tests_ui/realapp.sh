@@ -13,6 +13,6 @@ export DISPLAY=:99
 Xvfb :99 -screen 0 1440x900x24 >/dev/null 2>&1 & XV=$!
 sleep 1
 HOME=$TMPHOME WEBKIT_DISABLE_COMPOSITING_MODE=1 ./target/debug/datum-sim >"$OUT/app.log" 2>&1 & APP=$!
-sleep 6
+sleep ${WAIT:-12}                                # a fresh WebView profile takes a while to start
 bash "$STEPS" || true
 kill $APP $XV 2>/dev/null; rm -rf "$TMPHOME"
