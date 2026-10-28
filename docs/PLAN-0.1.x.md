@@ -112,7 +112,7 @@ Then 0.3 control design (linearise whole models, Nyquist, root locus, PID auto-t
 | **0.1.5** | Scopes (cursors, y-zoom, stacked plots, compare runs, SVG) |
 | **0.2.0** | Masks and copied user libraries, buses, algebraic loops, signal probe |
 
-## 6. The motor library (0.1.2), first draft
+## 6. The motor library (0.1.2), first draft (built in session 5; see MEMORY for what differs)
 
 All motors as d–q (or equivalent) models with mechanical outputs and a common load-torque input, parameters in SI or per unit, with **rating presets** (low, medium and high voltage examples, e.g. 400 V / 11 kW, 3.3 kV / 500 kW, 11 kV / 5 MW) that fill in typical values the user can change.
 

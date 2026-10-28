@@ -35,8 +35,9 @@
 | `crates/core/src/expr.rs` | Our expression parser: numbers, variables, + − * / ^, comparisons, functions, matrices `[1 2; 3 4]`; fast slot evaluation for the Function block |
 | `crates/core/src/model.rs` | Model, diagrams, blocks, wires, variables, run settings; `.dsim` read (migrations, repair of damaged files) and write |
 | `crates/core/src/doc.rs` | Edit operations (add, move, resize, set parameter, rename, flip, delete, connect, bend points, paste, group into a subsystem, ungroup, variables, settings, batch) with snapshot undo; copy |
-| `crates/core/src/blocks.rs` | The block library: names, categories, parameters with units and hints, help text, sizes, ports, port positions, labels; planned blocks |
-| `crates/core/src/rt.rs` | How each block runs (about 45 kinds, including the DC motor and the PMSM), transfer function → state space, roots → polynomials |
+| `crates/core/src/blocks.rs` | The block library: names, categories, parameters with units and hints, help text, sizes, ports, port names and positions, labels, typical ratings (from `motors.rs`); planned blocks |
+| `crates/core/src/rt.rs` | How each block runs (about 45 kinds, including the DC motor and the d–q PMSM), transfer function → state space, roots → polynomials; hands motor and drive kinds to `motors.rs` |
+| `crates/core/src/motors.rs` | The motor library (0.1.2): DC (sep. excited, shunt, series, compound), induction (cage, double cage, wound rotor; αβ frame, flux states), PMSM3, SynRM, wound-field synchronous with dampers, BLDC, stepper; Clarke/Park, three-phase source, inverter, PWM, encoder; typical-ratings presets from per-unit values |
 | `crates/core/src/compile.rs` | Flatten, parameters, widths, sorting, signal layout, logged channels; the run loop; CSV; decimation; the linear model of one block for analysis |
 | `crates/core/src/solve.rs` | Euler, Heun, RK4, Dormand–Prince 5(4), Rosenbrock 2(3); the stepping loop with hits and zero-crossings; solver conformance tests |
 | `crates/core/src/linalg.rs` | Dense LU with pivoting (for the stiff solver) |
@@ -67,9 +68,9 @@
 | `ui/src/styles.css`, `ui/src/ui.tsx`, `ui/index.html` | Plan's styles (orange accent) and components; the icon sprite |
 | `py/worker.py`, `py/datum_sim/linear.py` | The Python worker and the linear analyses (python-control) |
 | `py/tests/test_worker.py` | Python tests against closed-form answers and the protocol |
-| `tests_ui/run.cjs` | 22 UI checks of the built window with a mocked bridge |
+| `tests_ui/run.cjs` | 30 UI checks of the built window with a mocked bridge (the fixture also holds the induction motor start's diagram) |
 | `tests_ui/realapp.sh` | Screenshots of the real app under Xvfb (xdotool steps) |
-| `docs/verification/2026-10-27.md` | The first verification record: what was checked, numbers, what was not |
+| `docs/verification/2026-10-27.md`, `2026-10-28.md` | Verification records: 0.1.0 (solvers, blocks) and 0.1.2 (motors and drives): what was checked, numbers, what was not |
 | `docs/PLAN-0.1.md`, `docs/PLAN-0.1.x.md`, `docs/site.json`, `CHANGELOG.md` | The plans, the public summary and roadmap, the change log |
 
 ### Release flow
@@ -122,6 +123,10 @@
 | 0.1.1 | Library drag uses plain mouse events with a ghost, and the window's `dragDropEnabled` is off | On Windows Tauri catches drags for file drops, so HTML drag-and-drop never reached the diagram (the user's Windows test); mouse events behave the same everywhere and can be tested |
 | 0.1.1 | User libraries (0.2) will be **copied** into models, not linked | The user: "whichever is simpler, safer and faster" |
 | 0.1.1 | Order: motors (0.1.2), discrete control (0.1.3), then wires and scopes; live tuning moves to 0.3 | The user's answers in PLAN-0.1.x §5 |
+| 0.1.2 | Machines in their natural frames: induction in the stationary αβ frame with flux linkages as states (no speed-dependent frame, wound-rotor voltages turned by p·θ); synchronous machines in the rotor dq frame with Park inside; three-phase signals are width-3 vectors; transforms amplitude-invariant | Exact steady states against the equivalent circuit; one signal type; inductance matrices inverted once at build |
+| 0.1.2 | **Typical ratings** live in the engine (`motors::presets`, served with the library) and the Inspector applies one as a single `Batch` of `SetParam` | One owner for the numbers, testable, one undo step; values come from per-unit typical data (Zb = V²/S, J = 2H·S/ω²), stated as typical, never as a real machine |
+| 0.1.2 | A new library group **Drives** (source, inverter, PWM, transforms, encoder); motors stay in **Motors** | The user's "all motor types" brings drive pieces that are not motors |
+| 0.1.2 | Zero-crossing functions keep their last non-zero sign in the solver | A crossing landing exactly on 0 was lost (switched inverter test) |
 | 0.1.1 | `site.json` has `about` and `steps` for the family site's app page (`/apps/sim`), kept true with every release (CLAUDE.md release step 6); README links to that page | The user's request; FAMILY §10. Checking found three overclaims, corrected: sweeps run in Rust (not Python), only the variable-step solvers locate switching exactly, and not every block has its own test yet |
 
 ## 3. Roadmap
@@ -138,8 +143,8 @@
 | 0.1.0 | First release through the updater | ✅ (2026-10-28; Release run from the Actions tab: tag pushes are blocked from Claude sessions) |
 | 0.1.x | Check on a Windows PC: installer, Python first start, printing to PDF, updater | ✅ (the user: "it works"; library drag-and-drop did not) |
 | 0.1.1 | Library drag-and-drop fixed on Windows; live parameter checks; dock re-fit; branch dots | ✅ |
-| 0.1.2 | Motor library: all DC, induction and synchronous types, BLDC, stepper, drive pieces, LV/MV/HV presets (PLAN-0.1.x §6) | 🔜 |
-| 0.1.3 | Discrete control: discrete TF, integrator, PID, rate transition, sample-time colours; integrator reset; Goto/From | ⬜ |
+| 0.1.2 | Motor library: all DC, induction and synchronous types, BLDC, stepper, drive pieces, LV/MV/HV presets (PLAN-0.1.x §6) | ✅ (switched reluctance, DC link and current sensor blocks, power-balance checks: later) |
+| 0.1.3 | Discrete control: discrete TF, integrator, PID, rate transition, sample-time colours; integrator reset; Goto/From | 🔜 |
 | 0.1.4 | Wires and diagram: segments, signal names, notes, find | ⬜ |
 | 0.1.5 | Scopes: cursors, y-zoom, stacked plots, compare runs, SVG | ⬜ |
 | 0.2 | Masks, copied user libraries, buses, algebraic-loop solving, signal probe | ⬜ |
@@ -178,12 +183,20 @@
 - Fixed the drag (mouse-event drag with a ghost; `dragDropEnabled` off), added live parameter checks, re-fit when the dock opens, and branch dots. 27 UI checks (5 new), checked in the real app under Xvfb. `tests_ui/realapp.sh` now waits 12 s (a fresh WebView profile is slow to start).
 - Planned the motor library (PLAN-0.1.x §6) and reordered the 0.1.x steps.
 
+### 2026-10-28: Session 5 (0.1.2, the motor library)
+- The user: "start the motor library 0.1.2".
+- Built `motors.rs` (14 motor kinds, 8 drive pieces, presets for LV/MV/HV ratings), a Drives group, the Inspector's Typical ratings, motor glyphs and port names, seven motor examples with tile pictures.
+- Checked: 49 Rust tests (12 new: induction torque against the equivalent circuit for cage, double cage and wound rotor at three slips; DC, synchronous, PMSM3, BLDC, stepper, inverter, encoder, presets), 30 UI checks (3 new), clippy, cargo deny, Python tests; the real app under Xvfb (DOL start, FOC, Inspector ratings). Record: `docs/verification/2026-10-28.md`.
+- Bugs found by the checks and fixed: the preset formatter cut zeros off whole numbers (Nr 50 → 5); a zero-crossing landing exactly on zero was lost by the solver.
+- Released 0.1.2 (see the release flow); `site.json` about, steps, highlights and roadmap updated.
+
 ## 5. Known limits and next steps
 
-- Not yet run on Windows: the installer, the embedded Python's first start (unpacking the runtime), printing to PDF and the updater. CI builds and tests on Windows and macOS.
+- The user ran 0.1.0 on Windows (installer, Python, printing, updater work). The 0.1.2 motor library has not yet been run on a Windows PC; CI builds and tests on Windows and macOS.
 - The Python engine's large-array path (binary frames instead of JSON) is not needed yet: analyses send small data; step specifications send at most 20 000 points.
 - Wires have no branch points of their own (a second wire from the same output is drawn separately) and no labels.
 - Algebraic loops are reported, not solved (0.2). Discrete blocks are the zero-order hold and unit delay only.
+- Motors: no saturation, iron losses or BLDC commutation ripple; presets are typical values, not real machines; power-balance checks and switched reluctance are still to do. The switched inverter is slow for long runs (every switching instant is located); the average model is the default.
 - Linear analysis works on single blocks; linearising whole models arrives in 0.3.
 - Datum Plot has the same zip 2.x advisories (fix in Plot's chat: zip 9).
 - After the first release: add Datum Sim to the hub's `apps.json` and copy `docs/brand/datum-sim-icon.svg` into the hub's `brand/` (in the hub chat), then regenerate the brain.

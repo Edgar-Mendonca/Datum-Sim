@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.2 — 2026-10-28
+
+The motor library: DC, induction and synchronous motors, BLDC and stepper motors, and the pieces of a drive.
+
+**Motors**
+- DC motors: separately excited, shunt, series and compound, each with its field circuit.
+- Induction motors: squirrel-cage, double-cage and wound-rotor (rotor voltages as an input, for starting resistors or a rotor-side drive), fed with three-phase voltages.
+- Synchronous motors: permanent-magnet with three-phase inputs (surface or interior magnets), synchronous reluctance, and the wound-field salient-pole motor with damper windings used for large medium and high voltage drives.
+- BLDC motor with ideal six-step commutation and Hall signals; two-phase hybrid stepper motor.
+- **Typical ratings**: choose a rating in the Inspector (for example 400 V 11 kW, 3.3 kV 500 kW, 11 kV 5 MW) and every value is filled in at once, as one step you can undo. Replace them with nameplate data when you have it.
+
+**Drives** (a new library group)
+- Three-phase source, three-phase inverter (average model, or switched with the switching instants located exactly), PWM, encoder.
+- Clarke and Park transforms and their inverses.
+
+**Worked examples**: induction motor direct-on-line start, induction motor V/f speed control, PMSM field-oriented control with an inverter, BLDC speed control, a 3.3 kV synchronous motor on the grid taking a load step, a DC series motor starting a heavy load, and a stepper motor making full steps.
+
+**Checked**: the induction motors' torque against the exact equivalent circuit at three slips, the DC motors' and the synchronous motor's steady states, the three-phase PMSM against the d–q PMSM, BLDC no-load speed, the stepper's step angle, the inverter's mean voltages and the encoder. See [the verification record](docs/verification/2026-10-28.md).
+
+**Fixed**
+- A zero-crossing that fell exactly on zero at the end of a step could be missed; the variable-step solvers now keep its sign and locate it.
+
 ## 0.1.1 — 2026-10-28
 
 Dragging blocks from the library works on Windows, and small fixes from first use.

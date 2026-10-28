@@ -1,6 +1,6 @@
 [package]
 name = "datum-sim"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Datum Sim: model and simulate dynamic systems."
 license = "MIT"

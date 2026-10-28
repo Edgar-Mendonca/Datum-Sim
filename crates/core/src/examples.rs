@@ -401,7 +401,7 @@ fn im_dol() -> Model {
     let mut b = B::new(
         "Induction motor: direct-on-line start",
         "A 400 V, 50 Hz, 11 kW, 4-pole squirrel-cage motor (typical values) switched onto the mains at t = 0 with a fan on its shaft (torque ∝ speed²). Watch the starting current of several times rated, the torque pulsations while the flux builds, and the run-up to just below 1500 rpm (157 rad/s).",
-        1.5,
+        0.6,
     );
     b.var("Tn", "72", "N·m", "Fan torque at synchronous speed");
     b.var("wsync", "2*pi*50/2", "rad/s", "Synchronous speed");
