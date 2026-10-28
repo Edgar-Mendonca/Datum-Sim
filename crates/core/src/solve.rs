@@ -382,7 +382,14 @@ pub fn drive<S: Ode + Hooks>(sys: &mut S, x: &mut [f64], o: &Opts) -> Result<Sta
             break;
         }
         if nz > 0 {
-            sys.zc(t, x, &mut z0);
+            // A function that lands exactly on zero keeps its last sign, so the crossing still
+            // registers when it moves on.
+            sys.zc(t, x, &mut z1);
+            for (a, b) in z0.iter_mut().zip(&z1) {
+                if *b != 0.0 {
+                    *a = *b;
+                }
+            }
         }
         if o.method.adaptive() {
             let fac = if err > 0.0 { (0.9 * err.powf(-1.0 / o.method.order() as f64)).clamp(0.2, 5.0) } else { 5.0 };

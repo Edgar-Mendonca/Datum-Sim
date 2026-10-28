@@ -12,6 +12,7 @@ pub mod expr;
 mod hardening;
 pub mod linalg;
 pub mod model;
+pub mod motors;
 pub mod route;
 pub mod rt;
 pub mod solve;

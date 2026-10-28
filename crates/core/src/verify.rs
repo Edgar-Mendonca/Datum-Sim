@@ -232,6 +232,18 @@ mod tests {
                 "tank" => assert!((last(0) - 2.0).abs() < 0.02, "tank level {}", last(0)),
                 "cruise" => assert!((last(0) - 25.0).abs() < 0.05, "cruise speed {}", last(0)),
                 "dcpos" => assert!((last(0) - 1.0).abs() < 0.01, "angle {}", last(0)),
+                // Induction motors run just below synchronous speed (157 rad/s) and carry their load.
+                "imdol" => assert!((152.0..156.0).contains(&last(0)) && (last(1) - last(2)).abs() < 0.5, "imdol {} {} {}", last(0), last(1), last(2)),
+                "imvf" => assert!((150.0..156.0).contains(&last(0)) && (last(1) - 50.0).abs() < 0.5, "imvf {} {}", last(0), last(1)),
+                "pmsmfoc" | "bldc" => assert!((last(0) - last(1)).abs() < 0.005 * last(1), "{} speed {} vs {}", ex.id, last(0), last(1)),
+                "syncmotor" => assert!((last(0) - 50.0 * std::f64::consts::PI).abs() < 0.01 && (last(1) - 3000.0).abs() < 30.0, "sync {} {}", last(0), last(1)),
+                "dcseries" => {
+                    // Torque balance Laf·i² = 300 + 0.02·ω² at the end.
+                    let (w, i) = (last(0), last(1));
+                    assert!((0.0053 * i * i - 300.0 - 0.02 * w * w).abs() < 0.01 * 0.0053 * i * i, "dc series {w} {i}");
+                }
+                // Twenty full steps of π/100, give or take the last one in progress.
+                "stepper" => assert!((last(0) - 0.2 * std::f64::consts::PI).abs() < 0.02, "stepper angle {}", last(0)),
                 "thermostat" => {
                     let late: Vec<f64> = r.t.iter().zip(&r.y[0]).filter(|(t, _)| **t > 8000.0).map(|x| *x.1).collect();
                     let (lo, hi) = (late.iter().cloned().fold(f64::INFINITY, f64::min), late.iter().cloned().fold(f64::NEG_INFINITY, f64::max));
@@ -292,5 +304,292 @@ mod tests {
         let r = m.run();
         assert!((at(&r, 0, 0.6) - 0.5).abs() < 1e-12);
         assert!((at(&r, 1, 0.6) - 0.25).abs() < 1e-12);
+    }
+
+    // ------------------------------------------------------------ motor library (0.1.2)
+
+    fn last(r: &Results, ch: usize) -> f64 {
+        *r.y[ch].last().unwrap()
+    }
+
+    /// Apply a typical-ratings preset as the Inspector would.
+    fn preset(kind: &str, i: usize) -> Vec<(String, String)> {
+        crate::motors::presets(kind)[i].values.clone()
+    }
+
+    fn add_owned(m: &mut Mk, kind: &str, params: &[(String, String)], extra: &[(&str, &str)]) -> u32 {
+        let mut v: Vec<(&str, &str)> = params.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        v.extend_from_slice(extra);
+        m.add(kind, &v)
+    }
+
+    /// Air-gap torque of an induction machine from its exact equivalent circuit at slip s.
+    /// Rotor branches are (R, X) pairs in parallel; all values per phase, Vph RMS.
+    fn im_torque(vph: f64, f: f64, p: f64, rs: f64, xls: f64, xm: f64, rotor: &[(f64, f64)], s: f64) -> f64 {
+        type C = (f64, f64);
+        let add = |a: C, b: C| (a.0 + b.0, a.1 + b.1);
+        let mul = |a: C, b: C| (a.0 * b.0 - a.1 * b.1, a.0 * b.1 + a.1 * b.0);
+        let inv = |a: C| { let d = a.0 * a.0 + a.1 * a.1; (a.0 / d, -a.1 / d) };
+        let mut y = inv((0.0, xm));
+        for (r, x) in rotor {
+            y = add(y, inv((r / s, *x)));
+        }
+        let zp = inv(y);
+        let z = add((rs, xls), zp);
+        let i = mul((vph, 0.0), inv(z));
+        let i2 = i.0 * i.0 + i.1 * i.1;
+        let ws = 2.0 * std::f64::consts::PI * f / p;
+        3.0 * i2 * zp.0 / ws
+    }
+
+    /// Induction motor at a held speed: the torque settles to the equivalent-circuit value.
+    /// Squirrel-cage, double-cage and wound-rotor (short-circuited) machines.
+    #[test]
+    fn induction_torque_matches_equivalent_circuit() {
+        use std::f64::consts::PI;
+        let w = 2.0 * PI * 50.0;
+        for kind in ["InductionSC", "InductionDC", "InductionWR"] {
+            for s in [0.03, 0.2, 1.0] {
+                // At standstill the decaying DC flux takes longest to die away.
+                let mut m = Mk::new(if s == 1.0 { 12.0 } else { 3.0 }, "rk45");
+                m.d.m.sim.rtol = 1e-9;
+                let pr = preset(kind, 0);
+                let w0 = format!("{}", (1.0 - s) * w / 2.0);
+                let mot = add_owned(&mut m, kind, &pr, &[("J", "1e12"), ("w0", &w0)]);
+                let src = m.add("ThreePhase", &[("Vll", "400"), ("f", "50")]);
+                let tl = m.add("Constant", &[("value", "0")]);
+                let sc = m.add("Scope", &[]);
+                m.wire(src, 0, mot, 0);
+                if kind == "InductionWR" {
+                    let z = m.add("Constant", &[("value", "[0 0 0]")]);
+                    m.wire(z, 0, mot, 1);
+                    m.wire(tl, 0, mot, 2);
+                } else {
+                    m.wire(tl, 0, mot, 1);
+                }
+                m.wire(mot, 1, sc, 0);
+                let r = m.run();
+                let g = |k: &str| pr.iter().find(|(a, _)| a == k).unwrap().1.parse::<f64>().unwrap();
+                let mut rotor = vec![(g("Rr"), w * g("Llr"))];
+                if kind == "InductionDC" {
+                    rotor.push((g("Rr2"), w * g("Llr2")));
+                }
+                let te = im_torque(400.0 / 3f64.sqrt(), 50.0, 2.0, g("Rs"), w * g("Lls"), w * g("Lm"), &rotor, s);
+                let got = last(&r, 0);
+                assert!((got - te).abs() < 2e-3 * te.abs(), "{kind} s = {s}: torque {got}, equivalent circuit {te}");
+            }
+        }
+    }
+
+    /// A three-phase source: phase peak V_LL·√2/√3, 120° apart.
+    #[test]
+    fn three_phase_source() {
+        let mut m = Mk::new(0.02, "rk45");
+        let src = m.add("ThreePhase", &[("Vll", "400"), ("f", "50")]);
+        let sc = m.add("Scope", &[]);
+        m.wire(src, 0, sc, 0);
+        let r = m.run();
+        let pk = 400.0 * 2f64.sqrt() / 3f64.sqrt();
+        assert!((at(&r, 0, 0.0) - pk).abs() < 1e-9);
+        assert!((at(&r, 1, 0.0) + pk / 2.0).abs() < 1e-9);
+        assert!(max_err(&r, 2, |t| pk * (2.0 * std::f64::consts::PI * 50.0 * t + 2.0 * std::f64::consts::PI / 3.0).cos()) < 1e-9);
+    }
+
+    /// DC machines at steady state: separately excited no-load speed V/(Laf·i_f), series and
+    /// compound torque and voltage balance.
+    #[test]
+    fn dc_machines_steady_state() {
+        // Separately excited, no load, no friction: ω = Va / (Laf · Vf/Rf).
+        let mut m = Mk::new(4.0, "rk45");
+        let mot = m.add("DCSepEx", &[("b", "0")]);
+        let va = m.add("Constant", &[("value", "220")]);
+        let vf = m.add("Constant", &[("value", "220")]);
+        let tl = m.add("Constant", &[("value", "0")]);
+        let sc = m.add("Scope", &[]);
+        m.wire(va, 0, mot, 0);
+        m.wire(vf, 0, mot, 1);
+        m.wire(tl, 0, mot, 2);
+        m.wire(mot, 0, sc, 0);
+        let r = m.run();
+        assert!((last(&r, 0) - 220.0 / 1.3).abs() < 1e-3, "sep. excited speed {}", last(&r, 0));
+
+        // Series: Laf·i² = T_L and V = (Ra + Rf)·i + Laf·i·ω.
+        let mut m = Mk::new(10.0, "rk45");
+        let mot = m.add("DCSeries", &[("b", "0")]);
+        let v = m.add("Constant", &[("value", "220")]);
+        let tl = m.add("Constant", &[("value", "20")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(v, 0, mot, 0);
+        m.wire(tl, 0, mot, 1);
+        m.wire(mot, 0, sc, 0);
+        m.wire(mot, 1, sc, 1);
+        let r = m.run();
+        let i = (20.0f64 / 0.052).sqrt();
+        let w = (220.0 - 0.6 * i) / (0.052 * i);
+        assert!((last(&r, 1) - i).abs() < 1e-4 * i, "series current {} vs {i}", last(&r, 1));
+        assert!((last(&r, 0) - w).abs() < 1e-4 * w, "series speed {} vs {w}", last(&r, 0));
+
+        // Compound: i_f = V/Rf; (Laf·i_f + Lafse·i_a)·i_a = T_L.
+        let mut m = Mk::new(6.0, "rk45");
+        let mot = m.add("DCCompound", &[("b", "0")]);
+        let v = m.add("Constant", &[("value", "220")]);
+        let tl = m.add("Constant", &[("value", "30")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(v, 0, mot, 0);
+        m.wire(tl, 0, mot, 1);
+        m.wire(mot, 0, sc, 0);
+        m.wire(mot, 1, sc, 1);
+        let r = m.run();
+        let (laf, lse) = (1.25, 0.005);
+        let ia = (-laf + (laf * laf + 4.0 * lse * 30.0f64).sqrt()) / (2.0 * lse);
+        let w = (220.0 - 0.6 * ia) / (laf + lse * ia);
+        assert!((last(&r, 1) - ia).abs() < 1e-4 * ia, "compound current {} vs {ia}", last(&r, 1));
+        assert!((last(&r, 0) - w).abs() < 1e-4 * w, "compound speed {} vs {w}", last(&r, 0));
+    }
+
+    /// The wound-field synchronous motor on a stiff grid takes a load step and settles back to
+    /// synchronous speed with its torque equal to the load.
+    #[test]
+    fn synchronous_motor_holds_synchronism() {
+        use std::f64::consts::PI;
+        let mut m = Mk::new(8.0, "rk45");
+        m.d.m.sim.rtol = 1e-7;
+        let pr = preset("SyncField", 0);
+        let g = |k: &str| pr.iter().find(|(a, _)| a == k).unwrap().1.parse::<f64>().unwrap();
+        let ws = 2.0 * PI * 50.0 / 2.0;
+        let (w0, th0, vf) = (format!("{ws}"), format!("{}", -PI / 4.0), format!("{}", g("Rf") * g("if0")));
+        let mot = add_owned(&mut m, "SyncField", &pr, &[("w0", &w0), ("th0", &th0)]);
+        let src = m.add("ThreePhase", &[("Vll", "3300"), ("f", "50")]);
+        let f = m.add("Constant", &[("value", &vf)]);
+        let tl = m.add("Step", &[("time", "1"), ("final", "3000")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(src, 0, mot, 0);
+        m.wire(f, 0, mot, 1);
+        m.wire(tl, 0, mot, 2);
+        m.wire(mot, 0, sc, 0);
+        m.wire(mot, 1, sc, 1);
+        let r = m.run();
+        // Before the step: exact no-load equilibrium.
+        assert!((at(&r, 0, 0.9) - ws).abs() < 1e-6 * ws, "no-load speed {}", at(&r, 0, 0.9));
+        assert!(at(&r, 1, 0.9).abs() < 1.0, "no-load torque {}", at(&r, 1, 0.9));
+        assert!((last(&r, 0) - ws).abs() < 1e-4 * ws, "speed after the step {}", last(&r, 0));
+        assert!((last(&r, 1) - 3000.0).abs() < 0.01 * 3000.0, "torque after the step {}", last(&r, 1));
+    }
+
+    /// The three-phase PMSM, fed through the inverse transforms at its own angle, matches the
+    /// d–q PMSM block exactly.
+    #[test]
+    fn pmsm_three_phase_matches_dq() {
+        let mut m = Mk::new(0.3, "rk45");
+        let pr: [(&str, &str); 7] = [("Rs", "0.15"), ("Ld", "0.0025"), ("Lq", "0.004"), ("psi", "0.4"), ("p", "4"), ("J", "0.03"), ("b", "0.001")];
+        let m3 = m.add("PMSM3", &pr);
+        let dq = m.add("PMSM", &pr);
+        let vdq = m.add("Constant", &[("value", "[-20 150]")]);
+        let vd = m.add("Constant", &[("value", "-20")]);
+        let vq = m.add("Constant", &[("value", "150")]);
+        let tl = m.add("Constant", &[("value", "5")]);
+        let gp = m.add("Gain", &[("k", "4")]);
+        let ip = m.add("InvPark", &[]);
+        let ic = m.add("InvClarke", &[]);
+        let sc = m.add("Scope", &[("n", "4")]);
+        m.wire(vdq, 0, ip, 0);
+        m.wire(m3, 3, gp, 0);
+        m.wire(gp, 0, ip, 1);
+        m.wire(ip, 0, ic, 0);
+        m.wire(ic, 0, m3, 0);
+        m.wire(tl, 0, m3, 1);
+        m.wire(vd, 0, dq, 0);
+        m.wire(vq, 0, dq, 1);
+        m.wire(tl, 0, dq, 2);
+        m.wire(m3, 0, sc, 0);
+        m.wire(dq, 0, sc, 1);
+        m.wire(m3, 1, sc, 2);
+        m.wire(dq, 3, sc, 3);
+        let r = m.run();
+        let e = r.y[0].iter().zip(&r.y[1]).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max);
+        let et = r.y[2].iter().zip(&r.y[3]).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max);
+        assert!(e < 1e-4 && et < 1e-3, "speed difference {e}, torque difference {et}");
+        assert!(last(&r, 0) > 50.0, "the motor runs up ({})", last(&r, 0));
+    }
+
+    /// BLDC with no load or friction runs to V/(2·Ke).
+    #[test]
+    fn bldc_no_load_speed() {
+        let mut m = Mk::new(0.2, "rk45");
+        let mot = m.add("BLDC", &[("b", "0")]);
+        let v = m.add("Constant", &[("value", "24")]);
+        let tl = m.add("Constant", &[("value", "0")]);
+        let sc = m.add("Scope", &[]);
+        m.wire(v, 0, mot, 0);
+        m.wire(tl, 0, mot, 1);
+        m.wire(mot, 0, sc, 0);
+        let r = m.run();
+        assert!((last(&r, 0) - 24.0 / 0.09).abs() < 1e-4, "{}", last(&r, 0));
+    }
+
+    /// A hybrid stepper moves one full step, π/(2·Nr), when the current moves from phase A to B.
+    #[test]
+    fn stepper_full_step() {
+        let mut m = Mk::new(0.5, "rk45");
+        let mot = m.add("Stepper", &[]);
+        let va = m.add("Step", &[("time", "0.05"), ("initial", "1.65"), ("final", "0")]);
+        let vb = m.add("Step", &[("time", "0.05"), ("initial", "0"), ("final", "1.65")]);
+        let tl = m.add("Constant", &[("value", "0")]);
+        let sc = m.add("Scope", &[]);
+        m.wire(va, 0, mot, 0);
+        m.wire(vb, 0, mot, 1);
+        m.wire(tl, 0, mot, 2);
+        m.wire(mot, 2, sc, 0);
+        let r = m.run();
+        assert!(at(&r, 0, 0.05).abs() < 1e-9);
+        let step = std::f64::consts::PI / 100.0;
+        assert!((last(&r, 0) - step).abs() < 1e-5, "angle {} vs {step}", last(&r, 0));
+    }
+
+    /// Inverter: the average model gives Vdc/2·(m − mean m); the switched model has the same mean
+    /// over whole carrier periods. (Here crossings land exactly on zero, which once lost a switching
+    /// instant: the solver now keeps a zero-crossing function's last non-zero sign.)
+    #[test]
+    fn inverter_average_and_switched() {
+        for model in ["average", "switched (PWM)"] {
+            let mut m = Mk::new(0.1, "rk45");
+            let inv = m.add("Inverter", &[("model", model), ("fc", "1000")]);
+            let mi = m.add("Constant", &[("value", "[0.5 -0.2 0.1]")]);
+            let vdc = m.add("Constant", &[("value", "600")]);
+            let int = m.add("Integrator", &[]);
+            let sc = m.add("Scope", &[]);
+            m.wire(mi, 0, inv, 0);
+            m.wire(vdc, 0, inv, 1);
+            m.wire(inv, 0, int, 0);
+            m.wire(int, 0, sc, 0);
+            let r = m.run();
+            for (k, want) in [110.0, -100.0, -10.0].iter().enumerate() {
+                let got = last(&r, k) / 0.1;
+                assert!((got - want).abs() < 1e-3 * 600.0, "{model} phase {k}: mean {got} vs {want}");
+            }
+            if model != "average" {
+                assert!(r.stats.events >= 600, "switching instants located ({} events)", r.stats.events);
+            }
+        }
+    }
+
+    /// Encoder: the angle is quantised to 2π/(4·PPR), and the speed estimate is within one count
+    /// per sample time.
+    #[test]
+    fn encoder_quantises() {
+        let mut m = Mk::new(0.5, "rk45");
+        let th = m.add("Ramp", &[("slope", "10")]);
+        let enc = m.add("Encoder", &[("ppr", "1024"), ("ts", "0.001")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(th, 0, enc, 0);
+        m.wire(enc, 0, sc, 0);
+        m.wire(enc, 1, sc, 1);
+        let r = m.run();
+        let q = 2.0 * std::f64::consts::PI / 4096.0;
+        for (t, y) in r.t.iter().zip(&r.y[0]) {
+            assert!(10.0 * t - y >= -1e-9 && 10.0 * t - y < q + 1e-9);
+            assert!((y / q - (y / q).round()).abs() < 1e-6);
+        }
+        assert!((last(&r, 1) - 10.0).abs() <= q / 0.001 + 1e-9, "speed {}", last(&r, 1));
     }
 }

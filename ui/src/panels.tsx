@@ -55,7 +55,7 @@ export const LibraryPanel = () => {
                 <div class="libi" classList={{ off: !!d.planned }} title={d.planned ? `Planned for ${d.planned}: ${d.what}` : d.what}
                   onMouseDown={e => !d.planned && e.button === 0 && !(e.target as HTMLElement).closest(".help") && startDrag(e, d)}
                   onDblClick={() => !d.planned && C.addBlock(d.kind)}>
-                  <Icon n={LIB_ICON[d.kind] ?? "block"} /><span>{d.name}</span>
+                  <Icon n={LIB_ICON[d.kind] ?? (d.cat === "Motors" ? "motor" : "block")} /><span>{d.name}</span>
                   <Show when={d.planned} fallback={<button class="help" title={`About ${d.name}`} onClick={e => { e.stopPropagation(); helpCard(`block:${d.kind}`); }}>?</button>}><small class="pill">{d.planned}</small></Show>
                 </div>
               )}</For>
@@ -64,6 +64,28 @@ export const LibraryPanel = () => {
         )}</For>
       </div>
     </aside>
+  );
+};
+
+/** Typical ratings: one choice sets every parameter it lists, as one undoable edit. */
+const Presets = (p: { b: BlockView; def: Def }) => {
+  const [pick, setPick] = createSignal("");
+  createEffect(on(() => p.b.id, () => setPick("")));
+  const apply = (name: string) => {
+    const pr = p.def.presets.find(x => x.name === name); if (!pr) return;
+    setPick(name);
+    act({ Batch: pr.values.map(([key, value]) => ({ SetParam: { id: p.b.id, key, value } })) })
+      .then(o => o && invoke<Issue[]>("check").then(setIssues).catch(() => {}));
+  };
+  return (
+    <div class="iprow">
+      <label title="Typical values for a machine of this rating; replace them with nameplate or test data when you have it.">Typical ratings</label>
+      <select class="presets" value={pick()} onChange={e => apply(e.currentTarget.value)}>
+        <option value="">Choose a rating…</option>
+        <For each={p.def.presets}>{x => <option value={x.name}>{x.name}</option>}</For>
+      </select>
+      <small class="hint">Typical values; replace them with nameplate data</small>
+    </div>
   );
 };
 
@@ -103,6 +125,7 @@ export const Inspector = () => {
         <div class="ibody">
           <div class="iprow"><label>Name</label><input value={name()} onChange={e => act({ Rename: { id: b()!.id, name: e.currentTarget.value } }).then(o => { if (!o) setName(b()!.name); })} /></div>
           <p class="muted iwhat">{def()!.what}</p>
+          <Show when={def()!.presets?.length}><Presets b={b()!} def={def()!} /></Show>
           <For each={def()!.params}>{(_, k) => <Param b={b()!} def={def()!} k={k()} />}</For>
           <Show when={b()!.sub}><p><button class="btn sm" onClick={() => enter(b()!.id)}><Icon n="sub" /> Open subsystem</button> <button class="btn sm" onClick={() => C.ungroup(b()!.id)}>Ungroup</button></p></Show>
           <Show when={["TransferFcn", "ZPK", "StateSpace", "PID", "DCMotor", "Gain", "Integrator"].includes(b()!.kind)}>

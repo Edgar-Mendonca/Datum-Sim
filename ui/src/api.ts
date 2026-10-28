@@ -21,7 +21,8 @@ export interface BlockView {
 export interface WireView { id: number; from: [number, number]; to: [number, number]; pts: Pt[]; path: Pt[] }
 export interface DView { parent: number; path: [number, string][]; blocks: BlockView[]; wires: WireView[] }
 export interface ParamDef { key: string; label: string; def: string; unit: string; hint: string; kind: "num" | "text" | "choice"; choices: string[] }
-export interface Def { kind: string; name: string; cat: string; what: string; how: string; params: ParamDef[]; w: number; h: number; planned: string }
+export interface Preset { name: string; values: [string, string][] }
+export interface Def { kind: string; name: string; cat: string; what: string; how: string; params: ParamDef[]; w: number; h: number; planned: string; presets: Preset[] }
 export interface Library { cats: string[]; blocks: Def[] }
 export interface Issue { id: number; msg: string; warn: boolean }
 export interface Chan { sink: number; port: number; elem: number; name: string }

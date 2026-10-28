@@ -48,6 +48,12 @@ const T = (p: { x: number; y: number; children: JSX.Element; size?: number; anch
   <text x={p.x} y={p.y} font-size={String(p.size ?? 11)} text-anchor={p.anchor ?? "middle"} dominant-baseline="central" class="btxt" font-weight={p.bold ? "600" : "400"}>{p.children}</text>;
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
+/** The letters inside each motor's circle. */
+const MOTOR: Record<string, string> = {
+  DCMotor: "M", DCSepEx: "DC", DCShunt: "DC", DCSeries: "DC", DCCompound: "DC", InductionSC: "IM", InductionDC: "IM", InductionWR: "IM",
+  PMSM: "PM", PMSM3: "PM", SynRM: "RM", SyncField: "SM", BLDC: "BL", Stepper: "ST",
+};
+
 const glyph = (kind: string, w: number, h: number): JSX.Element | null => {
   const cx = w / 2, cy = h / 2, gw = Math.min(w - 16, 34), gh = Math.min(h - 14, 20), x0 = cx - gw / 2, x1 = cx + gw / 2, y0 = cy + gh / 2, y1 = cy - gh / 2;
   const P = (d: string) => <path d={d} class="bglyph" />;
@@ -67,11 +73,15 @@ const glyph = (kind: string, w: number, h: number): JSX.Element | null => {
     case "Abs": return P(`M${x0} ${y1}L${cx} ${y0}L${x1} ${y1}`);
     case "Sign": return P(`M${x0} ${y0}H${cx}V${y1}H${x1}`);
     case "Scope": case "XY": return <><rect x={6} y={6} width={w - 12} height={h - 18} rx={2} class="bscreen" />{kind === "Scope" ? <path d={`M10 ${h / 2 - 2}c4 0 4-10 8-10s4 14 8 14 4-6 ${w - 34} -6`} class="bwave" /> : <circle cx={w / 2} cy={h / 2 - 6} r={7} class="bwave" />}</>;
-    case "DCMotor": case "PMSM": return <><circle cx={cx} cy={cy} r={Math.min(w, h) / 4} class="bglyph" /><T x={cx} y={cy} bold>{kind === "DCMotor" ? "M" : "M3~"}</T></>;
+    case "Inverter": return <>{P(`M${x0} ${y0}L${x1} ${y1}`)}<T x={x0 + 6} y={y1 + 4} size={12} bold>=</T><T x={x1 - 6} y={y0 - 4} size={12} bold>~</T></>;
+    case "PWM": return P(`M${x0} ${y0}H${x0 + gw * .1}V${y1}H${x0 + gw * .4}V${y0}H${x0 + gw * .55}V${y1}H${x0 + gw * .7}V${y0}H${x1}`);
+    default: {
+      const m = MOTOR[kind];
+      return m ? <><circle cx={cx} cy={cy} r={Math.min(w, h) / 5} class="bglyph" /><T x={cx} y={cy} size={10} bold>{m}</T></> : null;
+    }
     case "Lookup1D": case "Table": return <>{P(`M${x0} ${y0}V${y1}M${x0} ${y0}H${x1}`)}{P(`M${x0 + 3} ${y0 - 3}L${cx - 4} ${cy}L${cx + 4} ${cy + 2}L${x1 - 2} ${y1 + 2}`)}</>;
     case "Lookup2D": return <>{P(`M${x0} ${y1}h${gw}v${gh}h${-gw}zM${x0} ${cy}h${gw}M${cx} ${y1}v${gh}`)}</>;
     case "FromFile": case "ToFile": case "ToPlot": return P(`M${cx - 8} ${cy - 10}h11l5 5v15h-16zM${cx + 3} ${cy - 10}v5h5`);
-    default: return null;
   }
 };
 
@@ -117,7 +127,7 @@ const BlockArt = (p: { b: BlockView }) => {
     const s = (bb.params.signs ?? "").replace(/[^+-]/g, "");
     return <For each={bb.ins}>{(p, i) => <T x={p[0] - bb.x + (bb.flip ? -7 : 7)} y={p[1] - bb.y - 7} size={10} bold>{s[i()] === "-" ? "−" : "+"}</T>}</For>;
   };
-  return <>{shape()}{inner()}{(b().sub || b().kind === "DCMotor" || b().kind === "PMSM") && portLabels()}{signs()}</>;
+  return <>{shape()}{inner()}{(b().sub || (b().kind !== "Switch" && [...b().in_names, ...b().out_names].some(n => n))) && portLabels()}{signs()}</>;
 };
 
 /** The latest value shown on a Display block. */

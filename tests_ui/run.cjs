@@ -29,7 +29,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
       core: {
         invoke: async (c, a) => {
           window.__calls.push([c, a]);
-          if (c === "diagram") return a.parent === f.sub ? f.subdiagram : f.diagram;
+          if (c === "diagram") return window.__motor ? f.motor : a.parent === f.sub ? f.subdiagram : f.diagram;
           if (c === "new_model") return f.state;
           // The run ends before its start call returns (a model with no states takes 0.1 ms).
           if (c === "run") { window.__emit("sim-done", { gen: 1, ok: true, error: null, issues: [], stats: f.results.stats, truncated: false, files: [] }); return f.started; }
@@ -157,7 +157,26 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   }
   await p.setViewportSize({ width: 1440, height: 900 });
 
-  // 12. Every view and File page opens without errors.
+  // 12. Motors: glyphs, port names, and typical ratings that set every parameter in one edit (0.1.2).
+  await p.evaluate(() => { window.__motor = true; document.querySelector(".tabs .file").click(); });
+  await p.waitForTimeout(200);
+  await p.click(".tile");
+  await p.waitForTimeout(600);
+  const mot = fix.motor.blocks.find(b => b.kind === "InductionSC");
+  check("a motor block shows its port names", (await p.$$eval(".blk text", els => els.map(e => e.textContent))).includes("v_abc"));
+  const mc = await box(mot.name + " (");
+  await p.mouse.click(mc.x, mc.y);
+  await p.waitForTimeout(200);
+  const nopt = await p.$$eval(".insp select.presets option", els => els.length);
+  check("a motor offers typical ratings", nopt === fix.library.blocks.find(d => d.kind === "InductionSC").presets.length + 1, String(nopt));
+  const pr = fix.library.blocks.find(d => d.kind === "InductionSC").presets[3];
+  await p.selectOption(".insp select.presets", pr.name);
+  await p.waitForTimeout(200);
+  const batch = (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).reverse().find(o => o.Batch);
+  check("choosing a rating sets every value in one undoable edit", !!batch && batch.Batch.length === pr.values.length && batch.Batch.every(o => o.SetParam && o.SetParam.id === mot.id), JSON.stringify(batch));
+  await p.evaluate(() => { window.__motor = false; });
+
+  // 13. Every view and File page opens without errors.
   for (const v of ["Variables", "Scopes", "Results", "Issues", "Diagram"]) { await p.click(`.side button[title="${v}"]`); await p.waitForTimeout(150); }
   for (const k of ["print", "options", "roadmap", "about", "home"]) { await p.evaluate(() => document.querySelector(".tabs .file").click()); await p.waitForTimeout(100); await p.click(`.bs aside button:has-text("${{ print: "Print", options: "Options", roadmap: "Roadmap", about: "Updates", home: "Home" }[k]}")`); await p.waitForTimeout(200); }
   check("roadmap lists the planned releases", (await p.textContent(".bsmain")).length > 0);

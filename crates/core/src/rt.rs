@@ -1111,6 +1111,9 @@ pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Result<(Box<dyn Rt>, Vec<usize
         }
         Ok(())
     };
+    if let Some(r) = crate::motors::build(kind, p, iw) {
+        return r;
+    }
     match kind {
         "Constant" => {
             let v = p.v("value")?;

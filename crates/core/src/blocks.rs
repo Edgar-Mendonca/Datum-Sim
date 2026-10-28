@@ -38,6 +38,8 @@ pub struct Def {
     pub h: f64,
     /// Shown dimmed in the library with the release it arrives in.
     pub planned: &'static str,
+    /// Typical parameter values for common ratings (motors).
+    pub presets: Vec<crate::motors::Preset>,
 }
 
 const fn n(key: &'static str, label: &'static str, def: &'static str, unit: &'static str, hint: &'static str) -> P {
@@ -52,16 +54,16 @@ const fn c(key: &'static str, label: &'static str, choices: &'static [&'static s
 
 pub const CATS: &[&str] = &[
     "Sources", "Math", "Continuous", "Discontinuities", "Discrete", "Routing", "Lookup tables", "Sinks", "Subsystems",
-    "Motors", "Physical (0.4)",
+    "Motors", "Drives", "Physical (0.4)",
 ];
 
 fn d(kind: &'static str, name: &'static str, cat: &'static str, what: &'static str, how: &'static str, params: Vec<P>) -> Def {
     let (w, h) = size(kind);
-    Def { kind, name, cat, what, how, params, w, h, planned: "" }
+    Def { kind, name, cat, what, how, params, w, h, planned: "", presets: crate::motors::presets(kind) }
 }
 
 fn planned(kind: &'static str, name: &'static str, cat: &'static str, what: &'static str, when: &'static str) -> Def {
-    Def { kind, name, cat, what, how: "", params: vec![], w: 60.0, h: 40.0, planned: when }
+    Def { kind, name, cat, what, how: "", params: vec![], w: 60.0, h: 40.0, planned: when, presets: vec![] }
 }
 
 /// Default block size on the canvas.
@@ -74,7 +76,10 @@ pub fn size(kind: &str) -> (f64, f64) {
         "Display" => (80.0, 30.0),
         "Mux" | "Demux" => (12.0, 60.0),
         "Subsystem" => (100.0, 70.0),
-        "DCMotor" | "PMSM" => (90.0, 70.0),
+        "DCMotor" | "PMSM" | "DCSepEx" | "DCShunt" | "DCSeries" | "DCCompound" | "InductionSC" | "InductionDC" | "PMSM3" | "SynRM" | "BLDC" | "Stepper" => (90.0, 80.0),
+        "InductionWR" | "SyncField" => (100.0, 100.0),
+        "Clarke" | "InvClarke" | "Park" | "InvPark" | "Encoder" => (60.0, 44.0),
+        "ThreePhase" | "Inverter" | "PWM" => (70.0, 50.0),
         "TransferFcn" | "ZPK" | "StateSpace" | "Fcn" | "PID" => (90.0, 44.0),
         "Lookup2D" | "Switch" => (60.0, 60.0),
         _ => (60.0, 40.0),
@@ -183,7 +188,72 @@ pub fn library() -> Vec<Def> {
             "Ld·di_d/dt = v_d − Rs·i_d + p·ω·Lq·i_q;  Lq·di_q/dt = v_q − Rs·i_q − p·ω·(Ld·i_d + ψ);  T_e = 1.5·p·(ψ·i_q + (Ld − Lq)·i_d·i_q);  J·dω/dt = T_e − b·ω − T_L.",
             vec![n("Rs", "Stator resistance Rs", "0.5", "Ω", ""), n("Ld", "d-axis inductance Ld", "0.001", "H", ""), n("Lq", "q-axis inductance Lq", "0.001", "H", ""),
                  n("psi", "Magnet flux ψ", "0.05", "Wb", ""), n("p", "Pole pairs p", "4", "", ""), n("J", "Inertia J", "0.0005", "kg·m²", ""), n("b", "Viscous friction b", "0.0001", "N·m·s/rad", "")]),
-        planned("Induction", "Induction motor", "Motors", "A squirrel-cage induction motor in the d–q frame.", "0.2"),
+        d("DCSepEx", "DC motor, separately excited", "Motors", "A wound-field DC machine with its own field supply. Inputs: armature voltage V_a, field voltage V_f, load torque T_L. Outputs: speed ω, armature current i_a, field current i_f, torque T_e, angle θ.",
+            "La·di_a/dt = V_a − Ra·i_a − Laf·i_f·ω;  Lf·di_f/dt = V_f − Rf·i_f;  T_e = Laf·i_f·i_a;  J·dω/dt = T_e − b·ω − T_L. Typical ratings set every value at once; replace them with nameplate data.",
+            dc_params(false)),
+        d("DCShunt", "DC motor, shunt", "Motors", "A DC machine whose field is fed from the same supply as the armature. Inputs: supply voltage V, load torque T_L. Outputs: speed ω, armature current i_a, field current i_f, torque T_e, angle θ.",
+            "As the separately excited motor with V_f = V. The supply current is i_a + i_f.",
+            dc_params(false)),
+        d("DCSeries", "DC motor, series", "Motors", "A DC machine with its field in series with the armature: high starting torque, speed falls with load (traction, hoists). Inputs: V, T_L. Outputs: ω, current i, T_e, θ.",
+            "(La + Lf)·di/dt = V − (Ra + Rf)·i − Laf·i·ω;  T_e = Laf·i². Never run it without load: the no-load speed is very high.",
+            vec![n("Ra", "Armature resistance Ra", "0.4", "Ω", ""), n("La", "Armature inductance La", "0.01", "H", ""), n("Rf", "Series field resistance Rf", "0.2", "Ω", ""),
+                 n("Lf", "Series field inductance Lf", "0.01", "H", ""), n("Laf", "Mutual inductance Laf", "0.052", "H", "Torque = Laf·i²"), n("J", "Inertia J", "0.15", "kg·m²", ""),
+                 n("b", "Viscous friction b", "0.01", "N·m·s/rad", ""), n("w0", "Initial speed", "0", "rad/s", "")]),
+        d("DCCompound", "DC motor, compound", "Motors", "A DC machine with a shunt field and a series field (cumulative when Lafse > 0, differential when < 0). Inputs: V, T_L. Outputs: ω, i_a, shunt field current i_f, T_e, θ.",
+            "(La + Lse)·di_a/dt = V − (Ra + Rse)·i_a − (Laf·i_f + Lafse·i_a)·ω;  Lf·di_f/dt = V − Rf·i_f;  T_e = (Laf·i_f + Lafse·i_a)·i_a.",
+            vec![n("Ra", "Armature resistance Ra", "0.5", "Ω", ""), n("La", "Armature inductance La", "0.01", "H", ""), n("Rse", "Series field resistance Rse", "0.1", "Ω", ""),
+                 n("Lse", "Series field inductance Lse", "0.002", "H", ""), n("Lafse", "Series mutual inductance Lafse", "0.005", "H", ""), n("Rf", "Shunt field resistance Rf", "220", "Ω", ""),
+                 n("Lf", "Shunt field inductance Lf", "50", "H", ""), n("Laf", "Shunt mutual inductance Laf", "1.25", "H", ""), n("J", "Inertia J", "0.15", "kg·m²", ""),
+                 n("b", "Viscous friction b", "0.01", "N·m·s/rad", ""), n("w0", "Initial speed", "0", "rad/s", "")]),
+        d("InductionSC", "Induction motor, squirrel-cage", "Motors", "A three-phase asynchronous motor. Inputs: stator phase voltages v_abc (width 3) and load torque T_L. Outputs: speed ω, torque T_e, stator currents i_abc (width 3), angle θ.",
+            "Fifth-order model in the stationary frame, the equivalent circuit Rs, Lls, Lm, Llr, Rr (rotor values referred to the stator). Feed it from a Three-phase source or an Inverter. Typical ratings cover low, medium and high voltage machines.",
+            im_params(false)),
+        d("InductionDC", "Induction motor, double-cage", "Motors", "A squirrel-cage motor with two rotor cages: a high-resistance outer cage for starting torque and a low-resistance inner cage for running. Inputs: v_abc, T_L. Outputs: ω, T_e, i_abc, θ.",
+            "Cage 1 (Rr, Llr) is the outer, starting cage; cage 2 (Rr2, Llr2) the inner, running cage. Both share the magnetising inductance Lm.",
+            im_params(true)),
+        d("InductionWR", "Induction motor, wound-rotor", "Motors", "An induction motor with its rotor windings brought out (slip rings), for rotor resistance starting or a rotor-side drive. Inputs: v_abc, rotor voltages vr_abc (in the rotor frame, referred to the stator), T_L. Outputs: ω, T_e, i_abc, θ, rotor currents ir_abc.",
+            "With the rotor short-circuited (vr_abc = 0) it behaves as the squirrel-cage motor. For a starting resistor, feed vr_abc = −R_ext·ir_abc through a Gain.",
+            im_params(false)),
+        d("PMSM3", "PMSM, three-phase", "Motors", "A permanent-magnet synchronous motor fed with three-phase voltages (surface or interior magnets, Ld ≠ Lq). Inputs: v_abc, T_L. Outputs: speed ω, torque T_e, phase currents i_abc, angle θ.",
+            "The same d–q model as the PMSM (d–q) block, with the Park transform inside at the electrical angle p·θ. θ = 0 puts the magnet on phase a.",
+            vec![n("Rs", "Stator resistance Rs", "0.15", "Ω", ""), n("Ld", "d-axis inductance Ld", "0.0025", "H", ""), n("Lq", "q-axis inductance Lq", "0.004", "H", ""),
+                 n("psi", "Magnet flux ψ", "0.4", "Wb", "Peak flux linkage per phase"), n("p", "Pole pairs p", "4", "", ""), n("J", "Inertia J", "0.03", "kg·m²", ""),
+                 n("b", "Viscous friction b", "0.001", "N·m·s/rad", ""), n("w0", "Initial speed", "0", "rad/s", "")]),
+        d("SynRM", "Synchronous reluctance motor", "Motors", "A synchronous motor with no magnets or field: torque comes from the difference of Ld and Lq. Inputs: v_abc, T_L. Outputs: ω, T_e, i_abc, θ.",
+            "T_e = 1.5·p·(Ld − Lq)·i_d·i_q. It needs a drive that knows the rotor angle; it does not start from the mains.",
+            vec![n("Rs", "Stator resistance Rs", "0.8", "Ω", ""), n("Ld", "d-axis inductance Ld", "0.12", "H", ""), n("Lq", "q-axis inductance Lq", "0.02", "H", ""),
+                 n("p", "Pole pairs p", "2", "", ""), n("J", "Inertia J", "0.02", "kg·m²", ""), n("b", "Viscous friction b", "0.001", "N·m·s/rad", ""), n("w0", "Initial speed", "0", "rad/s", "")]),
+        d("SyncField", "Synchronous motor, wound field", "Motors", "A salient-pole synchronous machine with a DC field winding and damper windings, as used for large medium and high voltage drives. Inputs: v_abc, field voltage v_f (referred to the stator), T_L. Outputs: ω, T_e, i_abc, field current i_f, θ.",
+            "Seventh-order model in the rotor d–q frame. The dampers let it start as an induction motor and damp hunting. Start it at synchronous speed (w0 = 2πf/p) with if0 and v_f = Rf·if0 to run on the grid; θ0 sets the rotor's starting angle.",
+            vec![n("Rs", "Stator resistance Rs", "0.1", "Ω", ""), n("Ll", "Stator leakage Ll", "0.004", "H", ""), n("Lmd", "d-axis magnetising Lmd", "0.035", "H", ""),
+                 n("Lmq", "q-axis magnetising Lmq", "0.02", "H", ""), n("Rf", "Field resistance Rf", "0.03", "Ω", "Referred to the stator"), n("Llf", "Field leakage Llf", "0.006", "H", ""),
+                 n("Rkd", "d damper resistance Rkd", "0.5", "Ω", ""), n("Llkd", "d damper leakage Llkd", "0.004", "H", ""), n("Rkq", "q damper resistance Rkq", "0.7", "Ω", ""),
+                 n("Llkq", "q damper leakage Llkq", "0.007", "H", ""), n("p", "Pole pairs p", "2", "", ""), n("J", "Inertia J", "20", "kg·m²", ""),
+                 n("b", "Viscous friction b", "0", "N·m·s/rad", ""), n("if0", "Initial field current", "0", "A", "Referred to the stator"), n("w0", "Initial speed", "0", "rad/s", ""),
+                 n("th0", "Initial rotor angle", "0", "rad", "Mechanical")]),
+        d("BLDC", "BLDC motor", "Motors", "A brushless DC motor with ideal six-step commutation. Inputs: DC voltage V, load torque T_L. Outputs: speed ω, current i, torque T_e, angle θ, Hall signals (width 3).",
+            "Two phases conduct at a time with flat back-EMF:  2L·di/dt = V − 2R·i − 2Ke·ω;  T_e = 2Ke·i. R, L and Ke are per phase. Commutation ripple is not modelled.",
+            vec![n("R", "Phase resistance R", "0.05", "Ω", ""), n("L", "Phase inductance L", "0.0001", "H", ""), n("Ke", "Phase back-EMF constant Ke", "0.045", "V·s/rad", ""),
+                 n("p", "Pole pairs p", "4", "", "For the Hall signals"), n("J", "Inertia J", "0.0003", "kg·m²", ""), n("b", "Viscous friction b", "0.00001", "N·m·s/rad", "")]),
+        d("Stepper", "Stepper motor, hybrid", "Motors", "A two-phase hybrid stepper motor. Inputs: phase voltages v_A, v_B and load torque T_L. Outputs: ω, T_e, θ, phase currents i_A, i_B.",
+            "T_e = −Km·i_A·sin(Nr·θ) + Km·i_B·cos(Nr·θ) − Td·sin(4·Nr·θ). One full step turns the rotor π/(2·Nr): 1.8° with Nr = 50 teeth. Drive it with Pulse or Table sources.",
+            vec![n("R", "Phase resistance R", "1.65", "Ω", ""), n("L", "Phase inductance L", "0.0028", "H", ""), n("Km", "Torque constant Km", "0.25", "N·m/A", ""),
+                 n("Nr", "Rotor teeth Nr", "50", "", ""), n("Td", "Detent torque Td", "0.01", "N·m", ""), n("J", "Inertia J", "0.0000054", "kg·m²", ""),
+                 n("b", "Viscous friction b", "0.00001", "N·m·s/rad", "")]),
+        // Drives
+        d("ThreePhase", "Three-phase source", "Drives", "A balanced three-phase voltage: v_abc (width 3).", "Line-to-line RMS voltage V_LL; each phase peak is V_LL·√2/√3. Phase a is a cosine; b and c lag by 120° and 240°.",
+            vec![n("Vll", "Line voltage (RMS)", "400", "V", ""), n("f", "Frequency", "50", "Hz", ""), n("phase", "Phase of a", "0", "rad", "")]),
+        d("Inverter", "Inverter, three-phase", "Drives", "A two-level voltage-source inverter. Inputs: modulation m_abc (−1…1, width 3), DC link voltage V_dc. Output: phase voltages v_abc.",
+            "Average model: v_k = V_dc/2·(m_k − mean of m). Switched: each leg compares m_k with a triangle carrier at the switching frequency; the switching instants are located exactly. The average model runs much faster.",
+            vec![c("model", "Model", &["average", "switched (PWM)"], ""), n("fc", "Switching frequency", "5000", "Hz", "Switched model only")]),
+        d("PWM", "PWM", "Drives", "Sine-triangle pulse width modulation: compares each reference (−1…1) with a triangle carrier.", "Output +1 / −1 (or 1 / 0) per element. Switching instants are located exactly by the variable-step solvers.",
+            vec![n("fc", "Carrier frequency", "1000", "Hz", ""), c("levels", "Output levels", &["−1 / +1", "0 / 1"], "")]),
+        d("Clarke", "abc → αβ", "Drives", "Clarke transform: three-phase abc (width 3) to the stationary αβ frame (width 2).", "Amplitude-invariant: a balanced set of peak A gives α, β of amplitude A.", vec![]),
+        d("InvClarke", "αβ → abc", "Drives", "Inverse Clarke transform: αβ (width 2) to three-phase abc (width 3).", "", vec![]),
+        d("Park", "αβ → dq", "Drives", "Park transform: αβ (width 2) to the rotating dq frame at angle θ.", "θ is the electrical angle: pole pairs × the motor's angle θ. d = α·cos θ + β·sin θ; q = −α·sin θ + β·cos θ.", vec![]),
+        d("InvPark", "dq → αβ", "Drives", "Inverse Park transform: dq (width 2) at angle θ to αβ (width 2).", "θ is the electrical angle: pole pairs × the motor's angle θ.", vec![]),
+        d("Encoder", "Encoder", "Drives", "An incremental encoder: the measured angle in steps of 2π/(4·PPR) and a speed estimate from the count change over each sample time.", "Input: the motor angle θ. Outputs: measured angle, estimated speed.",
+            vec![n("ppr", "Pulses per revolution", "1024", "", "Four counts per pulse"), n("ts", "Speed sample time", "0.001", "s", "")]),
         // Physical (planned)
         planned("Mass", "Mass, spring, damper", "Physical (0.4)", "Mechanical components you connect by ports.", "0.4"),
         planned("Resistor", "R, L, C and sources", "Physical (0.4)", "Electrical components you connect by ports.", "0.4"),
@@ -192,6 +262,25 @@ pub fn library() -> Vec<Def> {
         planned("FMU", "FMU", "Subsystems", "Run a model exported by another tool (FMI standard).", "0.5"),
         planned("PyBlock", "Python block", "Math", "A block written in Python.", "0.6"),
     ]
+}
+
+fn dc_params(_series: bool) -> Vec<P> {
+    vec![n("Ra", "Armature resistance Ra", "0.6", "Ω", ""), n("La", "Armature inductance La", "0.012", "H", ""), n("Rf", "Field resistance Rf", "220", "Ω", ""),
+         n("Lf", "Field inductance Lf", "50", "H", ""), n("Laf", "Mutual inductance Laf", "1.3", "H", "e = Laf·i_f·ω"), n("J", "Inertia J", "0.15", "kg·m²", ""),
+         n("b", "Viscous friction b", "0.01", "N·m·s/rad", ""), n("w0", "Initial speed", "0", "rad/s", "")]
+}
+
+fn im_params(double: bool) -> Vec<P> {
+    let mut v = vec![n("Rs", "Stator resistance Rs", "0.37", "Ω", ""), n("Lls", "Stator leakage Lls", "0.0039", "H", ""), n("Lm", "Magnetising inductance Lm", "0.117", "H", ""),
+                     n("Rr", "Rotor resistance Rr", "0.31", "Ω", "Referred to the stator"), n("Llr", "Rotor leakage Llr", "0.0039", "H", "")];
+    if double {
+        v[3] = n("Rr", "Outer cage resistance Rr", "0.93", "Ω", "Starting cage");
+        v[4] = n("Llr", "Outer cage leakage Llr", "0.0012", "H", "");
+        v.push(n("Rr2", "Inner cage resistance Rr2", "0.15", "Ω", "Running cage"));
+        v.push(n("Llr2", "Inner cage leakage Llr2", "0.0058", "H", ""));
+    }
+    v.extend([n("p", "Pole pairs p", "2", "", ""), n("J", "Inertia J", "0.07", "kg·m²", ""), n("b", "Viscous friction b", "0", "N·m·s/rad", ""), n("w0", "Initial speed", "0", "rad/s", "")]);
+    v
 }
 
 pub fn def(kind: &str) -> Option<Def> {
@@ -240,6 +329,15 @@ pub fn ports(b: &Block) -> (usize, usize) {
         }),
         "DCMotor" => (2, 3),
         "PMSM" => (3, 5),
+        "DCSepEx" | "SyncField" => (3, 5),
+        "DCShunt" | "DCCompound" => (2, 5),
+        "DCSeries" | "InductionSC" | "InductionDC" | "PMSM3" | "SynRM" => (2, 4),
+        "InductionWR" => (3, 5),
+        "BLDC" => (2, 5),
+        "Stepper" => (3, 5),
+        "ThreePhase" => (0, 1),
+        "Inverter" | "Park" | "InvPark" => (2, 1),
+        "Encoder" => (1, 2),
         _ => (1, 1),
     }
 }
@@ -250,6 +348,17 @@ pub fn port_names(b: &Block) -> (Vec<String>, Vec<String>) {
     match b.kind.as_str() {
         "DCMotor" => (s(&["V", "T_L"]), s(&["ω", "i", "θ"])),
         "PMSM" => (s(&["v_d", "v_q", "T_L"]), s(&["ω", "i_d", "i_q", "T_e", "θ"])),
+        "DCSepEx" => (s(&["V_a", "V_f", "T_L"]), s(&["ω", "i_a", "i_f", "T_e", "θ"])),
+        "DCShunt" | "DCCompound" => (s(&["V", "T_L"]), s(&["ω", "i_a", "i_f", "T_e", "θ"])),
+        "DCSeries" => (s(&["V", "T_L"]), s(&["ω", "i", "T_e", "θ"])),
+        "InductionSC" | "InductionDC" | "PMSM3" | "SynRM" => (s(&["v_abc", "T_L"]), s(&["ω", "T_e", "i_abc", "θ"])),
+        "InductionWR" => (s(&["v_abc", "vr_abc", "T_L"]), s(&["ω", "T_e", "i_abc", "θ", "ir_abc"])),
+        "SyncField" => (s(&["v_abc", "v_f", "T_L"]), s(&["ω", "T_e", "i_abc", "i_f", "θ"])),
+        "BLDC" => (s(&["V", "T_L"]), s(&["ω", "i", "T_e", "θ", "hall"])),
+        "Stepper" => (s(&["v_A", "v_B", "T_L"]), s(&["ω", "T_e", "θ", "i_A", "i_B"])),
+        "Inverter" => (s(&["m_abc", "V_dc"]), s(&["v_abc"])),
+        "Park" | "InvPark" => (s(&["", "θ"]), vec![]),
+        "Encoder" => (vec![], s(&["θ_m", "ω_m"])),
         "Subsystem" => {
             let Some(sd) = &b.sub else { return (vec![], vec![]) };
             let (i, o) = sub_ports(sd);
@@ -298,6 +407,12 @@ pub fn label(b: &Block) -> String {
         "Step" => format!("{} → {}", p("initial"), p("final")),
         "Table" | "Lookup1D" => "f(x)".into(),
         "FromFile" | "ToFile" => p("file"),
+        "ThreePhase" => format!("{} V {} Hz", p("Vll"), p("f")),
+        "PWM" => format!("{} Hz", p("fc")),
+        "Clarke" => "abc→αβ".into(),
+        "InvClarke" => "αβ→abc".into(),
+        "Park" => "αβ→dq".into(),
+        "InvPark" => "dq→αβ".into(),
         _ => String::new(),
     }
 }
