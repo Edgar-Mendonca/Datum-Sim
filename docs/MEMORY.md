@@ -70,7 +70,7 @@
 | `tests_ui/run.cjs` | 22 UI checks of the built window with a mocked bridge |
 | `tests_ui/realapp.sh` | Screenshots of the real app under Xvfb (xdotool steps) |
 | `docs/verification/2026-10-27.md` | The first verification record: what was checked, numbers, what was not |
-| `docs/PLAN-0.1.md`, `docs/site.json`, `CHANGELOG.md` | The plan, the public summary and roadmap, the change log |
+| `docs/PLAN-0.1.md`, `docs/PLAN-0.1.x.md`, `docs/site.json`, `CHANGELOG.md` | The plans, the public summary and roadmap, the change log |
 
 ### Release flow
 
@@ -160,6 +160,10 @@
 - Brainstormed the next steps with the user (wire branches and probes, masks and user libraries, discrete control, motor drives, control design, live tuning). The user asked to release 0.1.0 first.
 - Released 0.1.0: `release.yml` started from the Actions tab (pushing the tag from the session was refused). The embedded Python's tests passed on Windows; installer 85.6 MB.
 - Next: the user tests on a Windows PC; then 0.1.1 from that feedback and `docs/PLAN-0.2.md`.
+
+### 2026-10-28: Session 4 (plan for 0.1.x)
+- Gave the user the zip 9 and deny.toml fix for Datum Plot (tested on a copy of Plot 0.2.12: all checks pass; BSL-1.0 added to the allow-list for Plot's clipboard crates).
+- Wrote `docs/PLAN-0.1.x.md`: brainstorm and small releases 0.1.1 (first-use fixes) → 0.1.2 (wires) → 0.1.3 (scopes) → 0.1.4 (blocks) → 0.1.5 (motors and drives) → 0.1.6 (live tuning, command line) → 0.2.0 (masks, user libraries, buses). Waiting for the user's answers.
 
 ## 5. Known limits and next steps
 
