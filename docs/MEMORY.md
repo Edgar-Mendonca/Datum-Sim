@@ -6,13 +6,13 @@
 | | |
 | --- | --- |
 | **Product** | Datum Sim: model and simulate dynamic systems (block diagrams, control design, motors; physical components later) |
-| **Current version** | 0.1.0 (built and tested; not released yet) |
+| **Current version** | 0.1.0 (released 2026-10-28) |
 | **Repo** | `Edgar-Mendonca/Datum-Sim` · branch `claude/dreamy-babbage-dyf9nr` (the first branch pushed, so the default branch) |
 | **Stack** | Rust engine (`crates/core`), Tauri 2, SolidJS + strict TypeScript, uPlot for scopes; bundled CPython 3.13 with numpy, SciPy and python-control for analysis |
 | **Identifier** | `com.edgarmendonca.datumsim` · files `.dsim` · installer `DatumSim-x.y.z-setup.exe` |
 | **Accent** | Orange `#C2410C` (`--blue2` `#A3360A`, `--sky` `#F6C3A5`, `--pale` `#FCEEE6`, `--sel` `#F9E0D1`, `--sel2` `#F0C2A6`; dark `#F08A5D`; dark File sidebar `#5C220A`) |
 | **Code size** | about 9 500 lines: engine 5 300 (Rust), shell 1 150 (Rust), window 2 000 (TS), Python 250, tests in each |
-| **Installer** | built by `release.yml` with the Python runtime inside (expect about 70–90 MB; not built yet) |
+| **Installer** | `DatumSim-0.1.0-setup.exe`, 85.6 MB with the Python runtime inside (built by `release.yml`) |
 | **Reference repos** | `Edgar-Mendonca/Datum` (FAMILY, MEMORY, brain), `Edgar-Mendonca/Datum-Plan` (reference code), `Edgar-Mendonca/Datum-Plot` (bundled Python), `morluto/rea` (how a hard tool is built and tested) |
 
 ---
@@ -131,7 +131,7 @@
 | 0.1.0 | Engine: model, edits, 45 blocks, compiler, five solvers, events, routing, sweeps, examples, verification and hardening tests | ✅ |
 | 0.1.0 | Shell and window: family ribbon, File page, Options, Help, Roadmap, editor, inspector, scopes, subsystems, Python analyses, print, updater | ✅ |
 | 0.1.0 | CI, release workflow with the Python runtime, cargo deny, UI tests | ✅ (CI green on Linux, Windows and macOS, run 1) |
-| 0.1.0 | First release through the updater | 🔜 (the user starts it: tag `v0.1.0` or run Release) |
+| 0.1.0 | First release through the updater | ✅ (2026-10-28; Release run from the Actions tab: tag pushes are blocked from Claude sessions) |
 | 0.1.x | Check on a Windows PC: installer, Python first start, printing to PDF, updater | 🔜 |
 | 0.1.x | Wire branch points and labels; faster drawing of very large diagrams; print preview polish; more examples (heat exchanger, compressor anti-surge) | ⬜ |
 | 0.2 | Masks, buses, goto/from, discrete TF and PID, multi-rate, integrator reset, algebraic-loop solving, induction motor | ⬜ |
@@ -155,6 +155,11 @@
 - Checked: 37 Rust tests (closed-form verification, solver conformance with Robertson, Van der Pol and the bouncing ball, hardening; 2 000 random models once), 7 Python tests, 22 UI checks, clippy, cargo deny, and the real app under Xvfb (every example, live scopes, subsystems, Bode, drag-and-drop building and wiring, dark theme).
 - Bugs found and fixed: widths growing forever through a Mux in a loop and a Sum with `*` signs (random-model tests); a run that ended before its start call returned stayed "Running"; the ribbon jumped when the contextual tab appeared; scopes kept light colours in dark theme; the unit delay updated too early; Constant blocks were reset by flattening; three zip advisories (moved to zip 9).
 - Not done: no release yet; not run on Windows; brain not regenerated in the hub (this session cannot push there: the user adds Datum Sim to `apps.json` in the hub chat after the first release).
+
+### 2026-10-28: Session 3 (0.1.0 released)
+- Brainstormed the next steps with the user (wire branches and probes, masks and user libraries, discrete control, motor drives, control design, live tuning). The user asked to release 0.1.0 first.
+- Released 0.1.0: `release.yml` started from the Actions tab (pushing the tag from the session was refused). The embedded Python's tests passed on Windows; installer 85.6 MB.
+- Next: the user tests on a Windows PC; then 0.1.1 from that feedback and `docs/PLAN-0.2.md`.
 
 ## 5. Known limits and next steps
 
