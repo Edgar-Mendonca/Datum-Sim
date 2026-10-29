@@ -7,7 +7,7 @@
   "for": "Control, mechanical, electrical, process and mechatronics engineers, researchers and students.",
   "about": [
     "Datum Sim models and simulates dynamic systems. You draw the system as blocks and wires: sources, transfer functions, state space, continuous and discrete PID controllers, lookup tables, and a motor library with DC, induction, synchronous, switched reluctance, BLDC and stepper motors, inverters and transforms. Then press Run and watch the signals on live scopes.",
-    "Five solvers cover everything from simple fixed-step runs to stiff systems; the variable-step solvers find switching times exactly. Discrete controllers run at their own sample times, and the diagram can colour every block by its rate. Motors come with typical values for low, medium and high voltage ratings. Parameter sweeps run in the app's own engine, step-response specifications and Bode plots come from a built-in Python engine, and the solvers, main blocks and motors are checked against known answers."
+    "Five solvers cover everything from simple fixed-step runs to stiff systems; the variable-step solvers find switching times exactly. Discrete controllers run at their own sample times, and the diagram can colour every block by its rate. Motors come with typical values for low, medium and high voltage ratings. Scopes have measuring cursors, step-response marks and comparison of earlier runs, and a probe reads any wire after a run. Parameter sweeps run in the app's own engine, step-response specifications and Bode plots come from a built-in Python engine, and the solvers, main blocks and motors are checked against known answers."
   ],
   "steps": [
     {
@@ -20,11 +20,13 @@
     },
     {
       "title": "Analyse and tune",
-      "text": "Sweep parameters, read the step-response specifications and tune the controller, continuous or discrete."
+      "text": "Measure with cursors and step-response marks, compare runs, read any wire with the probe, and sweep parameters to tune the controller."
     }
   ],
   "highlights": [
     "Draw a model as blocks and wires, press Run and watch live scopes",
+    "Scopes with two measuring cursors, step-response marks, comparison of the last five runs, stacked plots, and PNG or SVG pictures",
+    "A signal probe: hover any wire after a run to read its value",
     "84 blocks: sources, math, transfer functions, state space, PID, delays, discontinuities, lookup tables, discrete control, motors and drives",
     "Discrete control: discrete transfer function, state space, integrator and PID, rate transition, and sample-time colours on the diagram",
     "Motor library: DC (separately excited, shunt, series, compound), induction (squirrel-cage, double-cage, wound-rotor), synchronous (permanent-magnet, reluctance, wound-field with dampers), switched reluctance, BLDC and stepper",
@@ -40,21 +42,9 @@
   ],
   "roadmap": [
     {
-      "v": "0.1.5",
-      "title": "Scopes",
-      "when": "Next",
-      "items": [
-        "Two measuring cursors",
-        "Y-zoom and auto-scale; stacked plots",
-        "Keep and compare runs",
-        "SVG and high-resolution pictures",
-        "Read any signal by hovering its wire"
-      ]
-    },
-    {
       "v": "0.1.6",
       "title": "Wires and diagram",
-      "when": "Soon",
+      "when": "Next",
       "items": [
         "Branch from the middle of a wire",
         "Move wire segments and remove bends",

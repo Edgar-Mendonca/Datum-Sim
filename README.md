@@ -32,7 +32,7 @@ Draw a model as blocks and wires, press Run, and see how the system behaves over
 - **Drives**: three-phase source, inverter (average or switched), DC link, PWM, Clarke and Park transforms, encoder, current sensor; worked examples from a direct-on-line start to field-oriented control.
 - **Subsystems**: group blocks into one, open them, nest them; Goto/From tags send signals without wires.
 - **Five solvers**: from fixed-step Euler to variable-step and stiff; the variable-step solvers find switching times exactly.
-- **Live scopes**, parameter sweeps, results as CSV for Datum Plot.
+- **Live scopes** with two measuring cursors, step-response marks, comparison of earlier runs, stacked plots and PNG or SVG pictures; a probe reads any wire after a run. Parameter sweeps, and results as CSV for Datum Plot.
 - **Analysis** from the built-in Python engine: Bode plots and stability margins, step responses, poles and zeros, rise time, overshoot and settling time.
 - **Checked**: the solvers, main blocks and motors are tested against known answers. See the verification records for [0.1.0](docs/verification/2026-10-27.md), [the motors](docs/verification/2026-10-28.md) and [discrete control](docs/verification/2026-10-29.md).
 

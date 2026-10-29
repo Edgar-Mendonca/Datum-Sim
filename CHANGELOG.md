@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.5 — 2026-10-29
+
+Scopes you can measure with, and a probe that reads any wire.
+
+**Scopes**
+- **Cursors**: two lines, A and B, that you drag across the plot; a table gives every signal at A and at B, the difference, Δt and 1/Δt.
+- **Marks**: rise time (10–90 %), overshoot, peak and settling time (2 %) of the first signal, drawn on the plot.
+- **Compare runs**: the last five runs are kept; overlay any of them, dashed in the same colours.
+- **Axes**: drag up or down to zoom the y axis; a fixed y range; one plot per input (stacked) on a shared time axis. Layout and range are saved in the Scope block.
+- **Pictures**: PNG as shown, PNG at three times the size for print, and SVG for papers and reports.
+
+**Signal probe**
+- Simulate › Log all signals logs every signal of the model. After the run, hover any wire to read its value at cursor A (or at the end of the run), inside subsystems too.
+
+**Fixed**
+- With every signal logged, the first run no longer opens an empty scope.
+
 ## 0.1.4 — 2026-10-29
 
 Discrete control: controllers that run at a sample time, as in a microcontroller, and more motor and drive blocks.

@@ -32,7 +32,12 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           if (c === "diagram") return window.__motor ? f.motor : a.parent === f.sub ? f.subdiagram : f.diagram;
           if (c === "new_model") return f.state;
           // The run ends before its start call returns (a model with no states takes 0.1 ms).
-          if (c === "run") { window.__emit("sim-done", { gen: 1, ok: true, error: null, issues: [], stats: f.results.stats, truncated: false, files: [] }); return f.started; }
+          if (c === "run") {
+            window.__emit("sim-done", { gen: 1, ok: true, error: null, issues: [], stats: f.results.stats, truncated: false, files: [] });
+            // With Log all signals the run also logs block outputs for the probe.
+            if (window.__probeRun) { const pid = f.diagram.blocks.find(b => b.kind === "PID").id; return { ...f.started, chans: [...f.started.chans, { sink: pid, port: 0, elem: 0, name: "PID", probe: true }] }; }
+            return f.started;
+          }
           if (c === "apply") return { ...f.state, created: [999] };
           if (c === "value_at") return a.chans.map((_, k) => 0.5 + k);
           if (c === "step_marks") return { y0: 0, yf: 1, t10: 0.2, t90: 0.8, rise: 0.6, peak: 1.1, tpeak: 1.2, overshoot: 10, settle: 2.5 };
@@ -144,18 +149,19 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.click('.menu button:has-text("Run 1")');
   await p.waitForTimeout(300);
   check("an earlier run is overlaid", (await calls("run_series")).some(c => c[1].run === 1) && await p.$eval(`${sc0} .cmpbtn`, e => e.classList.contains("on")));
-  await p.click(`${sc0} .setbtn`);
+  await p.click(`${sc0} .morebtn`);
   await p.waitForTimeout(150);
   await p.click('.menu button:has-text("stacked")');
   await p.waitForTimeout(150);
   const lay = (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).reverse().find(o => o.SetParam && o.SetParam.key === "layout");
+  check("the scope header fits on one line", await p.$eval(`${sc0} header`, e => e.scrollWidth <= e.clientWidth + 1 && e.clientHeight < 40));
   check("the stacked layout is saved in the Scope block", !!lay && lay.SetParam.value === "stacked", JSON.stringify(lay));
-  await p.click(`${sc0} .picbtn`);
+  await p.click(`${sc0} .morebtn`);
   await p.waitForTimeout(150);
   await p.click('.menu button:has-text("SVG")');
   await p.waitForTimeout(300);
   const svgOk = await p.evaluate(() => !!window.__saved && window.__saved.name.endsWith(".svg") && window.__saved.data.startsWith("<svg"));
-  await p.click(`${sc0} .picbtn`);
+  await p.click(`${sc0} .morebtn`);
   await p.waitForTimeout(150);
   await p.click('.menu button:has-text("high resolution")');
   await p.waitForTimeout(600);
@@ -180,6 +186,14 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(150);
   const ss = (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).reverse().find(o => o.SetSim);
   check("Log all signals is a run setting", !!ss && ss.SetSim.sim.log_all === true, JSON.stringify(ss));
+  // A run that logs every signal opens only the real scopes (0.1.5 bug: a probe signal opened an empty one).
+  const nScopes = fix.diagram.blocks.filter(b => b.kind === "Scope").length;
+  await p.evaluate(() => { window.__probeRun = true; document.querySelectorAll(".dock .scope .x").forEach(b => b.click()); });
+  await p.waitForTimeout(200);
+  await p.keyboard.press("F5");
+  await p.waitForTimeout(700);
+  check("probe signals do not open scopes of their own", (await p.$$(".dock .scope")).length === nScopes, String((await p.$$(".dock .scope")).length));
+  await p.evaluate(() => { window.__probeRun = false; });
   await p.click('.tabs > button:text-is("Model")');
 
   // 9. Subsystems open with a path back.

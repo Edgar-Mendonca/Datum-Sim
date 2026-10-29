@@ -34,7 +34,7 @@ export const HELP: Record<string, Topic> = {
   // View tab
   views: { t: "Views", what: "The model's pages: the diagram, the variables, the scopes, the results table, analyses and issues." },
   zoom: { t: "Zoom", what: "How large the diagram is drawn. Ctrl + wheel zooms; Fit shows the whole diagram." },
-  show: { t: "Show", what: "The grid dots, snapping blocks to the grid while dragging, and the scopes dock under the diagram." },
+  show: { t: "Show", what: "The grid dots, snapping blocks to the grid while dragging, the scopes dock under the diagram, and sample-time colours: every block coloured by how often its output changes." },
   // Panels
   library: { t: "Library", what: "Every block, by category. Planned blocks are dimmed with the release they arrive in.",
     how: ["Type to search by name.", "Drag a block onto the diagram, or double-click it to add it in the middle.", "Click ? on a block for its equations and how to use it."] },
@@ -42,7 +42,7 @@ export const HELP: Record<string, Topic> = {
     how: ["Drag from an output port to an input port to draw a wire; drop on a wire's end to reconnect it.", "Drag blocks to move them; drag on empty space to select an area; Shift or Ctrl adds to the selection.", "Double-click a block to edit it; double-click a scope to open it, a subsystem to go inside.", "Space-drag or the middle mouse button pans; Ctrl + wheel zooms."] },
   inspector: { t: "Inspector", what: "The selected block's parameters. Values can be numbers, vectors [1 2 3], matrices [1 2; 3 4] or expressions using model variables." },
   scopes: { t: "Scopes", what: "Plots of the signals going into each Scope block, live while the model runs.",
-    how: ["Drag on a plot to zoom in time; double-click to zoom out.", "Hover to read the values under the cursor.", "PNG saves a picture; CSV saves the data."] },
+    how: ["Drag sideways on a plot to zoom in time, up or down to zoom the y axis; double-click to see the whole run.", "Cursors: two lines A and B you drag; the table gives each signal at A and B and the difference.", "Marks: rise time, overshoot, peak and settling time of the first signal, drawn on the plot.", "Compare: overlay any of the last five runs, dashed.", "More: pictures (PNG as shown, PNG at three times the size, SVG), CSV, one plot per input, and a fixed y range. Layout and range are saved in the Scope block.", "Turn on Simulate › Log all signals, run, and hover any wire to read its value at cursor A (or the end of the run)."] },
   issues: { t: "Issues", what: "Errors stop a run; warnings do not. Click one to select its block." },
 };
 

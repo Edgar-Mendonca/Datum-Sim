@@ -59,13 +59,17 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
   const sweep = () => results()?.sweep ?? null;
   const plotH = (n: number) => Math.max(80, (host.clientHeight - 8) / n - (host.querySelector(".u-legend")?.clientHeight ?? 24));
   /** The current data table: [t, current series…, compared series…] and which columns each plot shows. */
-  let table: { data: uPlot.AlignedData; labels: string[]; dashed: boolean[]; groups: number[][] } | null = null;
+  let table: { data: uPlot.AlignedData; labels: string[]; dashed: boolean[]; groups: number[][]; ncur: number } | null = null;
+  /** A signal keeps its colour in every layout; an earlier run takes its signal's colour, dashed. */
+  const colour = (c: number) => OKABE[(c % Math.max(1, table?.ncur ?? 1)) % OKABE.length];
 
   const cssv = (v: string, d: string) => css(v) || d;
   const drawOver = (u: uPlot) => {
     const ctx = u.ctx, { left, top, width, height } = u.bbox, pr = uPlot.pxRatio;
     const xs = (t: number) => u.valToPos(t, "x", true);
     ctx.save();
+    // uPlot leaves its own text settings on the canvas.
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
     ctx.beginPath(); ctx.rect(left, top, width, height); ctx.clip();
     const m = marks();
     if (m && u === plots[0]) {
@@ -76,10 +80,14 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
       for (const t of [m.t10, m.t90, m.settle]) if (isFinite(t)) { ctx.beginPath(); ctx.moveTo(xs(t), top); ctx.lineTo(xs(t), top + height); ctx.stroke(); }
       ctx.setLineDash([]); ctx.fillStyle = cssv("--blue", "#C2410C");
       ctx.beginPath(); ctx.arc(xs(m.tpeak), ys(m.peak), 3.5 * pr, 0, 7); ctx.fill();
-      ctx.font = `${11 * pr}px 'IBM Plex Sans', sans-serif`; ctx.fillStyle = cssv("--text2", "#3B4859");
-      ctx.fillText(`rise ${num(m.rise)} s`, xs(m.t90) + 4 * pr, top + 14 * pr);
-      ctx.fillText(`settling ${num(m.settle)} s`, xs(m.settle) + 4 * pr, top + 28 * pr);
-      if (m.overshoot > 0.05) ctx.fillText(`overshoot ${num(m.overshoot)} %`, xs(m.tpeak) + 6 * pr, ys(m.peak) - 6 * pr);
+      // The figures in one box at the top right, so they never sit on each other.
+      const lines = [`Rise (10–90 %) ${num(m.rise)} s`, `Overshoot ${num(m.overshoot)} %`, `Peak ${num(m.peak)} at ${num(m.tpeak)} s`, `Settling (2 %) ${num(m.settle)} s`];
+      ctx.font = `${11 * pr}px 'IBM Plex Sans', sans-serif`;
+      const lw = Math.max(...lines.map(l => ctx.measureText(l).width)) + 12 * pr, lh = 14 * pr, bx = left + width - lw - 6 * pr, by = top + 6 * pr;
+      ctx.fillStyle = cssv("--bg2", "#FFFFFF"); ctx.globalAlpha = 0.9; ctx.fillRect(bx, by, lw, lh * lines.length + 8 * pr); ctx.globalAlpha = 1;
+      ctx.strokeStyle = cssv("--line", "#D3D7D6"); ctx.lineWidth = pr; ctx.strokeRect(bx, by, lw, lh * lines.length + 8 * pr);
+      ctx.fillStyle = cssv("--text2", "#3B4859");
+      lines.forEach((l, k) => ctx.fillText(l, bx + 6 * pr, by + 4 * pr + lh * (k + 0.8)));
     }
     const c = curs();
     if (c) {
@@ -119,18 +127,21 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
     const ink = css("--text2") || "#3B4859", grid = css("--line2") || "#E6E8E5";
     const axis = { stroke: ink, grid: { stroke: grid, width: 1 }, ticks: { stroke: grid, width: 1 }, font: "11px 'IBM Plex Sans', sans-serif" };
     const yr = set().y;
-    const n = table.groups.length;
+    const n = table.groups.length, stacked = n > 1;
     table.groups.forEach((cols, g) => {
+      // Stacked: no legend under each plot (it would take their height); the y axis names the signal.
+      const yname = stacked ? [...new Set(cols.filter(c => !table!.dashed[c]).map(c => table!.labels[c]))].join(", ") : undefined;
       const opts: uPlot.Options = {
-        width: Math.max(200, host.clientWidth), height: plotH(n),
+        width: Math.max(200, host.clientWidth), height: stacked ? Math.max(70, (host.clientHeight - 30) / n) : plotH(1),
         scales: yr ? { x: { time: false }, y: { auto: false, range: () => yr } } : { x: { time: false } },
-        axes: [{ ...axis, label: g === n - 1 ? "Time (s)" : undefined, labelFont: "11px 'IBM Plex Sans', sans-serif", labelSize: g === n - 1 ? 18 : 0 }, { ...axis, size: 56 }],
+        axes: [{ ...axis, label: g === n - 1 ? "Time (s)" : undefined, labelFont: "11px 'IBM Plex Sans', sans-serif", labelSize: g === n - 1 ? 18 : 0, ...(g === n - 1 ? {} : { size: 10, values: (_: uPlot, sp: number[]) => sp.map(() => "") }) },
+          { ...axis, size: 56, label: yname, labelFont: "10px 'IBM Plex Sans', sans-serif", labelSize: yname ? 14 : 0 }],
         series: [{ label: "t", value: (_, v) => (v == null ? "" : num(v)) }, ...cols.map(c => ({
-          label: table!.labels[c], stroke: OKABE[(table!.dashed[c] ? cols.indexOf(c) - cols.filter(x => !table!.dashed[x]).length : cols.indexOf(c)) % OKABE.length] ?? OKABE[0],
+          label: table!.labels[c], stroke: colour(c),
           width: 1.6, dash: table!.dashed[c] ? [5, 4] : undefined, spanGaps: true, value: (_: unknown, v: number | null) => (v == null ? "" : num(v)),
         }))],
         cursor: { drag: { x: true, y: true, uni: 40, setScale: true }, points: { size: 5 }, sync: { key: `scope-${p.id}` } },
-        legend: { live: true },
+        legend: { live: true, show: !stacked },
         hooks: {
           draw: [drawOver],
           setScale: [(uu: uPlot, key: string) => {
@@ -174,7 +185,7 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
       const tables: uPlot.AlignedData[] = runs.flatMap(rs => rs.map(r => [r.t, r.y] as uPlot.AlignedData));
       const joined = uPlot.join(tables);
       const names = ix.flatMap(i => sw[1].map(v => `${chans()[i].name} · ${sw[0]} = ${num(v)}`));
-      table = { data: joined, labels: names, dashed: names.map(() => false), groups: [names.map((_, k) => k)] };
+      table = { data: joined, labels: names, dashed: names.map(() => false), groups: [names.map((_, k) => k)], ncur: names.length };
       make();
       return;
     }
@@ -185,7 +196,7 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
       const data = others.length ? uPlot.join([[s.t, ...s.y] as uPlot.AlignedData, ...others.map(o => [o.t, ...o.y] as uPlot.AlignedData)]) : [s.t, ...s.y] as uPlot.AlignedData;
       const all = [...labels, ...cmp().flatMap(c => labels.map(l => `${l} · ${c.label}`))];
       const same = table && plots.length && table.labels.join("|") === all.join("|") && table.groups.length === groupsFor(ix, others.length).length;
-      table = { data, labels: all, dashed: all.map((_, k) => k >= labels.length), groups: groupsFor(ix, others.length) };
+      table = { data, labels: all, dashed: all.map((_, k) => k >= labels.length), groups: groupsFor(ix, others.length), ncur: labels.length };
       if (!same) make();
       else table.groups.forEach((cols, g) => plots[g]?.setData([data[0], ...cols.map(c => data[c + 1])], !range()));
       if (range()) plots.forEach(u => u.setScale("x", { min: t0, max: t1 }));
@@ -196,7 +207,7 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
     const t: number[] = [], ys: number[][] = ix.map(() => []);
     for (let j = 0; j < n; j += k) { t.push(live.t[j]); ix.forEach((i, m) => ys[m].push(live.y[i]?.[j] ?? NaN)); }
     const data = [t, ...ys] as uPlot.AlignedData;
-    if (!table || plots.length !== 1 || table.labels.join("|") !== labels.join("|")) { table = { data, labels, dashed: labels.map(() => false), groups: [labels.map((_, k) => k)] }; make(); }
+    if (!table || plots.length !== 1 || table.labels.join("|") !== labels.join("|")) { table = { data, labels, dashed: labels.map(() => false), groups: [labels.map((_, k) => k)], ncur: labels.length }; make(); }
     else { table.data = data; plots[0].setData(data); }
   };
 
@@ -217,7 +228,7 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
   // A new theme needs new axis and grid colours: build the plot again.
   createEffect(on(themeTick, () => { if (!isXY()) make(); }, { defer: true }));
   onMount(() => {
-    const ro = new ResizeObserver(() => plots.forEach(u => u.setSize({ width: Math.max(200, host.clientWidth), height: plotH(plots.length) })));
+    const ro = new ResizeObserver(() => plots.forEach(u => u.setSize({ width: Math.max(200, host.clientWidth), height: plots.length > 1 ? Math.max(70, (host.clientHeight - 30) / plots.length) : plotH(1) })));
     ro.observe(host);
     onCleanup(() => { ro.disconnect(); plots.forEach(u => u.destroy()); });
   });
@@ -240,15 +251,21 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
     openMenu(e, earlier.map(r => ({ label: `${cmp().some(c => c.id === r.id) ? "✓ " : ""}${r.label}`, run: () => setCmp(c => c.some(x => x.id === r.id) ? c.filter(x => x.id !== r.id) : [...c, r]) })));
   };
   const setParam = (key: string, value: string) => act({ SetParam: { id: p.id, key, value } });
-  const settingsMenu = (e: MouseEvent) => {
+  const moreMenu = (e: MouseEvent) => {
     const s = set();
+    if (isXY()) return openMenu(e, [{ label: "Save as PNG", run: () => png(1) }, { label: "Save signals as CSV", run: () => C.exportCsv(p.id) }]);
     openMenu(e, [
+      { label: "Save as PNG, as shown", run: () => png(1) },
+      { label: "Save as PNG, high resolution (3×)", run: () => png(3) },
+      { label: "Save as SVG (vector, for papers)", run: svg },
+      { label: "Save signals as CSV", run: () => C.exportCsv(p.id) },
+      "-" as unknown as Item,
       { label: `${!s.stacked ? "✓ " : ""}All inputs on one plot`, run: () => setParam("layout", "overlaid") },
       { label: `${s.stacked ? "✓ " : ""}One plot per input (stacked)`, run: () => setParam("layout", "stacked") },
       "-" as unknown as Item,
       { label: `${!s.y ? "✓ " : ""}Auto-scale the y axis`, run: () => act({ Batch: [{ SetParam: { id: p.id, key: "ymin", value: "auto" } }, { SetParam: { id: p.id, key: "ymax", value: "auto" } }] }) },
       { label: `${s.y ? "✓ " : ""}Fixed y range…`, run: () => yRangeDialog(p.id, s.y ?? (plots[0] ? [plots[0].scales.y.min ?? 0, plots[0].scales.y.max ?? 1] : [0, 1])) },
-    ]);
+    ].filter((_, k) => s.here || k < 4));
   };
 
   /** The plots drawn again off screen at a size and scale, for a picture. */
@@ -267,7 +284,7 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
         width: w * k, height: ph, legend: { show: false }, cursor: { show: false },
         scales: { x: { time: false, ...(range0?.min != null ? { min: range0.min, max: range0.max } : {}) }, ...(yr ? { y: { auto: false, range: () => yr } } : {}) },
         axes: [{ ...axis, size: 40 * k, label: g === n - 1 ? "Time (s)" : undefined, labelFont: `${11 * k}px 'IBM Plex Sans', sans-serif`, labelSize: 18 * k }, axis],
-        series: [{}, ...cols.map((c, j) => ({ stroke: OKABE[j % OKABE.length], width: 1.6 * k, dash: table!.dashed[c] ? [5 * k, 4 * k] : undefined, spanGaps: true }))],
+        series: [{}, ...cols.map(c => ({ stroke: colour(c), width: 1.6 * k, dash: table!.dashed[c] ? [5 * k, 4 * k] : undefined, spanGaps: true }))],
       }, [table!.data[0], ...cols.map(c => table!.data[c + 1])], off);
       made.push(u);
     });
@@ -318,8 +335,8 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
         const ys = table!.data[c + 1] as (number | null)[];
         let d = "", pen = false;
         ys.forEach((v, i) => { if (v == null || !isFinite(v) || t[i] < x0 || t[i] > x1) { pen = false; return; } d += `${pen ? "L" : "M"}${sx(t[i]).toFixed(2)} ${sy(v).toFixed(2)}`; pen = true; });
-        body += `<path d="${d}" fill="none" stroke="${OKABE[j % OKABE.length]}" stroke-width="1.6"${table!.dashed[c] ? ` stroke-dasharray="5 4"` : ""}/>`;
-        body += `<text x="${M.l + 8}" y="${top + M.t + 14 + 14 * j}" fill="${OKABE[j % OKABE.length]}">${esc(table!.labels[c])}</text>`;
+        body += `<path d="${d}" fill="none" stroke="${colour(c)}" stroke-width="1.6"${table!.dashed[c] ? ` stroke-dasharray="5 4"` : ""}/>`;
+        body += `<text x="${M.l + 8}" y="${top + M.t + 14 + 14 * j}" fill="${colour(c)}">${esc(table!.labels[c])}</text>`;
       });
       if (g === n - 1) body += `<text x="${M.l + pw / 2}" y="${top + PH - 8}" text-anchor="middle">Time (s)</text>`;
     });
@@ -327,25 +344,18 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
     const path = await call<string | null>("save_file", { name: `${blockName(p.id)}.svg`, data: doc });
     if (path) toast(`Saved ${path}`, true);
   };
-  const pictureMenu = (e: MouseEvent) => openMenu(e, [
-    { label: "PNG, as shown", run: () => png(1) },
-    { label: "PNG, high resolution (3×)", run: () => png(3) },
-    { label: "SVG (vector, for papers)", run: svg },
-  ]);
 
   return (
     <div class="scope" data-scope={p.id} style={p.height ? { height: `${p.height}px` } : undefined}>
       <header>
-        <Icon n="scope" /><b>{blockName(p.id)}</b><span class="muted">{cursor()}</span><span class="grow" />
+        <Icon n="scope" /><b class="stitle" title={blockName(p.id)}>{blockName(p.id)}</b><span class="muted stime">{cursor()}</span><span class="grow" />
         <Show when={range()}><button class="btn sm" onClick={() => setRange(null)}>Whole run</button></Show>
         <Show when={!isXY()}>
           <button class="btn sm cursbtn" classList={{ on: !!curs() }} title="Two measuring cursors: drag the A and B lines" onClick={toggleCursors} disabled={!results() || running()}>Cursors</button>
           <button class="btn sm marksbtn" classList={{ on: !!marks() }} title="Mark rise time, overshoot and settling time of the first signal" onClick={toggleMarks} disabled={!results() || running()}>Marks</button>
           <button class="btn sm cmpbtn" classList={{ on: cmp().length > 0 }} title="Overlay earlier runs (the last five are kept)" onClick={compareMenu} disabled={!results() || running()}>Compare ▾</button>
-          <button class="btn sm setbtn" title="Layout and y range" onClick={settingsMenu} disabled={!set().here}>Axes ▾</button>
         </Show>
-        <button class="btn sm picbtn" title="Save a picture of this scope" onClick={e => (isXY() ? png(1) : pictureMenu(e))}>Picture ▾</button>
-        <button class="btn sm" title="Save this scope's signals as CSV" onClick={() => C.exportCsv(p.id)} disabled={!results()}>CSV</button>
+        <button class="btn sm morebtn" title="Pictures (PNG, SVG), CSV, layout and y range" onClick={moreMenu}>More ▾</button>
         <Show when={p.close}><button class="x" title="Close" onClick={() => setScopes(scopes().filter(x => x !== p.id))}>×</button></Show>
       </header>
       <Show when={curs() && curVals()}>

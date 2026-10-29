@@ -144,7 +144,7 @@ const BlockArt = (p: { b: BlockView }) => {
 /** The latest value shown on a Display block. */
 const displayValue = (id: number) => {
   const r = results(), cs = r?.chans ?? chans();
-  const k = cs.findIndex(c => c.sink === id);
+  const k = cs.findIndex(c => !c.probe && c.sink === id);
   if (k < 0 || !r) return "—";
   return num(r.last[k]);
 };

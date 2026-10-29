@@ -53,7 +53,7 @@ export const C = {
         setChans(st.chans); setResults(null); setRunning(true); setPaused(false); setProgress(0); setIssues(st.warnings);
         setLastStatus(st.warnings.length ? `Running · ${st.warnings.length} warning${st.warnings.length > 1 ? "s" : ""}` : "Running…");
         // Open the model's scopes in the dock on the first run.
-        if (!scopes().length) setScopes([...new Set(st.chans.filter(c => ["Scope", "XY"].includes(dview()?.blocks.find(b => b.id === c.sink)?.kind ?? "Scope")).map(c => c.sink))].slice(0, 4));
+        if (!scopes().length) setScopes([...new Set(st.chans.filter(c => !c.probe && ["Scope", "XY"].includes(dview()?.blocks.find(b => b.id === c.sink)?.kind ?? "Scope")).map(c => c.sink))].slice(0, 4));
         setLiveTick(t => t + 1);
       });
       // A short run can finish before this call returns: handle its end now.

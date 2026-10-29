@@ -41,6 +41,7 @@
 | `crates/core/src/motors.rs` | The motor library (0.1.2): DC (sep. excited, shunt, series, compound), induction (cage, double cage, wound rotor; αβ frame, flux states), PMSM3, SynRM, wound-field synchronous with dampers, BLDC, stepper; Clarke/Park, three-phase source, inverter, PWM, encoder; typical-ratings presets from per-unit values |
 | `crates/core/src/compile.rs` | Flatten, parameters, widths, sorting, signal layout, logged channels; the run loop; CSV; decimation; the linear model of one block for analysis |
 | `crates/core/src/solve.rs` | Euler, Heun, RK4, Dormand–Prince 5(4), Rosenbrock 2(3); the stepping loop with hits and zero-crossings; solver conformance tests |
+| `crates/core/src/measure.rs` | Value at a time (probe, cursors) and step-response marks (10–90 % rise, peak, overshoot, 2 % settling) |
 | `crates/core/src/linalg.rs` | Dense LU with pivoting (for the stiff solver) |
 | `crates/core/src/route.rs` | Orthogonal wire routing on a sparse grid (bend and shared-segment penalties, user bend points) |
 | `crates/core/src/view.rs` | One diagram as the window draws it: blocks with port positions, labels, parameters; routed wires |
@@ -59,7 +60,7 @@
 | `ui/src/cmds.ts` | Every command (ribbon, menus, keys, Tell Me); run events |
 | `ui/src/canvas.tsx` | The block editor: drawing, select, move, resize, wire, bend, pan/zoom, minimap, quick insert, context menu, keys |
 | `ui/src/panels.tsx` | Library panel and Inspector (block parameters, or the run settings and variables) |
-| `ui/src/scope.tsx` | uPlot scopes (live, zoom, sweep overlays, PNG/CSV), XY graph, the dock, Scopes and Results pages |
+| `ui/src/scope.tsx` | uPlot scopes (live, zoom x and y, sweep overlays, cursors A/B, step marks, compare runs, stacked plots, fixed y range, PNG, 3× PNG, SVG, CSV), XY graph, the dock, Scopes and Results pages |
 | `ui/src/ribbon.tsx` | Title bar, quick access, Tell Me, the ribbon (Model, Simulate, Analyze, View, Help, contextual Format) |
 | `ui/src/backstage.tsx` | File page: examples, recent, export, options, updates |
 | `ui/src/print.tsx` | Print: diagrams (with subsystems), scopes and a results report as pages |
@@ -69,7 +70,7 @@
 | `ui/src/styles.css`, `ui/src/ui.tsx`, `ui/index.html` | Plan's styles (orange accent) and components; the icon sprite |
 | `py/worker.py`, `py/datum_sim/linear.py` | The Python worker and the linear analyses (python-control) |
 | `py/tests/test_worker.py` | Python tests against closed-form answers and the protocol |
-| `tests_ui/run.cjs` | 33 UI checks of the built window with a mocked bridge (the fixture also holds the induction motor start's diagram) |
+| `tests_ui/run.cjs` | 46 UI checks of the built window with a mocked bridge (the fixture also holds the induction motor start's diagram) |
 | `tests_ui/realapp.sh` | Screenshots of the real app under Xvfb (xdotool steps) |
 | `docs/verification/2026-10-27.md`, `2026-10-28.md`, `2026-10-29.md` | Verification records: 0.1.0 (solvers, blocks), 0.1.2 (motors and drives), 0.1.4 (discrete control, motor extras, power balance): what was checked, numbers, what was not |
 | `docs/PLAN-0.1.md`, `docs/PLAN-0.1.x.md`, `docs/PLAN-0.2.md`, `docs/site.json`, `CHANGELOG.md` | The plans, the public summary and roadmap, the change log |
@@ -127,6 +128,10 @@
 | 0.1.2 | Machines in their natural frames: induction in the stationary αβ frame with flux linkages as states (no speed-dependent frame, wound-rotor voltages turned by p·θ); synchronous machines in the rotor dq frame with Park inside; three-phase signals are width-3 vectors; transforms amplitude-invariant | Exact steady states against the equivalent circuit; one signal type; inductance matrices inverted once at build |
 | 0.1.2 | **Typical ratings** live in the engine (`motors::presets`, served with the library) and the Inspector applies one as a single `Batch` of `SetParam` | One owner for the numbers, testable, one undo step; values come from per-unit typical data (Zb = V²/S, J = 2H·S/ω²), stated as typical, never as a real machine |
 | 0.1.2 | A new library group **Drives** (source, inverter, PWM, transforms, encoder); motors stay in **Motors** | The user's "all motor types" brings drive pieces that are not motors |
+| 0.1.5 | Scope layout and y range are **Scope block parameters** (layout, ymin, ymax), set from the scope's More menu as undoable edits | Saved with the model, one owner, no window-only state |
+| 0.1.5 | Cursor values, step marks and the probe's values come from the engine (`value_at`, `step_marks` in `measure.rs`); the window only draws | "The window never calculates" |
+| 0.1.5 | **Log all signals** is a run setting (`SimSettings.log_all`); probe channels carry `probe: true` and the block (or subsystem) and port the wire leaves from | One logging path; sinks and the probe never mix |
+| 0.1.5 | The shell keeps the **last five runs** (plus the current) for Compare; channels are matched by name | Small, enough to compare a few tunings |
 | 0.1.4 | Discrete blocks keep their own state inside the block (not the solver's state vector) and change only at sample hits; at a hit the output is computed from state and input, then `update` moves the state on | Same pattern as ZOH and unit delay; no solver changes; exact difference equations |
 | 0.1.4 | **Rates** worked out in the compiler (`Rt::rate`, fixed point over inputs: constant < continuous/discrete < mixed); `rates` command; View › Sample-time colours | One owner (the engine); the window only colours |
 | 0.1.4 | **Goto/From** resolved in flattening: a From becomes a pass-through fed by its Goto's source; local = same diagram, global = anywhere | No runtime cost, errors point at the block |
@@ -153,8 +158,8 @@
 | 0.1.2 | Motor library: all DC, induction and synchronous types, BLDC, stepper, drive pieces, LV/MV/HV presets (PLAN-0.1.x §6) | ✅ (switched reluctance, DC link and current sensor blocks, power-balance checks: later) |
 | 0.1.3 | Windows publisher name "Datum" (family-wide change) | ✅ |
 | 0.1.4 | Discrete control: discrete TF/SS, integrator, PID, rate transition, sample-time colours; integrator reset; Goto/From; sources; SRM, DC link, inverter DC current, sensor; power-balance checks (PLAN-0.2 A) | ✅ |
-| 0.1.5 | Scopes: cursors, y-zoom, stacked plots, compare runs, signal probe, step marks, SVG (PLAN-0.2 C) | 🔜 |
-| 0.1.6 | Wires and diagram: branch from a wire, segments, signal names, notes, find, colours (PLAN-0.2 B) | ⬜ |
+| 0.1.5 | Scopes: cursors, y-zoom, stacked plots, compare runs, signal probe, step marks, SVG (PLAN-0.2 C) | ✅ |
+| 0.1.6 | Wires and diagram: branch from a wire, segments, signal names, notes, find, colours (PLAN-0.2 B) | 🔜 |
 | 0.2 | Masks and My blocks (copied), file version 2 (PLAN-0.2 D) | ⬜ |
 | 0.3 | Control design: trim, linearise whole models, Nyquist, root locus, PID tuning, live tuning; buses; algebraic-loop solving | ⬜ |
 | 0.4 | Physical components (mechanical, rotational, electrical, hydraulic, thermal), DAEs | ⬜ |
@@ -209,6 +214,12 @@
 - Built part A: `discrete.rs`, rate transition, integrator reset, Goto/From, Terminator, new sources, rates and sample-time colours; SRM, DC link, inverter DC current, sensor; three examples (digital PMSM drive with DC link, digital vs continuous PID, SRM).
 - Checked: 63 Rust tests (14 new, with power balance for the AC, DC and BLDC machines), 33 UI checks, clippy, the real app (digital PMSM drive, sample-time colours). Record `docs/verification/2026-10-29.md`. Bug found: a zero-crossing resting at zero made endless tiny steps (fixed).
 - Released 0.1.4.
+
+### 2026-10-29: Session 6 (0.1.5)
+- Built part C: `measure.rs`, Log all signals with probe channels, the shell's run history, value_at and step_marks; the new scopes (cursors, marks, compare, stacked, y range, 3× PNG, SVG) and the wire probe; help card updated.
+- Checked: 66 Rust tests (3 new), 46 UI checks (13 new), clippy; the real app (DC motor: cursors, marks, compare menu, stacked layout, probe tooltip).
+- Bugs found in the real app and fixed: uPlot crashed when a plot was redrawn in the tick it was made (redraws now wait a frame); the high-resolution PNG copied a canvas before uPlot drew it; probe channels opened an empty scope; the marks' text was right-aligned by uPlot's canvas state; the scope header wrapped at dock width (Axes, Picture and CSV moved into More).
+- Released 0.1.5.
 
 ## 5. Known limits and next steps
 

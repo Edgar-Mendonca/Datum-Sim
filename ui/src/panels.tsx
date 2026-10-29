@@ -115,7 +115,7 @@ export const Inspector = () => {
   const blockIssues = () => issues().filter(i => i.id === b()?.id);
   const display = () => {
     const r = results(); if (!r || !b()) return null;
-    const ks = chans().map((c, i) => [c, i] as const).filter(([c]) => c.sink === b()!.id);
+    const ks = chans().map((c, i) => [c, i] as const).filter(([c]) => !c.probe && c.sink === b()!.id);
     return ks.length ? ks.map(([c, i]) => `${c.name} = ${num(r.last[i])}`) : null;
   };
   return (
