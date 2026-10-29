@@ -2,7 +2,8 @@
 // Geometry (ports, routed wires) comes from the engine; the window only draws and sends edits.
 import { For, Show, JSX, createSignal, createMemo, createEffect, onMount, onCleanup, batch, on } from "solid-js";
 import { BlockView, WireView, Pt, num } from "./api";
-import { dview, sel, setSel, act, parent, enter, out, opts, issues, results, chans, openMenu, defOf, lib, openDialog, closeDialog, setScopes, scopes, Item, running, setView, setBackstage, showRates, rateColours } from "./store";
+import { dview, sel, setSel, act, parent, enter, out, opts, issues, results, chans, openMenu, defOf, lib, openDialog, closeDialog, setScopes, scopes, Item, running, setView, setBackstage, showRates, rateColours, probeT } from "./store";
+import { invoke } from "./api";
 import { C } from "./cmds";
 import { helpCard } from "./help";
 
@@ -366,6 +367,19 @@ export const Canvas = () => {
   };
   const off = (id: number) => { const d = drag(); return d?.k === "move" && d.ids.includes(id) ? [d.dx, d.dy] : [0, 0]; };
   const pathD = (pts: Pt[]) => pts.map((p, i) => `${i ? "L" : "M"}${p[0]} ${p[1]}`).join("");
+  // The signal probe: after a run with every signal logged, hovering a wire shows its value.
+  const [probe, setProbe] = createSignal<{ x: number; y: number; text: string[] } | null>(null);
+  let probeSeq = 0;
+  const probeWire = async (w: WireView, e: MouseEvent) => {
+    const r = results(); if (!r || running() || drag()) return setProbe(null);
+    const ix = chans().map((c, i) => [c, i] as const).filter(([c]) => c.probe && c.sink === w.from[0] && c.port === w.from[1]);
+    const box = (e.currentTarget as Element).closest(".canvas")!.getBoundingClientRect();
+    const at = { x: e.clientX - box.left + 14, y: e.clientY - box.top + 12 };
+    if (!ix.length) return setProbe({ ...at, text: ["Turn on Simulate › Log all signals and run again to read this wire."] });
+    const t = probeT() ?? r.t1, n = ++probeSeq;
+    const v = await invoke<number[]>("value_at", { chans: ix.map(x => x[1]), t }).catch(() => [] as number[]);
+    if (n === probeSeq) setProbe({ ...at, text: [`t = ${num(t)} s`, ...ix.map(([c], k) => `${c.name} = ${num(v[k])}`)] });
+  };
 
   return (
     <div class="canvas" classList={{ grid: opts().grid, panning: space() || drag()?.k === "pan" }} tabindex="0" onKeyDown={keys}
@@ -380,7 +394,7 @@ export const Canvas = () => {
         <g transform={`translate(${pan()[0]} ${pan()[1]}) scale(${zoom()})`}>
           <For each={v()?.wires ?? []}>{w => {
             const s = () => selSet().has(w.id), pv = () => preview(w);
-            return <g data-wire={w.id} class="wire" classList={{ sel: s() }}>
+            return <g data-wire={w.id} class="wire" classList={{ sel: s() }} onMouseEnter={e => probeWire(w, e)} onMouseMove={e => probe() && probeWire(w, e)} onMouseLeave={() => { probeSeq++; setProbe(null); }}>
               <path d={pv() ?? pathD(w.path)} class="whit" />
               <path d={pv() ?? pathD(w.path)} class="wline" marker-end={s() ? "url(#arrs)" : "url(#arr)"} />
             </g>;
@@ -421,6 +435,7 @@ export const Canvas = () => {
       </Show>
       <MiniMap />
       <Show when={showRates() && rateColours().legend.length}><div class="ratelegend"><b>Sample times</b><For each={rateColours().legend}>{([c, l]) => <span><i style={{ background: c }} />{l}</span>}</For></div></Show>
+      <Show when={probe()}>{pr => <div class="probetip" style={{ left: `${pr().x}px`, top: `${pr().y}px` }}><For each={pr().text}>{l => <div>{l}</div>}</For></div>}</Show>
       <div class="zoomctl"><button title="Zoom out" onClick={() => zoomBy(1 / 1.2)}>−</button><span>{Math.round(zoom() * 100)}%</span><button title="Zoom in" onClick={() => zoomBy(1.2)}>+</button><button title="Fit the diagram to the window" onClick={fit}>Fit</button></div>
       <Show when={running()}><div class="runbadge" onClick={() => setView("scopes")}>Running…</div></Show>
     </div>

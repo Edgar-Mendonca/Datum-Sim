@@ -41,7 +41,7 @@ export const C = {
         : bs.map(b => ({ Move: { ids: [b.id], dx: 0, dy: Math.round(bs[0].y + bs[0].h / 2 - b.y - b.h / 2) } }));
     act({ Batch: ops });
   },
-  setSim: (k: string, v: number | string) => { const s = out()?.sim; if (s) act({ SetSim: { sim: { ...s, [k]: v } } }); },
+  setSim: (k: string, v: number | string | boolean) => { const s = out()?.sim; if (s) act({ SetSim: { sim: { ...s, [k]: v } } }); },
 
   // ---------- running ----------
   run: async () => {

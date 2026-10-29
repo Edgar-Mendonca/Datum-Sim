@@ -831,6 +831,34 @@ mod tests {
         assert!(v.iter().any(|r| r.id == dtf && r.rate == "discrete"), "blocks inside are listed too");
     }
 
+    /// Log all signals: every block output (and each subsystem output, by the subsystem) is logged
+    /// for the probe, and the scope channels are unchanged.
+    #[test]
+    fn log_all_signals_for_the_probe() {
+        let mut m = Mk::new(1.0, "rk45");
+        let s = m.add("Step", &[("time", "0")]);
+        let g = m.add("Gain", &[("k", "3")]);
+        let i = m.add("Integrator", &[]);
+        let sc = m.add("Scope", &[]);
+        m.wire(s, 0, g, 0);
+        m.wire(g, 0, i, 0);
+        m.wire(i, 0, sc, 0);
+        let before = m.run();
+        assert!(before.chans.iter().all(|c| !c.probe));
+        let sub = m.d.apply(Op::Group { ids: vec![g, i] }).unwrap()[0];
+        let mut sim = m.d.m.sim.clone();
+        sim.log_all = true;
+        m.d.apply(Op::SetSim { sim }).unwrap();
+        let r = m.run();
+        let scope: Vec<_> = r.chans.iter().filter(|c| !c.probe).collect();
+        assert_eq!(scope.len(), 1, "the scope still logs one signal");
+        let ch = |id: u32| r.chans.iter().position(|c| c.probe && c.sink == id && c.port == 0).unwrap_or_else(|| panic!("no probe for block {id}"));
+        assert!((last(&r, ch(s)) - 1.0).abs() < 1e-12);
+        assert!((last(&r, ch(g)) - 3.0).abs() < 1e-12, "a block inside the subsystem");
+        assert!((last(&r, ch(sub)) - 3.0).abs() < 1e-9, "the subsystem's output, by the subsystem block");
+        assert!((crate::measure::value_at(&r.t, &r.y[ch(sub)], 0.5) - 1.5).abs() < 1e-9);
+    }
+
     // ------------------------------------------------------------ motor extras and power balance
 
     /// Steady state at a held speed: electrical power in − stator copper loss = air-gap power.

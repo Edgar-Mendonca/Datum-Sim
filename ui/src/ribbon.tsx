@@ -112,7 +112,8 @@ export const Ribbon = () => (
         <Show when={["rk4", "heun", "euler"].includes(out()?.sim.solver ?? "")} fallback={<label>Tolerance <input class="mono" value={out()?.sim.rtol ?? 1e-6} onChange={e => +e.currentTarget.value > 0 && C.setSim("rtol", +e.currentTarget.value)} /></label>}>
           <label>Step <input class="mono" value={out()?.sim.step ?? 0.01} onChange={e => +e.currentTarget.value > 0 && C.setSim("step", +e.currentTarget.value)} /> s</label></Show></div></G>
       <G l="Studies" h="sweep"><B big i="sweep" l="Parameter Sweep" run={C.sweep} /><S><Planned i="sweep" l="Monte Carlo" v="0.6" /><Planned i="specs" l="Sensitivity" v="0.6" /><Planned i="solver" l="Operating Point" v="0.3" /></S></G>
-      <G l="Scopes" h="scopes"><B big i="scope" l="Scopes" run={() => C.view("scopes")} dd={e => openMenu(e, scopeMenu())} /></G>
+      <G l="Scopes" h="scopes"><B big i="scope" l="Scopes" run={() => C.view("scopes")} dd={e => openMenu(e, scopeMenu())} />
+        <S><label class="chk" title="Log every signal, so after a run you can read any wire by hovering it (the signal probe)"><input type="checkbox" class="logall" checked={!!out()?.sim.log_all} onChange={e => C.setSim("log_all", e.currentTarget.checked)} />Log all signals</label></S></G>
     </Show>
     <Show when={tab() === "analyze"}>
       <G l="Linear Analysis" h="linear"><B big i="bode" l="Bode" run={() => C.analyze("bode")} /><B big i="specs" l="Step Response" run={() => C.analyze("step")} /><S><B i="solver" l="Poles and Zeros" run={() => C.analyze("pz")} /><Planned i="bode" l="Nyquist" v="0.3" /><Planned i="bode" l="Root Locus" v="0.3" /></S></G>

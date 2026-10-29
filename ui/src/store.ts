@@ -73,6 +73,8 @@ export const [running, setRunning] = createSignal(false);
 export const [paused, setPaused] = createSignal(false);
 export const [progress, setProgress] = createSignal(0);
 export const [results, setResults] = createSignal<ResultsInfo | null>(null);
+/** The time the signal probe reads at: the scope crosshair or cursor A (else the end of the run). */
+export const [probeT, setProbeT] = createSignal<number | null>(null);
 /** The channels of the run in progress (or the last one) and their live samples. */
 export const [chans, setChans] = createSignal<Chan[]>([]);
 export const live = { gen: 0, t: [] as number[], y: [] as number[][] };

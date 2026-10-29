@@ -9,7 +9,7 @@ export const listen = (e: string, f: (p: any) => void) => window.__TAURI__?.even
 
 export type Pt = [number, number];
 export interface Var { name: string; expr: string; unit: string; note: string }
-export interface SimSettings { start: number; stop: number; solver: string; step: number; max_step: number; rtol: number; atol: number }
+export interface SimSettings { start: number; stop: number; solver: string; step: number; max_step: number; rtol: number; atol: number; log_all?: boolean }
 export interface Out {
   name: string; notes: string; vars: Var[]; sim: SimSettings; path: string | null; dirty: boolean; undo: boolean; redo: boolean;
   clip: boolean; running: boolean; rev: number; created: number[];
@@ -25,7 +25,7 @@ export interface Preset { name: string; values: [string, string][] }
 export interface Def { kind: string; name: string; cat: string; what: string; how: string; params: ParamDef[]; w: number; h: number; planned: string; presets: Preset[] }
 export interface Library { cats: string[]; blocks: Def[] }
 export interface Issue { id: number; msg: string; warn: boolean }
-export interface Chan { sink: number; port: number; elem: number; name: string }
+export interface Chan { sink: number; port: number; elem: number; name: string; probe?: boolean }
 export interface RunStats { steps: number; rejected: number; fevals: number; events: number; stopped: boolean; ms: number }
 export interface ResultsInfo { chans: Chan[]; stats: RunStats; n: number; t0: number; t1: number; last: number[]; sweep: [string, number[]] | null }
 export interface Series { t: number[]; y: number[] }

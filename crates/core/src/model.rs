@@ -42,11 +42,13 @@ pub struct SimSettings {
     pub max_step: f64,
     pub rtol: f64,
     pub atol: f64,
+    /// Log every signal, so any wire can be read after a run (the signal probe).
+    pub log_all: bool,
 }
 
 impl Default for SimSettings {
     fn default() -> Self {
-        SimSettings { start: 0.0, stop: 10.0, solver: "rk45".into(), step: 0.01, max_step: 0.0, rtol: 1e-6, atol: 1e-8 }
+        SimSettings { start: 0.0, stop: 10.0, solver: "rk45".into(), step: 0.01, max_step: 0.0, rtol: 1e-6, atol: 1e-8, log_all: false }
     }
 }
 

@@ -18,7 +18,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   const b = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
-  p.on("pageerror", e => errors.push(e.message));
+  p.on("pageerror", e => { errors.push(e.message); if (process.env.DEBUG) console.log(e.stack); });
   await p.addInitScript(f => {
     const opts = { autosave: 0, beta: false, theme: "light", openLast: false, solver: "rk45", stop: 10, snap: true, grid: true, paper: "A4", landscape: true, company: "" };
     const handlers = {};
@@ -34,6 +34,11 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           // The run ends before its start call returns (a model with no states takes 0.1 ms).
           if (c === "run") { window.__emit("sim-done", { gen: 1, ok: true, error: null, issues: [], stats: f.results.stats, truncated: false, files: [] }); return f.started; }
           if (c === "apply") return { ...f.state, created: [999] };
+          if (c === "value_at") return a.chans.map((_, k) => 0.5 + k);
+          if (c === "step_marks") return { y0: 0, yf: 1, t10: 0.2, t90: 0.8, rise: 0.6, peak: 1.1, tpeak: 1.2, overshoot: 10, settle: 2.5 };
+          if (c === "runs") return [{ id: 1, label: "Run 1 · 10:00:00" }, { id: 2, label: "Run 2 · 10:01:00" }];
+          if (c === "run_series") return { t: f.series.t, y: a.names.map((_, k) => f.series.y[k] ?? f.series.y[0]) };
+          if (c === "save_file") { window.__saved = a; return "/tmp/x"; }
           if (c in m) return m[c];
           return null;
         },
@@ -122,6 +127,60 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(700);
   check("a very short run ends with Done", (await p.textContent(".status")).includes("Done"), await p.textContent(".status"));
   check("the scopes open with plots after a run", (await p.$$(".dock .scope")).length >= 1 && (await p.$$(".dock .scope canvas")).length >= 1);
+
+  // 8b. Scope tools (0.1.5): cursors, marks, compare, axes, pictures; the probe hint on a wire.
+  const sc0 = ".dock .scope";
+  const calls = async c => p.evaluate(n => window.__calls.filter(x => x[0] === n), c);
+  await p.click(`${sc0} .cursbtn`);
+  await p.waitForTimeout(300);
+  check("cursors show a readout with A, B and B − A", (await p.$$(`${sc0} .cursread tr`)).length >= 3 && (await p.textContent(`${sc0} .cursread`)).includes("B − A"));
+  check("cursor values come from the engine", (await calls("value_at")).length >= 2);
+  await p.click(`${sc0} .marksbtn`);
+  await p.waitForTimeout(200);
+  check("step marks are asked of the engine", (await calls("step_marks")).length === 1 && await p.$eval(`${sc0} .marksbtn`, e => e.classList.contains("on")));
+  await p.click(`${sc0} .cmpbtn`);
+  await p.waitForTimeout(200);
+  check("compare lists the earlier runs", (await p.textContent(".menu")).includes("Run 1"));
+  await p.click('.menu button:has-text("Run 1")');
+  await p.waitForTimeout(300);
+  check("an earlier run is overlaid", (await calls("run_series")).some(c => c[1].run === 1) && await p.$eval(`${sc0} .cmpbtn`, e => e.classList.contains("on")));
+  await p.click(`${sc0} .setbtn`);
+  await p.waitForTimeout(150);
+  await p.click('.menu button:has-text("stacked")');
+  await p.waitForTimeout(150);
+  const lay = (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).reverse().find(o => o.SetParam && o.SetParam.key === "layout");
+  check("the stacked layout is saved in the Scope block", !!lay && lay.SetParam.value === "stacked", JSON.stringify(lay));
+  await p.click(`${sc0} .picbtn`);
+  await p.waitForTimeout(150);
+  await p.click('.menu button:has-text("SVG")');
+  await p.waitForTimeout(300);
+  const svgOk = await p.evaluate(() => !!window.__saved && window.__saved.name.endsWith(".svg") && window.__saved.data.startsWith("<svg"));
+  await p.click(`${sc0} .picbtn`);
+  await p.waitForTimeout(150);
+  await p.click('.menu button:has-text("high resolution")');
+  await p.waitForTimeout(600);
+  check("a high-resolution PNG is three times the size and not blank", await p.evaluate(async () => {
+    const d = window.__saved; if (!d || !d.name.endsWith("3x.png")) return false;
+    const img = new Image(); img.src = d.data; await img.decode();
+    const c = document.createElement("canvas"); c.width = img.width; c.height = img.height; const g = c.getContext("2d"); g.drawImage(img, 0, 0);
+    const px = g.getImageData(0, 0, c.width, c.height).data; let ink = 0; for (let i = 0; i < px.length; i += 4) if (px[i] < 200 || px[i + 1] < 200 || px[i + 2] < 200) ink++;
+    const host = document.querySelector(".dock .scope .plot");
+    return img.width >= 2.5 * host.clientWidth && ink > 1000;
+  }));
+  check("a scope saves as SVG", svgOk);
+  await p.click(`${sc0} .cursbtn`);
+  const wbox = await p.evaluate(() => { const g = document.querySelector(".wire .whit"); const r = g.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await p.mouse.move(wbox.x, wbox.y);
+  await p.waitForTimeout(300);
+  check("hovering a wire offers the signal probe", (await p.$$(".probetip")).length === 1 && (await p.textContent(".probetip")).includes("Log all signals"));
+  await p.mouse.move(5, 5);
+  await p.click('.tabs > button:text-is("Simulate")');
+  await p.waitForTimeout(100);
+  await p.click(".logall");
+  await p.waitForTimeout(150);
+  const ss = (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).reverse().find(o => o.SetSim);
+  check("Log all signals is a run setting", !!ss && ss.SetSim.sim.log_all === true, JSON.stringify(ss));
+  await p.click('.tabs > button:text-is("Model")');
 
   // 9. Subsystems open with a path back.
   const sub = fix.diagram.blocks.find(b => b.kind === "Subsystem");

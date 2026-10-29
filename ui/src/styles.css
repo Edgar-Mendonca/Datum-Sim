@@ -832,3 +832,12 @@ tr.behind td { background: var(--err-bg); }
 .ratelegend b { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .ratelegend span { display: flex; align-items: center; gap: 6px; }
 .ratelegend i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+
+/* Scope tools (0.1.5) */
+.scope header .btn.on { background: var(--panel2); border-color: var(--blue); color: var(--blue); }
+.cursread { padding: 2px 8px 4px; border-bottom: 1px solid var(--line2); font: 11px var(--mono); overflow-x: auto; }
+.cursread table { border-collapse: collapse; }
+.cursread th, .cursread td { padding: 1px 10px 1px 0; text-align: right; white-space: nowrap; }
+.cursread th:first-child, .cursread td:first-child { text-align: left; font-family: var(--sans); }
+.cursread th { color: var(--muted); font-weight: 500; }
+.probetip { position: absolute; z-index: 5; pointer-events: none; background: var(--navy); color: var(--bg2); font: 11px var(--mono); padding: 5px 8px; border-radius: 3px; max-width: 360px; }

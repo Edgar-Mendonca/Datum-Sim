@@ -79,6 +79,9 @@ pub struct Chan {
     pub elem: usize,
     /// The signal's name: source block (and port) and element.
     pub name: String,
+    /// Logged for the signal probe ("log all signals"): `sink` and `port` are then the block
+    /// output the wire starts from, not a sink.
+    pub probe: bool,
     #[serde(skip)]
     slot: usize,
 }
@@ -162,7 +165,10 @@ fn eval_vars(m: &Model, over: &BTreeMap<String, f64>) -> Result<BTreeMap<String,
 }
 
 /// Flatten the diagram tree into a list of blocks with resolved input sources.
-fn flatten(m: &Model, issues: &mut Vec<Issue>) -> Vec<Flat> {
+/// Flattened blocks, and each subsystem's (in, out) pass-through nodes.
+type Subs = BTreeMap<u32, (Vec<usize>, Vec<usize>)>;
+
+fn flatten(m: &Model, issues: &mut Vec<Issue>) -> (Vec<Flat>, Subs) {
     let mut flat: Vec<Flat> = Vec::new();
     // block id → flat index; subsystem id → (in pass nodes, out pass nodes)
     let mut at: BTreeMap<u32, usize> = BTreeMap::new();
@@ -228,7 +234,7 @@ fn flatten(m: &Model, issues: &mut Vec<Issue>) -> Vec<Flat> {
     }
     wires(&m.root, &mut flat, &at, &subs, issues);
     goto_from(&mut flat, issues);
-    flat
+    (flat, subs)
 }
 
 /// Each From becomes a pass-through fed by the signal into the Goto with its tag.
@@ -283,7 +289,7 @@ fn params<'a>(f: &Flat, vars: &'a BTreeMap<String, Mat>, base: Option<&'a Path>)
 pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> Result<Sim, Vec<Issue>> {
     let vars = eval_vars(m, over)?;
     let mut issues = vec![];
-    let flat = flatten(m, &mut issues);
+    let (flat, subs) = flatten(m, &mut issues);
     let n = flat.len();
     // Parameters
     let mut pvs = Vec::with_capacity(n);
@@ -443,11 +449,33 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
             let base = s.map_or_else(|| "(not connected)".to_string(), |(b, bp)| flat[b].out_names[bp].clone());
             for e in 0..w {
                 let name = if w > 1 { format!("{base}[{}]", e + 1) } else { base.clone() };
-                chans.push(Chan { sink: f.id, port: p, elem: e, name, slot: slot + e });
+                chans.push(Chan { sink: f.id, port: p, elem: e, name, probe: false, slot: slot + e });
             }
         }
         if f.kind == "ToFile" {
             files.push((f.id, blocks::param(&f.block, "file"), (first..chans.len()).collect()));
+        }
+    }
+    // Every block output, for the probe: by the block (or subsystem) the wire leaves from.
+    if m.sim.log_all {
+        let mut outs: Vec<(u32, usize, usize, usize)> = vec![];
+        for (i, f) in flat.iter().enumerate() {
+            for p in 0..f.nout {
+                outs.push((f.id, p, i, p));
+            }
+        }
+        for (sid, (_, o)) in &subs {
+            for (p, i) in o.iter().enumerate() {
+                outs.push((*sid, p, *i, 0));
+            }
+        }
+        for (id, port, i, p) in outs {
+            let w = ow[i][p];
+            for e in 0..w {
+                let base = &flat[i].out_names[p];
+                let name = if w > 1 { format!("{base}[{}]", e + 1) } else { base.clone() };
+                chans.push(Chan { sink: id, port, elem: e, name, probe: true, slot: port_slot(i, p) + e });
+            }
         }
     }
     let nz = zo;

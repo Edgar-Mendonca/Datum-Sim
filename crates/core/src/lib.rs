@@ -12,6 +12,7 @@ pub mod examples;
 pub mod expr;
 mod hardening;
 pub mod linalg;
+pub mod measure;
 pub mod model;
 pub mod motors;
 pub mod route;

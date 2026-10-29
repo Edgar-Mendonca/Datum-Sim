@@ -54,7 +54,13 @@ struct RunState {
     sweep: Option<(String, Vec<f64>, Vec<Arc<Results>>)>,
     /// Bumped when a run starts, so a late finish of an older run is ignored.
     gen: u64,
+    /// The last runs kept for comparing (newest last): (number, label, results).
+    history: Vec<(u64, String, Arc<Results>)>,
+    count: u64,
 }
+
+/// How many earlier runs are kept for comparing.
+const KEEP_RUNS: usize = 5;
 
 struct App {
     doc: Doc,
@@ -411,7 +417,14 @@ fn run(app: AppHandle, st: State<St>) -> Result<Started, Vec<Issue>> {
                     }
                 }
                 let d = Done { gen, ok: true, error: None, issues, stats: Some(r.stats.clone()), truncated: r.truncated, files: written };
-                a.run.results = Some(Arc::new(r));
+                let r = Arc::new(r);
+                a.run.count += 1;
+                let label = format!("Run {} · {}", a.run.count, chrono::Local::now().format("%H:%M:%S"));
+                let n = a.run.count;
+                a.run.history.push((n, label, r.clone()));
+                let extra = a.run.history.len().saturating_sub(KEEP_RUNS + 1);
+                a.run.history.drain(..extra);
+                a.run.results = Some(r);
                 d
             }
             Err(e) => Done { gen, ok: false, error: Some(e), issues: vec![], stats: None, truncated: false, files: vec![] },
@@ -477,6 +490,43 @@ fn series(st: State<St>, chans: Vec<usize>, t0: f64, t1: f64, buckets: usize) ->
     let Some(r) = a.run.results.clone() else { return Multi { t: vec![], y: vec![] } };
     drop(a);
     let ys: Vec<&[f64]> = chans.iter().filter(|c| **c < r.y.len()).map(|c| r.y[*c].as_slice()).collect();
+    let (t, y) = compile::decimate_multi(&r.t, &ys, t0, t1, buckets.clamp(10, 5000));
+    Multi { t, y }
+}
+
+/// Signals at one time (the probe and the cursors), interpolated.
+#[tauri::command]
+fn value_at(st: State<St>, chans: Vec<usize>, t: f64) -> Vec<f64> {
+    let Some(r) = st.lock().run.results.clone() else { return vec![] };
+    chans.iter().map(|c| r.y.get(*c).map_or(f64::NAN, |y| datum_core::measure::value_at(&r.t, y, t))).collect()
+}
+
+/// Step-response marks of one signal of the last run, for drawing on its scope.
+#[tauri::command]
+fn step_marks(st: State<St>, chan: usize) -> R<datum_core::measure::StepMarks> {
+    let r = st.lock().run.results.clone().ok_or("Run the model first.")?;
+    let y = r.y.get(chan).ok_or("That signal is not in the results.")?;
+    datum_core::measure::step_marks(&r.t, y)
+}
+
+#[derive(Serialize)]
+struct RunInfo {
+    id: u64,
+    label: String,
+}
+
+/// The kept runs, oldest first; the last is the current one.
+#[tauri::command]
+fn runs(st: State<St>) -> Vec<RunInfo> {
+    st.lock().run.history.iter().map(|(id, label, _)| RunInfo { id: *id, label: label.clone() }).collect()
+}
+
+/// Signals of a kept run by name (a name that run did not log gives an empty series).
+#[tauri::command]
+fn run_series(st: State<St>, run: u64, names: Vec<String>, t0: f64, t1: f64, buckets: usize) -> Multi {
+    let Some(r) = st.lock().run.history.iter().find(|h| h.0 == run).map(|h| h.2.clone()) else { return Multi { t: vec![], y: vec![] } };
+    let empty = vec![f64::NAN; r.t.len()];
+    let ys: Vec<&[f64]> = names.iter().map(|n| r.chans.iter().position(|c| &c.name == n && !c.probe).map_or(empty.as_slice(), |i| r.y[i].as_slice())).collect();
     let (t, y) = compile::decimate_multi(&r.t, &ys, t0, t1, buckets.clamp(10, 5000));
     Multi { t, y }
 }
@@ -741,7 +791,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, open, save, save_file,
-            run, control, results, series, sweep_series, run_sweep, export_csv, analyze, step_info, engine,
+            run, control, results, series, value_at, step_marks, runs, run_series, sweep_series, run_sweep, export_csv, analyze, step_info, engine,
             options, set_options, autosave, recovery, recover, recent, startup_file, open_url, version, quit, check_update, install_update
         ])
         .run(tauri::generate_context!())

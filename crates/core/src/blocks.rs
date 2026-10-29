@@ -196,7 +196,8 @@ pub fn library() -> Vec<Def> {
         d("Lookup2D", "2-D lookup table", "Lookup tables", "Bilinear interpolation in a table: input 1 picks the row, input 2 the column.", "Table has one row per row breakpoint and one column per column breakpoint. Inputs are clipped to the table.",
             vec![n("x", "Row breakpoints", "[0 1]", "", ""), n("y", "Column breakpoints", "[0 1]", "", ""), n("table", "Table", "[0 1; 1 2]", "", "")]),
         // Sinks
-        d("Scope", "Scope", "Sinks", "Plots its inputs against time while the model runs.", "Double-click to open it. Each input can be a vector; every element is a line.", vec![n("n", "Inputs", "1", "", "")]),
+        d("Scope", "Scope", "Sinks", "Plots its inputs against time while the model runs.", "Double-click to open it. Each input can be a vector; every element is a line. On the scope: two measuring cursors, step-response marks, earlier runs to compare, and pictures as PNG or SVG. Drag across the plot to zoom (sideways for time, up or down for y); double-click to see the whole run.",
+            vec![n("n", "Inputs", "1", "", ""), c("layout", "Layout", &["overlaid", "stacked"], "Stacked: one plot per input"), t("ymin", "Y lower limit", "auto", "A number, or auto"), t("ymax", "Y upper limit", "auto", "A number, or auto")]),
         d("XY", "XY graph", "Sinks", "Plots input 2 against input 1 (a phase plane or a trajectory).", "", vec![]),
         d("Display", "Display", "Sinks", "Shows the latest value of its input on the block.", "", vec![]),
         d("ToFile", "To file (CSV)", "Sinks", "Writes its inputs and time to a CSV file at the end of the run.", "The path may be relative to the model file.",
