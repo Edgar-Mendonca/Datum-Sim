@@ -1,6 +1,6 @@
 # Plan 0.2: a bigger build
 
-Written 2026-10-29 (session 6), after 0.1.3. Status: **waiting for the user's answers (§6)**. Nothing in this plan is built yet.
+Written 2026-10-29 (session 6), after 0.1.3. Status: **answered (§7); being built.**
 
 ## 1. The idea
 
@@ -96,3 +96,21 @@ About three times the size of 0.1.2. Every step keeps the CLAUDE.md checks green
 4. **Motor extras**: add the switched reluctance motor, DC link and current sensor, and the motor power-balance checks to this build?
 5. **Examples**: are there models you want as worked examples, for example a model from your own work, a textbook problem, or a particular drive?
 6. **My blocks location**: keep your library in a folder you choose (it can then be shared on a network drive), or only in the app's own data folder?
+
+## 7. Answers (2026-10-29) and the release order
+
+| Question | Answer | What it means |
+| --- | --- | --- |
+| 1 Scope | "all" | A, B, C and D are all in this build |
+| 2 Releases | "as you please" | A patch release after each part, 0.2.0 when masks land (below) |
+| 3 Order | "as you please" | As in §4 |
+| 4 Motor extras | "yes" | Switched reluctance motor, DC link, inverter DC current, current sensor and power-balance checks for every machine join part A |
+| 5 Examples | not answered | The examples in §2 |
+| 6 My blocks location | not answered | A folder you can choose in Options; by default the app's own data folder |
+
+| Release | Contents |
+| --- | --- |
+| 0.1.4 | Discrete control (A) and the motor extras |
+| 0.1.5 | Scopes and the signal probe (C) |
+| 0.1.6 | Wires and diagram (B) |
+| 0.2.0 | Masks and My blocks (D) |

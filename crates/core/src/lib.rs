@@ -6,6 +6,7 @@
 
 pub mod blocks;
 pub mod compile;
+pub mod discrete;
 pub mod doc;
 pub mod examples;
 pub mod expr;

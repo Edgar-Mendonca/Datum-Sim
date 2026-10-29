@@ -297,8 +297,11 @@ impl Stepper {
     }
 }
 
+/// A crossing goes from one strict side to the other. A function at exactly zero has not crossed
+/// yet: it keeps its last non-zero sign (see the stepping loop), so it registers when it moves on,
+/// and one that rests at zero never fires.
 fn sign_change(a: f64, b: f64) -> bool {
-    (a < 0.0 && b >= 0.0) || (a > 0.0 && b <= 0.0)
+    (a < 0.0 && b > 0.0) || (a > 0.0 && b < 0.0)
 }
 
 /// Run from t0 to t1. `x` holds the initial state and ends with the final state.

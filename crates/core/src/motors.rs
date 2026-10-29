@@ -5,7 +5,7 @@
 //! speed ω (rad/s), angle θ (rad) and a load-torque input T_L. Three-phase signals are vectors of
 //! width 3; the αβ and dq transforms are amplitude-invariant.
 
-use crate::rt::{Ctx, Pv, Rt};
+use crate::rt::{Ctx, Pv, Rate, Rt};
 use std::f64::consts::PI;
 
 const SQ3: f64 = 1.732_050_807_568_877_2;
@@ -610,6 +610,9 @@ impl Encoder {
     }
 }
 impl Rt for Encoder {
+    fn rate(&self) -> Rate {
+        Rate::Discrete(self.ts)
+    }
     fn init(&mut self, _: &mut [f64]) {
         self.last = f64::NAN;
         self.w = 0.0;
@@ -639,11 +642,181 @@ impl Rt for Encoder {
     cb!();
 }
 
+// ---------------------------------------------------------------- switched reluctance
+
+/// Three-phase switched reluctance motor without saturation: L_k(θ) = L0 − L1·cos(Nr·θ − k·2π/3),
+/// flux linkages as states, T = Σ ½·i_k²·dL_k/dθ. With an asymmetric bridge the phase currents
+/// cannot reverse (the diodes): a phase's flux stops falling at zero.
+#[derive(Clone)]
+struct Srm {
+    r: f64,
+    l0: f64,
+    l1: f64,
+    nr: f64,
+    j: f64,
+    b: f64,
+    w0: f64,
+    th0: f64,
+    oneway: bool,
+}
+impl Srm {
+    fn l(&self, th: f64, k: usize) -> (f64, f64) {
+        let a = self.nr * th - k as f64 * TAU3;
+        (self.l0 - self.l1 * a.cos(), self.l1 * self.nr * a.sin())
+    }
+    fn i(&self, x: &[f64], k: usize) -> f64 {
+        let psi = if self.oneway { x[k].max(0.0) } else { x[k] };
+        psi / self.l(x[4], k).0
+    }
+    fn te(&self, x: &[f64]) -> f64 {
+        (0..3).map(|k| 0.5 * self.i(x, k).powi(2) * self.l(x[4], k).1).sum()
+    }
+}
+impl Rt for Srm {
+    fn nx(&self) -> usize {
+        5
+    }
+    fn init(&mut self, x: &mut [f64]) {
+        x.copy_from_slice(&[0.0, 0.0, 0.0, self.w0, self.th0]);
+    }
+    fn feed(&self) -> bool {
+        false
+    }
+    fn out(&self, _: &Ctx, x: &[f64], _: &[f64], y: &mut [f64]) {
+        y.copy_from_slice(&[x[3], self.te(x), self.i(x, 0), self.i(x, 1), self.i(x, 2), x[4]]);
+    }
+    fn deriv(&self, _: &Ctx, x: &[f64], u: &[f64], dx: &mut [f64]) {
+        for k in 0..3 {
+            let d = u[k] - self.r * self.i(x, k);
+            dx[k] = if self.oneway && x[k] <= 0.0 && d < 0.0 { 0.0 } else { d };
+        }
+        dx[3] = (self.te(x) - self.b * x[3] - u[3]) / self.j;
+        dx[4] = x[3];
+    }
+    fn update(&mut self, _: &Ctx, x: &mut [f64], _: &[f64]) {
+        if self.oneway {
+            x[..3].iter_mut().for_each(|v| *v = v.max(0.0));
+        }
+    }
+    cb!();
+}
+
+// ---------------------------------------------------------------- DC link, sensors
+
+/// DC link capacitor fed from a source through a resistance: C·dV/dt = i_s − i_load.
+#[derive(Clone)]
+struct DcLink {
+    c: f64,
+    rs: f64,
+    v0: f64,
+    diode: bool,
+}
+impl DcLink {
+    fn is(&self, vs: f64, v: f64) -> f64 {
+        let i = (vs - v) / self.rs;
+        if self.diode { i.max(0.0) } else { i }
+    }
+}
+impl Rt for DcLink {
+    fn nx(&self) -> usize {
+        1
+    }
+    fn init(&mut self, x: &mut [f64]) {
+        x[0] = self.v0;
+    }
+    fn out(&self, _: &Ctx, x: &[f64], u: &[f64], y: &mut [f64]) {
+        y[0] = x[0];
+        y[1] = self.is(u[0], x[0]);
+    }
+    fn deriv(&self, _: &Ctx, x: &[f64], u: &[f64], dx: &mut [f64]) {
+        dx[0] = (self.is(u[0], x[0]) - u[1]) / self.c;
+    }
+    cb!();
+}
+
+/// The current an average-model inverter draws from its DC link: power balance,
+/// i_dc = ½·(Σ m_k·i_k − mean(m)·Σ i_k) with m limited to ±1, as in the Inverter.
+#[derive(Clone)]
+struct InverterDc;
+impl Rt for InverterDc {
+    fn out(&self, _: &Ctx, _: &[f64], u: &[f64], y: &mut [f64]) {
+        let m: Vec<f64> = (0..3).map(|k| u[k].clamp(-1.0, 1.0)).collect();
+        let mean = m.iter().sum::<f64>() / 3.0;
+        let isum: f64 = u[3..6].iter().sum();
+        y[0] = 0.5 * (m.iter().zip(&u[3..6]).map(|(a, b)| a * b).sum::<f64>() - mean * isum);
+    }
+    cb!();
+}
+
+/// A current (or any) sensor: gain, offset, first-order bandwidth and noise held each sample time.
+#[derive(Clone)]
+struct Sensor {
+    k: f64,
+    off: f64,
+    wc: f64,
+    sd: f64,
+    ts: f64,
+    seed: u64,
+    state: u64,
+    noise: Vec<f64>,
+}
+impl Sensor {
+    fn gauss(&mut self) -> f64 {
+        let mut u = || {
+            self.state ^= self.state << 13;
+            self.state ^= self.state >> 7;
+            self.state ^= self.state << 17;
+            ((self.state >> 11) as f64 + 0.5) / (1u64 << 53) as f64
+        };
+        let (a, b) = (u(), u());
+        (-2.0 * a.ln()).sqrt() * (2.0 * PI * b).cos()
+    }
+    fn draw(&mut self) {
+        for k in 0..self.noise.len() {
+            self.noise[k] = if self.sd > 0.0 { self.sd * self.gauss() } else { 0.0 };
+        }
+    }
+}
+impl Rt for Sensor {
+    fn nx(&self) -> usize {
+        if self.wc > 0.0 { self.noise.len() } else { 0 }
+    }
+    fn init(&mut self, x: &mut [f64]) {
+        x.iter_mut().for_each(|v| *v = 0.0);
+        self.state = self.seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+        self.draw();
+    }
+    fn feed(&self) -> bool {
+        self.wc <= 0.0
+    }
+    fn out(&self, _: &Ctx, x: &[f64], u: &[f64], y: &mut [f64]) {
+        for (k, yk) in y.iter_mut().enumerate() {
+            let s = if self.wc > 0.0 { x[k] } else { u[k] };
+            *yk = self.k * s + self.off + self.noise[k];
+        }
+    }
+    fn deriv(&self, _: &Ctx, x: &[f64], u: &[f64], dx: &mut [f64]) {
+        for k in 0..dx.len() {
+            dx[k] = self.wc * (u[k] - x[k]);
+        }
+    }
+    fn update(&mut self, c: &Ctx, _: &mut [f64], _: &[f64]) {
+        if self.sd > 0.0 && crate::rt::is_hit(c.t, self.ts) && c.t > 0.0 {
+            self.draw();
+        }
+    }
+    fn next_hit(&self, t: f64) -> f64 {
+        if self.sd > 0.0 { crate::rt::next_sample(t, self.ts) } else { f64::INFINITY }
+    }
+    cb!();
+}
+
 // ---------------------------------------------------------------- build
 
 pub const KINDS: &[&str] = &[
     "DCSepEx", "DCShunt", "DCSeries", "DCCompound", "InductionSC", "InductionDC", "InductionWR", "PMSM3", "SynRM", "SyncField",
     "BLDC", "Stepper", "Clarke", "InvClarke", "Park", "InvPark", "ThreePhase", "Inverter", "PWM", "Encoder",
+    "SRM", "DCLink", "InverterDC", "Sensor",
 ];
 
 pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Option<Result<(Box<dyn Rt>, Vec<usize>), String>> {
@@ -784,6 +957,40 @@ fn build_inner(kind: &str, p: &Pv, iw: &[usize]) -> Result<(Box<dyn Rt>, Vec<usi
             let ppr = pos(p, "ppr")?;
             ok(Encoder { q: 2.0 * PI / (4.0 * ppr), ts: pos(p, "ts")?, last: f64::NAN, w: 0.0 }, vec![1, 1])
         }
+        "SRM" => {
+            need(iw, &[3, 1], &["phase voltages", "load torque"])?;
+            let (lmax, lmin) = (pos(p, "Lmax")?, pos(p, "Lmin")?);
+            if lmin >= lmax {
+                return Err("the unaligned inductance Lmin must be below the aligned Lmax".into());
+            }
+            let m = Srm {
+                r: nonneg(p, "R")?,
+                l0: 0.5 * (lmax + lmin),
+                l1: 0.5 * (lmax - lmin),
+                nr: pos(p, "Nr")?,
+                j: pos(p, "J")?,
+                b: nonneg(p, "b")?,
+                w0: num(p, "w0")?,
+                th0: num(p, "th0")?,
+                oneway: p.t.get("currents").map(|s| s.as_str()) != Some("both ways"),
+            };
+            ok(m, vec![1, 1, 3, 1])
+        }
+        "DCLink" => {
+            need(iw, &[1, 1], &["source voltage", "load current"])?;
+            let diode = p.t.get("source").map(|s| s.as_str()) == Some("diode rectifier (charges only)");
+            ok(DcLink { c: pos(p, "C")?, rs: pos(p, "Rs")?, v0: num(p, "V0")?, diode }, vec![1, 1])
+        }
+        "InverterDC" => {
+            need(iw, &[3, 3], &["modulation", "phase currents"])?;
+            ok(InverterDc, vec![1])
+        }
+        "Sensor" => {
+            let w = iw.first().cloned().unwrap_or(1);
+            let bw = nonneg(p, "bw")?;
+            let seed = num(p, "seed")?.abs() as u64;
+            ok(Sensor { k: num(p, "k")?, off: num(p, "offset")?, wc: 2.0 * PI * bw, sd: nonneg(p, "sd")?, ts: pos(p, "ts")?, seed, state: 1, noise: vec![0.0; w] }, vec![w])
+        }
         _ => Err(format!("unknown motor block '{kind}'")),
     }
 }
@@ -901,6 +1108,10 @@ pub fn presets(kind: &str) -> Vec<Preset> {
         "Stepper" => vec![
             preset("NEMA 17 · 1.8° · 1.7 A", &[("R", 1.65), ("L", 2.8e-3), ("Km", 0.25), ("Nr", 50.0), ("Td", 0.01), ("J", 5.4e-6), ("b", 1e-5)]),
             preset("NEMA 23 · 1.8° · 2.8 A", &[("R", 0.9), ("L", 3.6e-3), ("Km", 0.45), ("Nr", 50.0), ("Td", 0.03), ("J", 3e-5), ("b", 3e-5)]),
+        ],
+        "SRM" => vec![
+            preset("LV 400 V · 4 kW · 6/4", &[("R", 1.3), ("Lmax", 0.06), ("Lmin", 0.008), ("Nr", 4.0), ("J", 0.008), ("b", 1e-3)]),
+            preset("LV 400 V · 7.5 kW · 12/8", &[("R", 0.5), ("Lmax", 0.04), ("Lmin", 0.006), ("Nr", 8.0), ("J", 0.02), ("b", 2e-3)]),
         ],
         _ => vec![],
     }

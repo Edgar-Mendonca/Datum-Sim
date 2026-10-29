@@ -5,7 +5,7 @@
 use crate::blocks::{self, Pk};
 use crate::expr::{self, Mat};
 use crate::model::{Block, Diagram, Model};
-use crate::rt::{self, Ctx, Pv, Rt};
+use crate::rt::{self, Ctx, Pv, Rate, Rt};
 use crate::solve::{self, Hooks, Method, Ode, Opts, Stats};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -33,6 +33,8 @@ struct Flat {
     inputs: Vec<Option<(usize, usize)>>,
     nout: usize,
     out_names: Vec<String>,
+    /// The diagram it sits in ("" for the top level, "Motor/" inside a subsystem named Motor).
+    parent: String,
 }
 
 pub struct Node {
@@ -113,6 +115,8 @@ pub const MAX_POINTS: usize = 2_000_000;
 
 #[derive(Clone)]
 pub struct Sim {
+    /// Each block's rate (by block id), for the sample-time colours.
+    pub rates: Vec<(u32, Rate)>,
     pub nodes: Vec<Node>,
     order: Vec<usize>,
     sig: Vec<f64>,
@@ -196,7 +200,7 @@ fn flatten(m: &Model, issues: &mut Vec<Issue>) -> Vec<Flat> {
                 block.params.insert("value".into(), "0".into());
             }
             at.insert(b.id, flat.len());
-            flat.push(Flat { id: b.id, name, kind: kind.into(), block, inputs: vec![None; ni], nout: no, out_names });
+            flat.push(Flat { id: b.id, name, kind: kind.into(), block, inputs: vec![None; ni], nout: no, out_names, parent: prefix.to_string() });
         }
     }
     nodes(&m.root, "", &mut flat, &mut at, &mut subs, false);
@@ -223,7 +227,35 @@ fn flatten(m: &Model, issues: &mut Vec<Issue>) -> Vec<Flat> {
         }
     }
     wires(&m.root, &mut flat, &at, &subs, issues);
+    goto_from(&mut flat, issues);
     flat
+}
+
+/// Each From becomes a pass-through fed by the signal into the Goto with its tag.
+fn goto_from(flat: &mut [Flat], issues: &mut Vec<Issue>) {
+    let gotos: Vec<(usize, String, bool, String)> = flat.iter().enumerate().filter(|(_, f)| f.kind == "Goto")
+        .map(|(i, f)| (i, blocks::param(&f.block, "tag").trim().to_string(), blocks::param(&f.block, "scope") == "global", f.parent.clone())).collect();
+    // Two Gotos may not send the same tag to the same From.
+    for (k, (i, tag, glob, par)) in gotos.iter().enumerate() {
+        if gotos[..k].iter().any(|(_, t, g, p)| t == tag && (*g || *glob || p == par)) {
+            issues.push(err(flat[*i].id, format!("{}: another Goto already sends the tag '{tag}' here", flat[*i].name)));
+        }
+    }
+    for i in 0..flat.len() {
+        if flat[i].kind != "From" {
+            continue;
+        }
+        let tag = blocks::param(&flat[i].block, "tag").trim().to_string();
+        let found = gotos.iter().find(|(_, t, g, p)| *t == tag && (*g || *p == flat[i].parent));
+        match found {
+            Some((g, ..)) => {
+                let src = flat[*g].inputs.first().cloned().flatten();
+                flat[i].kind = "Pass".into();
+                flat[i].inputs = vec![src];
+            }
+            None => issues.push(err(flat[i].id, format!("{}: no Goto sends the tag '{tag}' (a local Goto must be in the same diagram)", flat[i].name))),
+        }
+    }
 }
 
 fn params<'a>(f: &Flat, vars: &'a BTreeMap<String, Mat>, base: Option<&'a Path>) -> Result<Pv<'a>, String> {
@@ -317,6 +349,7 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
         }
     }
     let rts: Vec<Box<dyn Rt>> = built.into_iter().map(|r| r.unwrap()).collect();
+    let rates = rates(&flat, &rts);
     // Unconnected inputs read zero (a warning).
     for f in &flat {
         for (k, s) in f.inputs.iter().enumerate() {
@@ -419,6 +452,7 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
     }
     let nz = zo;
     Ok(Sim {
+        rates,
         nodes,
         order,
         sig: vec![0.0; zero + 1],
@@ -431,6 +465,47 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
         files,
         tseg: m.sim.start,
     })
+}
+
+/// Combine the rates of a block's inputs: constants drop out; one rate is kept; several make it
+/// mixed.
+fn combine(rs: impl Iterator<Item = Rate>) -> Rate {
+    let mut out = Rate::Constant;
+    for r in rs {
+        out = match (out, r) {
+            (o, Rate::Constant | Rate::Inherit) => o,
+            (Rate::Constant, r) => r,
+            (Rate::Discrete(a), Rate::Discrete(b)) if (a - b).abs() <= 1e-12 * a.max(b) => Rate::Discrete(a),
+            (Rate::Continuous, Rate::Continuous) => Rate::Continuous,
+            _ => Rate::Mixed,
+        };
+    }
+    out
+}
+
+/// Rates by fixed-point iteration over the inputs, as the widths are.
+fn rates(flat: &[Flat], rts: &[Box<dyn Rt>]) -> Vec<(u32, Rate)> {
+    let n = flat.len();
+    let own: Vec<Rate> = (0..n).map(|i| if rts[i].nx() > 0 { Rate::Continuous } else { rts[i].rate() }).collect();
+    let mut r: Vec<Rate> = own.iter().map(|o| if *o == Rate::Inherit { Rate::Constant } else { *o }).collect();
+    for _ in 0..=n.min(200) {
+        let mut changed = false;
+        for i in 0..n {
+            if own[i] != Rate::Inherit {
+                continue;
+            }
+            // A block with no inputs and no rate of its own (a time source) is continuous.
+            let v = if flat[i].inputs.is_empty() { Rate::Continuous } else { combine(flat[i].inputs.iter().flatten().map(|(b, _)| r[*b])) };
+            if r[i] != v {
+                r[i] = v;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    (0..n).map(|i| (flat[i].id, r[i])).collect()
 }
 
 impl Sim {
@@ -666,7 +741,7 @@ fn rows(m: &Mat) -> Vec<Vec<f64>> {
 pub fn linear(m: &Model, id: u32) -> Result<LinSys, String> {
     let b = m.block(id).ok_or("Select a block first.")?.clone();
     let vars = eval_vars(m, &BTreeMap::new()).map_err(|e| e.into_iter().map(|i| i.msg).collect::<Vec<_>>().join("; "))?;
-    let f = Flat { id, name: b.name.clone(), kind: b.kind.clone(), block: b.clone(), inputs: vec![], nout: 1, out_names: vec![] };
+    let f = Flat { id, name: b.name.clone(), kind: b.kind.clone(), block: b.clone(), inputs: vec![], nout: 1, out_names: vec![], parent: String::new() };
     let p = params(&f, &vars, None).map_err(|e| format!("{}: {e}", b.name))?;
     let s = |k: &str| p.m.get(k).and_then(|v| v.s().ok()).ok_or_else(|| format!("{}: {k} must be a single number", b.name));
     let lin = match b.kind.as_str() {

@@ -48,6 +48,8 @@ const fn n(key: &'static str, label: &'static str, def: &'static str, unit: &'st
 const fn t(key: &'static str, label: &'static str, def: &'static str, hint: &'static str) -> P {
     P { key, label, def, unit: "", hint, kind: Pk::Text, choices: &[] }
 }
+const RESET: &[&str] = &["none", "rising", "falling", "either"];
+
 const fn c(key: &'static str, label: &'static str, choices: &'static [&'static str], hint: &'static str) -> P {
     P { key, label, def: choices[0], unit: "", hint, kind: Pk::Choice, choices }
 }
@@ -76,11 +78,14 @@ pub fn size(kind: &str) -> (f64, f64) {
         "Display" => (80.0, 30.0),
         "Mux" | "Demux" => (12.0, 60.0),
         "Subsystem" => (100.0, 70.0),
-        "DCMotor" | "PMSM" | "DCSepEx" | "DCShunt" | "DCSeries" | "DCCompound" | "InductionSC" | "InductionDC" | "PMSM3" | "SynRM" | "BLDC" | "Stepper" => (90.0, 80.0),
+        "DCMotor" | "PMSM" | "DCSepEx" | "DCShunt" | "DCSeries" | "DCCompound" | "InductionSC" | "InductionDC" | "PMSM3" | "SynRM" | "BLDC" | "Stepper" | "SRM" => (90.0, 80.0),
+        "DCLink" | "InverterDC" => (80.0, 50.0),
         "InductionWR" | "SyncField" => (100.0, 100.0),
         "Clarke" | "InvClarke" | "Park" | "InvPark" | "Encoder" => (60.0, 44.0),
         "ThreePhase" | "Inverter" | "PWM" => (70.0, 50.0),
-        "TransferFcn" | "ZPK" | "StateSpace" | "Fcn" | "PID" => (90.0, 44.0),
+        "TransferFcn" | "ZPK" | "StateSpace" | "Fcn" | "PID" | "DiscreteTF" | "DiscretePID" | "DiscreteIntegrator" => (90.0, 44.0),
+        "Goto" | "From" => (60.0, 30.0),
+        "Terminator" => (24.0, 24.0),
         "Lookup2D" | "Switch" => (60.0, 60.0),
         _ => (60.0, 40.0),
     }
@@ -105,6 +110,14 @@ pub fn library() -> Vec<Def> {
             vec![n("times", "Times", "[0 1 2]", "s", "Increasing"), n("values", "Values", "[0 1 0]", "", "Same length as Times"), c("interp", "Between points", interp, "")]),
         d("FromFile", "From file (CSV)", "Sources", "Plays back measured data from a CSV file: the first column is time, the others are signals.", "The path may be relative to the model file. A header row is skipped. Values are interpolated linearly.",
             vec![t("file", "CSV file", "data.csv", "Path to the file")]),
+        d("Square", "Square wave", "Sources", "A square wave between bias − amplitude and bias + amplitude.", "High for duty % of each period. The edges are hit exactly by every solver.",
+            vec![n("amp", "Amplitude", "1", "", ""), n("freq", "Frequency", "1", "Hz", ""), n("duty", "Duty cycle", "50", "%", "Percent of the period"), n("bias", "Bias", "0", "", "")]),
+        d("Triangle", "Triangle wave", "Sources", "A symmetrical triangle wave from bias − amplitude to bias + amplitude, starting at the bias and rising.", "The corners are hit exactly.",
+            vec![n("amp", "Amplitude", "1", "", ""), n("freq", "Frequency", "1", "Hz", ""), n("bias", "Bias", "0", "", "")]),
+        d("Chirp", "Chirp (frequency sweep)", "Sources", "A sine wave whose frequency rises linearly from f0 to f1 over a sweep time, then stays at f1.", "Use it to find resonances and the frequency response of a model from a single run.",
+            vec![n("amp", "Amplitude", "1", "", ""), n("f0", "Start frequency f0", "0.1", "Hz", ""), n("f1", "End frequency f1", "10", "Hz", ""), n("T", "Sweep time", "10", "s", "")]),
+        d("RepSeq", "Repeating sequence", "Sources", "A pattern of times and values repeated for ever: a sawtooth, a drive cycle, a test profile.", "Times start at 0 and increase; the last time is the period. Values are interpolated linearly and every point is hit exactly.",
+            vec![n("times", "Times", "[0 1 2]", "s", "From 0; the last is the period"), n("values", "Values", "[0 1 0]", "", "One per time")]),
         d("Noise", "Random noise", "Sources", "Normally distributed random numbers, held for each sample time.", "Same seed, same sequence: runs are repeatable.",
             vec![n("mean", "Mean", "0", "", ""), n("sd", "Standard deviation", "1", "", ""), n("ts", "Sample time", "0.1", "s", ""), n("seed", "Seed", "1", "", "")]),
         // Math
@@ -125,7 +138,8 @@ pub fn library() -> Vec<Def> {
             vec![n("upper", "Upper limit", "1", "", ""), n("lower", "Lower limit", "-1", "", "")]),
         // Continuous
         d("Integrator", "Integrator", "Continuous", "Integrates its input over time: the output is the state x with dx/dt = u.", "Limits hold the state inside [lower, upper] (use inf for none). Integrators break algebraic loops.",
-            vec![n("ic", "Initial condition", "0", "", ""), n("upper", "Upper limit", "inf", "", ""), n("lower", "Lower limit", "-inf", "", "")]),
+            vec![n("ic", "Initial condition", "0", "", ""), n("upper", "Upper limit", "inf", "", ""), n("lower", "Lower limit", "-inf", "", ""),
+                 c("reset", "External reset", RESET, "Adds a reset input; on that edge the state goes back to the initial condition")]),
         d("Derivative", "Derivative", "Continuous", "The rate of change of the input, du/dt, from the last two accepted steps.", "Noisy and step inputs give spikes; prefer a filtered derivative (PID with N, or s/(τs+1)).", vec![]),
         d("TransferFcn", "Transfer function", "Continuous", "A linear system given by numerator and denominator coefficients in s, highest power first.", "Example: [1] and [1 2 1] is 1/(s² + 2s + 1). The numerator degree must not exceed the denominator's.",
             vec![n("num", "Numerator", "[1]", "", "Coefficients in s"), n("den", "Denominator", "[1 1]", "", "Coefficients in s")]),
@@ -152,15 +166,29 @@ pub fn library() -> Vec<Def> {
         // Discrete
         d("ZOH", "Zero-order hold", "Discrete", "Samples the input every sample time and holds it.", "", vec![n("ts", "Sample time", "0.1", "s", "")]),
         d("UnitDelay", "Unit delay", "Discrete", "Outputs the input from the previous sample.", "", vec![n("ts", "Sample time", "0.1", "s", ""), n("ic", "Initial output", "0", "", "")]),
-        planned("DiscreteTF", "Discrete transfer function", "Discrete", "A linear system in z.", "0.2"),
-        planned("DiscretePID", "Discrete PID", "Discrete", "A PID controller that runs at a sample time.", "0.2"),
+        d("DiscreteTF", "Discrete transfer function", "Discrete", "A linear system in z, updated every sample time: numerator and denominator coefficients in z, highest power first.", "Example: [0.5] and [1 -0.5] is 0.5/(z − 0.5). The numerator degree must not exceed the denominator's. The output holds between samples.",
+            vec![n("num", "Numerator", "[1]", "", "Coefficients in z"), n("den", "Denominator", "[1 -0.5]", "", "Coefficients in z"), n("ts", "Sample time", "0.1", "s", "")]),
+        d("DiscreteSS", "Discrete state space", "Discrete", "x[k+1] = A x[k] + B u[k], y[k] = C x[k] + D u[k], every sample time.", "Matrices as [a b; c d]. D may be 0.",
+            vec![n("A", "A", "[0.5]", "", ""), n("B", "B", "[1]", "", ""), n("C", "C", "[1]", "", ""), n("D", "D", "0", "", ""), n("x0", "Initial state", "0", "", ""), n("ts", "Sample time", "0.1", "s", "")]),
+        d("DiscreteIntegrator", "Discrete integrator", "Discrete", "Accumulates K·Ts·u each sample: the discrete form of an integrator, with limits and an optional reset input.", "Forward Euler: y[k] = x[k] (no direct feedthrough, so it breaks loops). Backward Euler: y[k] = x[k] + K·Ts·u[k]. Trapezoidal: the average of the two.",
+            vec![n("k", "Gain K", "1", "", ""), n("ts", "Sample time", "0.1", "s", ""), c("method", "Method", &["forward Euler", "backward Euler", "trapezoidal"], ""), n("ic", "Initial condition", "0", "", ""),
+                 n("upper", "Upper limit", "inf", "", ""), n("lower", "Lower limit", "-inf", "", ""), c("reset", "External reset", RESET, "Adds a reset input, sampled each sample time")]),
+        d("DiscretePID", "Discrete PID", "Discrete", "A parallel PID that runs at a sample time, as in a microcontroller: P·e + I·Ts·Σe + a filtered derivative, with output limits and anti-windup.", "The integral is forward Euler and the derivative filter backward Euler: d[k] = (d[k−1] + D·N·(e[k] − e[k−1]))/(1 + N·Ts). Clamping stops the integral while the output is limited; back-calculation bleeds it back with gain Kb.",
+            vec![n("P", "Proportional P", "1", "", ""), n("I", "Integral I", "0", "1/s", ""), n("D", "Derivative D", "0", "s", ""), n("N", "Filter N", "100", "rad/s", ""), n("ts", "Sample time", "0.001", "s", ""),
+                 n("upper", "Output upper limit", "inf", "", ""), n("lower", "Output lower limit", "-inf", "", ""), c("aw", "Anti-windup", &["clamping", "back-calculation", "none"], ""),
+                 n("kb", "Back-calculation gain Kb", "1", "1/s", "Back-calculation only"), n("ic", "Integral initial value", "0", "", "")]),
+        d("RateTransition", "Rate transition", "Discrete", "Passes a signal from one sample time to another.", "Hold samples the input at the new sample time (fast to slow, or continuous to discrete). Delay one sample gives a deterministic hand-over from slow to fast, as a real controller would.",
+            vec![n("ts", "Output sample time", "0.1", "s", ""), c("mode", "Mode", &["hold", "delay one sample"], ""), n("ic", "Initial output", "0", "", "Delay mode only")]),
         // Routing
         d("Mux", "Mux", "Routing", "Combines its inputs into one vector signal.", "", vec![n("n", "Inputs", "2", "", "")]),
         d("Demux", "Demux", "Routing", "Splits a vector signal into its parts.", "", vec![n("n", "Outputs", "2", "", "")]),
         d("Switch", "Switch", "Routing", "Passes input 1 when the middle input meets the criterion, otherwise input 3.", "",
             vec![c("crit", "Pass input 1 when", &["u2 >= threshold", "u2 > threshold", "u2 != 0"], ""), n("th", "Threshold", "0", "", "")]),
         d("Selector", "Selector", "Routing", "Picks elements of a vector signal.", "Indices start at 1, e.g. [1 3].", vec![n("idx", "Indices", "[1]", "", "")]),
-        planned("Goto", "Goto / From", "Routing", "Connect signals by name without wires.", "0.2"),
+        d("Goto", "Goto", "Routing", "Sends its input to every From block with the same tag, without a wire.", "Local: only Froms in the same diagram. Global: Froms anywhere in the model, inside subsystems too.",
+            vec![t("tag", "Tag", "A", "A short name"), c("scope", "Visible to", &["local", "global"], "")]),
+        d("From", "From", "Routing", "Outputs the signal sent by the Goto with the same tag.", "", vec![t("tag", "Tag", "A", "The Goto's tag")]),
+        d("Terminator", "Terminator", "Sinks", "Ends an output you do not need, so it is not reported as unconnected.", "", vec![]),
         planned("Bus", "Bus", "Routing", "Group named signals into one wire.", "0.2"),
         // Lookup
         d("Lookup1D", "1-D lookup table", "Lookup tables", "Interpolates y at the input from a table of x and y.", "x must increase. Outside the table: hold the end value (clip) or extend the end line (linear).",
@@ -240,6 +268,11 @@ pub fn library() -> Vec<Def> {
             vec![n("R", "Phase resistance R", "1.65", "Ω", ""), n("L", "Phase inductance L", "0.0028", "H", ""), n("Km", "Torque constant Km", "0.25", "N·m/A", ""),
                  n("Nr", "Rotor teeth Nr", "50", "", ""), n("Td", "Detent torque Td", "0.01", "N·m", ""), n("J", "Inertia J", "0.0000054", "kg·m²", ""),
                  n("b", "Viscous friction b", "0.00001", "N·m·s/rad", "")]),
+        d("SRM", "Switched reluctance motor", "Motors", "A three-phase switched reluctance motor (6/4, 12/8 …): no magnets or windings on the rotor; torque from the change of phase inductance with angle. Inputs: phase voltages v_abc, T_L. Outputs: ω, T_e, i_abc, θ.",
+            "L_k(θ) = L0 − L1·cos(Nr·θ − k·120°) between the unaligned Lmin and aligned Lmax; T_e = Σ ½·i_k²·dL_k/dθ. Phase a is unaligned at θ = 0. With an asymmetric bridge (the default) phase currents cannot reverse. No saturation.",
+            vec![n("R", "Phase resistance R", "1.3", "Ω", ""), n("Lmax", "Aligned inductance Lmax", "0.06", "H", ""), n("Lmin", "Unaligned inductance Lmin", "0.008", "H", ""),
+                 n("Nr", "Rotor poles Nr", "4", "", "4 for a 6/4 motor, 8 for 12/8"), n("J", "Inertia J", "0.008", "kg·m²", ""), n("b", "Viscous friction b", "0.001", "N·m·s/rad", ""),
+                 n("w0", "Initial speed", "0", "rad/s", ""), n("th0", "Initial angle", "0", "rad", ""), c("currents", "Phase currents", &["one way (asymmetric bridge)", "both ways"], "")]),
         // Drives
         d("ThreePhase", "Three-phase source", "Drives", "A balanced three-phase voltage: v_abc (width 3).", "Line-to-line RMS voltage V_LL; each phase peak is V_LL·√2/√3. Phase a is a cosine; b and c lag by 120° and 240°.",
             vec![n("Vll", "Line voltage (RMS)", "400", "V", ""), n("f", "Frequency", "50", "Hz", ""), n("phase", "Phase of a", "0", "rad", "")]),
@@ -248,6 +281,15 @@ pub fn library() -> Vec<Def> {
             vec![c("model", "Model", &["average", "switched (PWM)"], ""), n("fc", "Switching frequency", "5000", "Hz", "Switched model only")]),
         d("PWM", "PWM", "Drives", "Sine-triangle pulse width modulation: compares each reference (−1…1) with a triangle carrier.", "Output +1 / −1 (or 1 / 0) per element. Switching instants are located exactly by the variable-step solvers.",
             vec![n("fc", "Carrier frequency", "1000", "Hz", ""), c("levels", "Output levels", &["−1 / +1", "0 / 1"], "")]),
+        d("DCLink", "DC link", "Drives", "The DC link capacitor of a drive, charged from a source through a resistance. Inputs: source voltage V_s, load current i_load. Outputs: link voltage V_dc, source current i_s.",
+            "C·dV_dc/dt = i_s − i_load, i_s = (V_s − V_dc)/R_s. A diode rectifier only charges the link (i_s ≥ 0), so braking energy raises V_dc. Feed i_load from Inverter DC current.",
+            vec![n("C", "Capacitance C", "0.002", "F", ""), n("Rs", "Source resistance R_s", "0.1", "Ω", ""), n("V0", "Initial voltage", "600", "V", ""),
+                 c("source", "Source", &["two-way", "diode rectifier (charges only)"], "")]),
+        d("InverterDC", "Inverter DC current", "Drives", "The current an average-model inverter draws from its DC link, from the modulation and the phase currents (power balance). Inputs: m_abc, i_abc. Output: i_dc.",
+            "i_dc = ½·(Σ m_k·i_k − mean(m)·Σ i_k), so V_dc·i_dc equals the power into the motor.", vec![]),
+        d("Sensor", "Current sensor", "Drives", "A measurement: gain, offset, bandwidth and noise. Works for any signal and width.", "Bandwidth 0 means an ideal, instant sensor. The noise is normally distributed, held for each sample time and repeatable with the same seed.",
+            vec![n("k", "Gain", "1", "", ""), n("offset", "Offset", "0", "", ""), n("bw", "Bandwidth", "0", "Hz", "0 = ideal"), n("sd", "Noise (standard deviation)", "0", "", ""),
+                 n("ts", "Noise sample time", "0.0001", "s", ""), n("seed", "Seed", "1", "", "")]),
         d("Clarke", "abc → αβ", "Drives", "Clarke transform: three-phase abc (width 3) to the stationary αβ frame (width 2).", "Amplitude-invariant: a balanced set of peak A gives α, β of amplitude A.", vec![]),
         d("InvClarke", "αβ → abc", "Drives", "Inverse Clarke transform: αβ (width 2) to three-phase abc (width 3).", "", vec![]),
         d("Park", "αβ → dq", "Drives", "Park transform: αβ (width 2) to the rotating dq frame at angle θ.", "θ is the electrical angle: pole pairs × the motor's angle θ. d = α·cos θ + β·sin θ; q = −α·sin θ + β·cos θ.", vec![]),
@@ -317,6 +359,9 @@ pub fn ports(b: &Block) -> (usize, usize) {
         "Sum" => (param(b, "signs").chars().filter(|c| *c == '+' || *c == '-').count().clamp(1, 32), 1),
         "Product" => (param(b, "ops").chars().filter(|c| *c == '*' || *c == '/').count().clamp(1, 32), 1),
         "Divide" | "Lookup2D" => (2, 1),
+        "Integrator" | "DiscreteIntegrator" => (if param(b, "reset") == "none" || param(b, "reset").is_empty() { 1 } else { 2 }, 1),
+        "Square" | "Triangle" | "Chirp" | "RepSeq" | "From" => (0, 1),
+        "Goto" | "Terminator" => (1, 0),
         "MinMax" | "Fcn" | "Mux" => (count(b, "n"), 1),
         "Demux" => (1, count(b, "n")),
         "Switch" => (3, 1),
@@ -338,6 +383,8 @@ pub fn ports(b: &Block) -> (usize, usize) {
         "ThreePhase" => (0, 1),
         "Inverter" | "Park" | "InvPark" => (2, 1),
         "Encoder" => (1, 2),
+        "SRM" => (2, 4),
+        "DCLink" | "InverterDC" => (2, if b.kind == "DCLink" { 2 } else { 1 }),
         _ => (1, 1),
     }
 }
@@ -359,6 +406,9 @@ pub fn port_names(b: &Block) -> (Vec<String>, Vec<String>) {
         "Inverter" => (s(&["m_abc", "V_dc"]), s(&["v_abc"])),
         "Park" | "InvPark" => (s(&["", "θ"]), vec![]),
         "Encoder" => (vec![], s(&["θ_m", "ω_m"])),
+        "SRM" => (s(&["v_abc", "T_L"]), s(&["ω", "T_e", "i_abc", "θ"])),
+        "DCLink" => (s(&["V_s", "i_load"]), s(&["V_dc", "i_s"])),
+        "InverterDC" => (s(&["m_abc", "i_abc"]), vec![]),
         "Subsystem" => {
             let Some(sd) = &b.sub else { return (vec![], vec![]) };
             let (i, o) = sub_ports(sd);
@@ -366,6 +416,7 @@ pub fn port_names(b: &Block) -> (Vec<String>, Vec<String>) {
             (nm(i), nm(o))
         }
         "Switch" => (s(&["", "u2", ""]), vec![]),
+        "Integrator" | "DiscreteIntegrator" if ports(b).0 == 2 => (s(&["", "reset"]), vec![]),
         _ => (vec![], vec![]),
     }
 }
@@ -404,6 +455,13 @@ pub fn label(b: &Block) -> String {
         "Derivative" => "du/dt".into(),
         "ZOH" => format!("ZOH {}", p("ts")),
         "UnitDelay" => "1/z".into(),
+        "DiscreteTF" => format!("{}\n{}", p("num"), p("den")),
+        "DiscreteSS" => "x[k+1]".into(),
+        "DiscreteIntegrator" => "K·Ts/(z−1)".into(),
+        "DiscretePID" => format!("P {} · I {} · D {}", p("P"), p("I"), p("D")),
+        "RateTransition" => format!("→ {} s", p("ts")),
+        "Goto" => format!("[{}]", p("tag")),
+        "From" => format!("[{}]", p("tag")),
         "Step" => format!("{} → {}", p("initial"), p("final")),
         "Table" | "Lookup1D" => "f(x)".into(),
         "FromFile" | "ToFile" => p("file"),

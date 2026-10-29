@@ -16,7 +16,7 @@ pub struct Ctx {
 }
 
 impl Ctx {
-    fn tq(&self) -> f64 {
+    pub(crate) fn tq(&self) -> f64 {
         if self.major {
             self.t
         } else {
@@ -25,7 +25,24 @@ impl Ctx {
     }
 }
 
+/// How often a block's output changes: the sample-time colours on the diagram.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Rate {
+    /// Takes the rate of its inputs.
+    Inherit,
+    Continuous,
+    Constant,
+    /// Changes only at multiples of the sample time.
+    Discrete(f64),
+    /// Fed by several rates (worked out by the compiler, never a block's own).
+    Mixed,
+}
+
 pub trait Rt: Send + Sync {
+    /// The block's own rate; blocks with continuous states are continuous whatever this says.
+    fn rate(&self) -> Rate {
+        Rate::Inherit
+    }
     fn nx(&self) -> usize {
         0
     }
@@ -58,24 +75,24 @@ pub struct Pv<'a> {
 }
 
 impl Pv<'_> {
-    fn mat(&self, k: &str) -> Result<Mat, String> {
+    pub(crate) fn mat(&self, k: &str) -> Result<Mat, String> {
         self.m.get(k).cloned().ok_or_else(|| format!("missing parameter '{k}'"))
     }
-    fn s(&self, k: &str) -> Result<f64, String> {
+    pub(crate) fn s(&self, k: &str) -> Result<f64, String> {
         let v = self.mat(k)?;
         v.s().map_err(|e| format!("{k}: {e}"))
     }
-    fn v(&self, k: &str) -> Result<Vec<f64>, String> {
+    pub(crate) fn v(&self, k: &str) -> Result<Vec<f64>, String> {
         let m = self.mat(k)?;
         if m.r > 1 && m.c > 1 {
             return Err(format!("{k}: expected a vector, got a {}×{} matrix", m.r, m.c));
         }
         Ok(m.d)
     }
-    fn txt(&self, k: &str) -> &str {
+    pub(crate) fn txt(&self, k: &str) -> &str {
         self.t.get(k).map_or("", |s| s.as_str())
     }
-    fn pos(&self, k: &str) -> Result<f64, String> {
+    pub(crate) fn pos(&self, k: &str) -> Result<f64, String> {
         let v = self.s(k)?;
         if v > 0.0 && v.is_finite() {
             Ok(v)
@@ -133,6 +150,9 @@ fn ewidth(kind: &str, w: &[usize]) -> Result<usize, String> {
 #[derive(Clone)]
 struct Constant(Vec<f64>);
 impl Rt for Constant {
+    fn rate(&self) -> Rate {
+        Rate::Constant
+    }
     fn out(&self, _: &Ctx, _: &[f64], _: &[f64], y: &mut [f64]) {
         y.copy_from_slice(&self.0);
     }
@@ -340,6 +360,9 @@ impl Noise {
     }
 }
 impl Rt for Noise {
+    fn rate(&self) -> Rate {
+        Rate::Discrete(self.ts)
+    }
     fn init(&mut self, _: &mut [f64]) {
         self.state = self.seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
         self.val = self.next();
@@ -361,12 +384,12 @@ impl Rt for Noise {
     cb!();
 }
 
-fn is_hit(t: f64, ts: f64) -> bool {
+pub(crate) fn is_hit(t: f64, ts: f64) -> bool {
     let k = (t / ts).round();
     (t - k * ts).abs() <= 1e-9 * ts.max(t.abs() * 1e-3)
 }
 
-fn next_sample(t: f64, ts: f64) -> f64 {
+pub(crate) fn next_sample(t: f64, ts: f64) -> f64 {
     let k = (t / ts).floor() + 1.0;
     let mut h = k * ts;
     if h <= t + 1e-12 * ts.max(t.abs()) {
@@ -475,6 +498,14 @@ struct Integrator {
     hi: f64,
     lo: f64,
     ins: usize,
+    /// Reset edge ("none", "rising", "falling", "either") and the reset input's last value.
+    reset: String,
+    last_r: f64,
+}
+impl Integrator {
+    fn limited(&self) -> bool {
+        self.hi.is_finite() || self.lo.is_finite()
+    }
 }
 impl Rt for Integrator {
     fn nx(&self) -> usize {
@@ -484,6 +515,7 @@ impl Rt for Integrator {
         for (xi, v) in x.iter_mut().zip(&self.ic) {
             *xi = v.clamp(self.lo, self.hi);
         }
+        self.last_r = f64::NAN;
     }
     fn feed(&self) -> bool {
         false
@@ -499,22 +531,31 @@ impl Rt for Integrator {
             *d = if (x[j] >= self.hi && v > 0.0) || (x[j] <= self.lo && v < 0.0) { 0.0 } else { v };
         }
     }
-    fn update(&mut self, _: &Ctx, x: &mut [f64], _: &[f64]) {
+    fn update(&mut self, _: &Ctx, x: &mut [f64], u: &[f64]) {
+        if self.reset != "none" {
+            let r = u[self.ins];
+            if crate::discrete::edge_hit(&self.reset, self.last_r, r) {
+                x.copy_from_slice(&self.ic);
+            }
+            self.last_r = r;
+        }
         for xj in x.iter_mut() {
             *xj = xj.clamp(self.lo, self.hi);
         }
     }
     fn nzc(&self) -> usize {
-        if self.hi.is_finite() || self.lo.is_finite() {
-            2 * self.ic.len()
-        } else {
-            0
-        }
+        (if self.limited() { 2 * self.ic.len() } else { 0 }) + usize::from(self.reset != "none")
     }
-    fn zc(&self, _: &Ctx, x: &[f64], _: &[f64], z: &mut [f64]) {
-        for (j, xj) in x.iter().enumerate() {
-            z[2 * j] = if self.hi.is_finite() { xj - self.hi } else { -1.0 };
-            z[2 * j + 1] = if self.lo.is_finite() { xj - self.lo } else { 1.0 };
+    fn zc(&self, _: &Ctx, x: &[f64], u: &[f64], z: &mut [f64]) {
+        if self.limited() {
+            for (j, xj) in x.iter().enumerate() {
+                z[2 * j] = if self.hi.is_finite() { xj - self.hi } else { -1.0 };
+                z[2 * j + 1] = if self.lo.is_finite() { xj - self.lo } else { 1.0 };
+            }
+        }
+        if self.reset != "none" {
+            // The reset signal itself: its crossings of zero are located exactly.
+            *z.last_mut().unwrap() = u[self.ins];
         }
     }
     cb!();
@@ -877,6 +918,9 @@ struct Zoh {
     held: Vec<f64>,
 }
 impl Rt for Zoh {
+    fn rate(&self) -> Rate {
+        Rate::Discrete(self.ts)
+    }
     fn out(&self, c: &Ctx, _: &[f64], u: &[f64], y: &mut [f64]) {
         if c.major && is_hit(c.t, self.ts) {
             y.copy_from_slice(u);
@@ -904,6 +948,9 @@ struct UnitDelay {
     held: Vec<f64>,
 }
 impl Rt for UnitDelay {
+    fn rate(&self) -> Rate {
+        Rate::Discrete(self.ts)
+    }
     fn init(&mut self, _: &mut [f64]) {
         for (j, v) in self.s.iter_mut().enumerate() {
             *v = if self.ic.len() == 1 { self.ic[0] } else { self.ic[j] };
@@ -1114,6 +1161,9 @@ pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Result<(Box<dyn Rt>, Vec<usize
     if let Some(r) = crate::motors::build(kind, p, iw) {
         return r;
     }
+    if let Some(r) = crate::discrete::build(kind, p, iw) {
+        return r;
+    }
     match kind {
         "Constant" => {
             let v = p.v("value")?;
@@ -1233,7 +1283,12 @@ pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Result<(Box<dyn Rt>, Vec<usize
                 return Err(format!("the initial condition has {} elements but the input has width {w0}", ic.len()));
             }
             let ic = if ic.len() == 1 { vec![ic[0]; w] } else { ic };
-            one(Box::new(Integrator { ic, hi, lo, ins: w0 }), w)
+            let reset = p.txt("reset").to_string();
+            let reset = if reset.is_empty() { "none".to_string() } else { reset };
+            if reset != "none" && iw.get(1).cloned().unwrap_or(1) != 1 {
+                return Err("the reset input must be a scalar".into());
+            }
+            one(Box::new(Integrator { ic, hi, lo, ins: w0, reset, last_r: f64::NAN }), w)
         }
         "Derivative" => one(Box::new(Derivative { last: None, prev_y: vec![0.0; w0] }), w0),
         "TransferFcn" | "ZPK" => {
@@ -1375,7 +1430,19 @@ pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Result<(Box<dyn Rt>, Vec<usize
             }
             one(Box::new(Lookup2 { x, y, t }), 1)
         }
-        "Scope" | "XY" | "Display" | "ToFile" | "ToPlot" | "Outport" => Ok((Box::new(Sink), vec![])),
+        "Scope" | "XY" | "Display" | "ToFile" | "ToPlot" | "Outport" | "Goto" | "Terminator" => Ok((Box::new(Sink), vec![])),
+        "RateTransition" => {
+            let ts = p.pos("ts")?;
+            if p.txt("mode") == "delay one sample" {
+                let ic = p.v("ic")?;
+                if ic.len() != 1 && ic.len() != w0 {
+                    return Err("the initial output must be one value or one per element".into());
+                }
+                one(Box::new(UnitDelay { ts, ic, s: vec![0.0; w0], held: vec![0.0; w0] }), w0)
+            } else {
+                one(Box::new(Zoh { ts, held: vec![0.0; w0] }), w0)
+            }
+        }
         // Pass-throughs left by flattening subsystems.
         "Inport" | "Pass" => one(Box::new(Route((0..w0).collect())), w0),
         "DCMotor" => {

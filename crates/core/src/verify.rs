@@ -573,6 +573,471 @@ mod tests {
         }
     }
 
+    // ------------------------------------------------------------ discrete control (0.1.4)
+
+    /// Values at the sample instants k·Ts.
+    fn samples(r: &Results, ch: usize, ts: f64, n: usize) -> Vec<f64> {
+        (0..n).map(|k| {
+            let t = k as f64 * ts;
+            let i = r.t.iter().position(|x| (x - t).abs() < 1e-9).unwrap_or_else(|| panic!("no sample at t = {t}"));
+            r.y[ch][i]
+        }).collect()
+    }
+
+    /// 0.5/(z − 0.5) to a unit step: y[k] = 1 − 0.5^k, held between samples; the state-space form
+    /// of the same system gives the same.
+    #[test]
+    fn discrete_tf_and_ss_step() {
+        let mut m = Mk::new(2.0, "rk45");
+        let s = m.add("Step", &[("time", "0")]);
+        let tf = m.add("DiscreteTF", &[("num", "[0.5]"), ("den", "[1 -0.5]"), ("ts", "0.1")]);
+        let ss = m.add("DiscreteSS", &[("A", "[0.5]"), ("B", "[0.5]"), ("C", "[1]"), ("D", "0"), ("ts", "0.1")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(s, 0, tf, 0);
+        m.wire(s, 0, ss, 0);
+        m.wire(tf, 0, sc, 0);
+        m.wire(ss, 0, sc, 1);
+        let r = m.run();
+        for (k, (a, b)) in samples(&r, 0, 0.1, 20).iter().zip(samples(&r, 1, 0.1, 20)).enumerate() {
+            let want = 1.0 - 0.5f64.powi(k as i32);
+            assert!((a - want).abs() < 1e-12 && (b - want).abs() < 1e-12, "k = {k}: {a}, {b}, want {want}");
+        }
+        assert!((at(&r, 0, 0.35) - (1.0 - 0.5f64.powi(3))).abs() < 1e-12, "held between samples");
+    }
+
+    /// The discrete integrator's three methods on a ramp u = t (K = 1, Ts = 0.1): forward Euler
+    /// Ts²·k(k−1)/2, backward Euler Ts²·k(k+1)/2, trapezoidal the exact (k·Ts)²/2.
+    #[test]
+    fn discrete_integrator_methods() {
+        let mut m = Mk::new(2.0, "rk45");
+        let c = m.add("Clock", &[]);
+        let ids: Vec<u32> = ["forward Euler", "backward Euler", "trapezoidal"].iter().map(|meth| m.add("DiscreteIntegrator", &[("method", meth), ("ts", "0.1")])).collect();
+        let sc = m.add("Scope", &[("n", "3")]);
+        for (k, id) in ids.iter().enumerate() {
+            m.wire(c, 0, *id, 0);
+            m.wire(*id, 0, sc, k);
+        }
+        let r = m.run();
+        let ts: f64 = 0.1;
+        for k in 0..20 {
+            let kf = k as f64;
+            let want = [ts * ts * kf * (kf - 1.0) / 2.0, ts * ts * kf * (kf + 1.0) / 2.0, (kf * ts).powi(2) / 2.0];
+            for (ch, w) in want.iter().enumerate() {
+                let got = samples(&r, ch, ts, 20)[k];
+                assert!((got - w).abs() < 1e-12, "method {ch}, k = {k}: {got} vs {w}");
+            }
+        }
+    }
+
+    /// A discrete PI loop around b/(z − a): the run equals the difference equations, and the
+    /// integral action removes the error.
+    #[test]
+    fn discrete_pi_loop_difference_equations() {
+        let (a, b, kp, ki, ts) = (0.8, 0.2, 1.5, 4.0, 0.1);
+        let mut m = Mk::new(5.0, "rk45");
+        let r0 = m.add("Step", &[("time", "0")]);
+        let e = m.add("Sum", &[("signs", "+-")]);
+        let pid = m.add("DiscretePID", &[("P", "1.5"), ("I", "4"), ("ts", "0.1")]);
+        let pl = m.add("DiscreteTF", &[("num", "[0.2]"), ("den", "[1 -0.8]"), ("ts", "0.1")]);
+        let sc = m.add("Scope", &[]);
+        m.wire(r0, 0, e, 0);
+        m.wire(e, 0, pid, 0);
+        m.wire(pid, 0, pl, 0);
+        m.wire(pl, 0, e, 1);
+        m.wire(pl, 0, sc, 0);
+        let r = m.run();
+        let (mut y, mut xi) = (0.0f64, 0.0f64);
+        let got = samples(&r, 0, ts, 50);
+        for (k, g) in got.iter().enumerate() {
+            assert!((g - y).abs() < 1e-12, "k = {k}: {g} vs {y}");
+            let err = 1.0 - y;
+            let u = kp * err + xi;
+            xi += ki * ts * err;
+            y = a * y + b * u;
+        }
+        assert!((last(&r, 0) - 1.0).abs() < 1e-5, "no steady-state error ({})", last(&r, 0));
+    }
+
+    /// Discrete PID derivative on a ramp settles to D; clamping keeps the integral from winding up.
+    #[test]
+    fn discrete_pid_derivative_and_windup() {
+        let mut m = Mk::new(1.0, "rk45");
+        let c = m.add("Clock", &[]);
+        let d = m.add("DiscretePID", &[("P", "0"), ("D", "2"), ("N", "50"), ("ts", "0.01")]);
+        let one = m.add("Constant", &[("value", "1")]);
+        let cl = m.add("DiscretePID", &[("P", "0"), ("I", "10"), ("ts", "0.01"), ("upper", "1"), ("lower", "-1")]);
+        let nb = m.add("DiscretePID", &[("P", "0"), ("I", "10"), ("ts", "0.01"), ("upper", "1"), ("lower", "-1"), ("aw", "none")]);
+        let sc = m.add("Scope", &[("n", "3")]);
+        m.wire(c, 0, d, 0);
+        m.wire(one, 0, cl, 0);
+        m.wire(one, 0, nb, 0);
+        m.wire(d, 0, sc, 0);
+        m.wire(cl, 0, sc, 1);
+        m.wire(nb, 0, sc, 2);
+        let r = m.run();
+        assert!((last(&r, 0) - 2.0).abs() < 1e-9, "derivative of a ramp → D ({})", last(&r, 0));
+        assert!(last(&r, 1) == 1.0 && last(&r, 2) == 1.0, "both limited");
+        // Inspect the integral: a negative error now brings the clamped one off the limit at once.
+        let mut m2 = Mk::new(1.2, "rk45");
+        let sq = m2.add("Step", &[("time", "1"), ("initial", "1"), ("final", "-1")]);
+        let cl = m2.add("DiscretePID", &[("P", "0"), ("I", "10"), ("ts", "0.01"), ("upper", "1"), ("lower", "-1")]);
+        let nb = m2.add("DiscretePID", &[("P", "0"), ("I", "10"), ("ts", "0.01"), ("upper", "1"), ("lower", "-1"), ("aw", "none")]);
+        let sc = m2.add("Scope", &[("n", "2")]);
+        m2.wire(sq, 0, cl, 0);
+        m2.wire(sq, 0, nb, 0);
+        m2.wire(cl, 0, sc, 0);
+        m2.wire(nb, 0, sc, 1);
+        let r = m2.run();
+        assert!(at(&r, 0, 1.05) < 0.7, "clamped integral unwinds at once ({})", at(&r, 0, 1.05));
+        assert!(at(&r, 1, 1.05) == 1.0, "unclamped integral is still wound up ({})", at(&r, 1, 1.05));
+    }
+
+    /// Rate transition: hold samples, delay lags one output sample.
+    #[test]
+    fn rate_transition() {
+        let mut m = Mk::new(1.0, "rk45");
+        let c = m.add("Clock", &[]);
+        let h = m.add("RateTransition", &[("ts", "0.25")]);
+        let d = m.add("RateTransition", &[("ts", "0.25"), ("mode", "delay one sample")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(c, 0, h, 0);
+        m.wire(c, 0, d, 0);
+        m.wire(h, 0, sc, 0);
+        m.wire(d, 0, sc, 1);
+        let r = m.run();
+        assert!((at(&r, 0, 0.6) - 0.5).abs() < 1e-12 && (at(&r, 1, 0.6) - 0.25).abs() < 1e-12);
+    }
+
+    /// Integrator reset on a rising edge: the state returns to its initial value at 0.5 and 1.5 s.
+    /// (The reset signal rests at exactly zero between pulses; the solver once took endless tiny
+    /// steps there. Crossings now go strictly from one side to the other.)
+    #[test]
+    fn integrator_reset() {
+        let mut m = Mk::new(2.0, "rk45");
+        let one = m.add("Constant", &[("value", "1")]);
+        let p = m.add("Pulse", &[("period", "1"), ("delay", "0.5")]);
+        let i = m.add("Integrator", &[("reset", "rising")]);
+        let di = m.add("DiscreteIntegrator", &[("reset", "rising"), ("ts", "0.1")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(one, 0, i, 0);
+        m.wire(p, 0, i, 1);
+        m.wire(one, 0, di, 0);
+        m.wire(p, 0, di, 1);
+        m.wire(i, 0, sc, 0);
+        m.wire(di, 0, sc, 1);
+        let r = m.run();
+        for (t, want) in [(0.4, 0.4), (1.0, 0.5), (1.4, 0.9), (1.6, 0.1), (2.0, 0.5)] {
+            assert!((at(&r, 0, t) - want).abs() < 1e-9, "continuous at {t}: {}", at(&r, 0, t));
+        }
+        for (t, want) in [(0.45, 0.4), (1.05, 0.5), (1.65, 0.1)] {
+            assert!((at(&r, 1, t) - want).abs() < 1e-9, "discrete at {t}: {}", at(&r, 1, t));
+        }
+    }
+
+    /// Goto/From: local in the same diagram, global into a subsystem, and clear errors.
+    #[test]
+    fn goto_from() {
+        let mut m = Mk::new(1.0, "rk45");
+        let c = m.add("Constant", &[("value", "3")]);
+        let g = m.add("Goto", &[("tag", "speed")]);
+        let f = m.add("From", &[("tag", "speed")]);
+        let sc = m.add("Scope", &[]);
+        m.wire(c, 0, g, 0);
+        m.wire(f, 0, sc, 0);
+        assert_eq!(last(&m.run(), 0), 3.0);
+        // A From inside a subsystem sees only a global Goto.
+        let mut m = Mk::new(1.0, "rk45");
+        let c = m.add("Constant", &[("value", "3")]);
+        let g = m.add("Goto", &[("tag", "speed")]);
+        let f = m.add("From", &[("tag", "speed")]);
+        m.wire(c, 0, g, 0);
+        m.d.apply(Op::Group { ids: vec![f] }).unwrap();
+        let e = compile(&m.d.m, None, &none()).err().expect("a local Goto is not seen inside a subsystem");
+        assert!(e.iter().any(|i| i.msg.contains("no Goto sends the tag 'speed'")), "{e:?}");
+        m.d.apply(Op::SetParam { id: g, key: "scope".into(), value: "global".into() }).unwrap();
+        assert!(compile(&m.d.m, None, &none()).is_ok());
+        // Two Gotos with one tag.
+        let g2 = m.add("Goto", &[("tag", "speed")]);
+        m.wire(c, 0, g2, 0);
+        let e = compile(&m.d.m, None, &none()).err().unwrap();
+        assert!(e.iter().any(|i| i.msg.contains("another Goto already sends the tag 'speed'")), "{e:?}");
+    }
+
+    /// Square, triangle, chirp and repeating sequence against their definitions.
+    #[test]
+    fn periodic_sources() {
+        let mut m = Mk::new(3.0, "rk45");
+        let sq = m.add("Square", &[("amp", "2"), ("freq", "1"), ("duty", "25"), ("bias", "1")]);
+        let tr = m.add("Triangle", &[("amp", "2"), ("freq", "0.5")]);
+        let ch = m.add("Chirp", &[("f0", "0.1"), ("f1", "2"), ("T", "2")]);
+        let rs = m.add("RepSeq", &[("times", "[0 1 1.5]"), ("values", "[0 2 0]")]);
+        let sc = m.add("Scope", &[("n", "4")]);
+        for (k, b) in [sq, tr, ch, rs].iter().enumerate() {
+            m.wire(*b, 0, sc, k);
+        }
+        let r = m.run();
+        for (t, want) in [(0.1, 3.0), (0.3, -1.0), (1.2, 3.0), (1.9, -1.0)] {
+            assert!((at(&r, 0, t) - want).abs() < 1e-12, "square at {t}");
+        }
+        assert!(r.t.iter().any(|t| (t - 0.25).abs() < 1e-12) && r.t.iter().any(|t| (t - 1.25).abs() < 1e-12), "square edges hit");
+        for (t, want) in [(0.5, 2.0), (1.0, 0.0), (1.5, -2.0), (2.25, 1.0)] {
+            assert!((at(&r, 1, t) - want).abs() < 1e-9, "triangle at {t}: {}", at(&r, 1, t));
+        }
+        let chirp = |t: f64| if t <= 2.0 { (2.0 * std::f64::consts::PI * (0.1 * t + 0.25 * 1.9 * t * t)).sin() } else { (2.0 * std::f64::consts::PI * (0.2 + 1.9 + 2.0 * (t - 2.0))).sin() };
+        assert!(max_err(&r, 2, chirp) < 1e-12);
+        for (t, want) in [(0.5, 1.0), (1.25, 1.0), (2.0, 1.0), (2.75, 1.0), (3.0, 0.0)] {
+            assert!((at(&r, 3, t) - want).abs() < 1e-9, "sequence at {t}: {}", at(&r, 3, t));
+        }
+    }
+
+    /// Sample-time rates: constant, discrete, continuous, inherited and mixed.
+    #[test]
+    fn sample_time_rates() {
+        use crate::rt::Rate;
+        let mut m = Mk::new(1.0, "rk45");
+        let k = m.add("Constant", &[]);
+        let gk = m.add("Gain", &[]);
+        let dtf = m.add("DiscreteTF", &[("ts", "0.1")]);
+        let gd = m.add("Gain", &[]);
+        let i = m.add("Integrator", &[]);
+        let sum = m.add("Sum", &[("signs", "++")]);
+        let z2 = m.add("ZOH", &[("ts", "0.02")]);
+        m.wire(k, 0, gk, 0);
+        m.wire(gk, 0, dtf, 0);
+        m.wire(dtf, 0, gd, 0);
+        m.wire(gk, 0, i, 0);
+        m.wire(gd, 0, sum, 0);
+        m.wire(i, 0, sum, 1);
+        m.wire(i, 0, z2, 0);
+        let sim = compile(&m.d.m, None, &none()).unwrap();
+        let rate = |id: u32| sim.rates.iter().find(|(b, _)| *b == id).unwrap().1;
+        assert_eq!(rate(k), Rate::Constant);
+        assert_eq!(rate(gk), Rate::Constant);
+        assert_eq!(rate(dtf), Rate::Discrete(0.1));
+        assert_eq!(rate(gd), Rate::Discrete(0.1));
+        assert_eq!(rate(i), Rate::Continuous);
+        assert_eq!(rate(sum), Rate::Mixed);
+        assert_eq!(rate(z2), Rate::Discrete(0.02));
+    }
+
+    // ------------------------------------------------------------ motor extras and power balance
+
+    /// Steady state at a held speed: electrical power in − stator copper loss = air-gap power.
+    /// Induction: P_ag = T_e·ω_sync; synchronous (PMSM3, SynRM): T_e·ω.
+    #[test]
+    fn power_balance_ac_machines() {
+        use std::f64::consts::PI;
+        let wsync = 2.0 * PI * 50.0 / 2.0;
+        for kind in ["InductionSC", "InductionDC", "InductionWR"] {
+            let mut m = Mk::new(3.0, "rk45");
+            m.d.m.sim.rtol = 1e-9;
+            let pr = preset(kind, 0);
+            let w0 = format!("{}", 0.97 * wsync);
+            let mot = add_owned(&mut m, kind, &pr, &[("J", "1e12"), ("w0", &w0)]);
+            let src = m.add("ThreePhase", &[("Vll", "400"), ("f", "50")]);
+            let tl = m.add("Constant", &[("value", "0")]);
+            let sc = m.add("Scope", &[("n", "3")]);
+            m.wire(src, 0, mot, 0);
+            if kind == "InductionWR" {
+                let z = m.add("Constant", &[("value", "[0 0 0]")]);
+                m.wire(z, 0, mot, 1);
+                m.wire(tl, 0, mot, 2);
+            } else {
+                m.wire(tl, 0, mot, 1);
+            }
+            m.wire(mot, 1, sc, 0);
+            m.wire(mot, 2, sc, 1);
+            m.wire(src, 0, sc, 2);
+            let r = m.run();
+            let rs: f64 = pr.iter().find(|(k, _)| k == "Rs").unwrap().1.parse().unwrap();
+            let pin: f64 = (0..3).map(|k| last(&r, 4 + k) * last(&r, 1 + k)).sum();
+            let loss: f64 = (0..3).map(|k| rs * last(&r, 1 + k).powi(2)).sum();
+            let pag = last(&r, 0) * wsync;
+            assert!((pin - loss - pag).abs() < 1e-3 * pin.abs(), "{kind}: P_in − loss = {}, T_e·ω_s = {pag}", pin - loss);
+        }
+        for kind in ["PMSM3", "SynRM"] {
+            // Long enough for the slowest electrical time constant (SynRM Ld/Rs = 0.15 s).
+            let mut m = Mk::new(4.0, "rk45");
+            m.d.m.sim.rtol = 1e-9;
+            let mot = m.add(kind, &[("J", "1e12"), ("w0", "100")]);
+            let vdq = m.add("Constant", &[("value", "[-40 150]")]);
+            // The electrical angle: pole pairs × θ (4 for the PMSM3, 2 for the SynRM defaults).
+            let gp = m.add("Gain", &[("k", if kind == "PMSM3" { "4" } else { "2" })]);
+            let ip = m.add("InvPark", &[]);
+            let ic = m.add("InvClarke", &[]);
+            let tl = m.add("Constant", &[("value", "0")]);
+            let sc = m.add("Scope", &[("n", "4")]);
+            m.wire(vdq, 0, ip, 0);
+            m.wire(mot, 3, gp, 0);
+            m.wire(gp, 0, ip, 1);
+            m.wire(ip, 0, ic, 0);
+            m.wire(ic, 0, mot, 0);
+            m.wire(tl, 0, mot, 1);
+            m.wire(mot, 1, sc, 0);
+            m.wire(mot, 2, sc, 1);
+            m.wire(ic, 0, sc, 2);
+            m.wire(mot, 0, sc, 3);
+            let r = m.run();
+            let rs = if kind == "PMSM3" { 0.15 } else { 0.8 };
+            let pin: f64 = (0..3).map(|k| last(&r, 4 + k) * last(&r, 1 + k)).sum();
+            let loss: f64 = (0..3).map(|k| rs * last(&r, 1 + k).powi(2)).sum();
+            let pm = last(&r, 0) * last(&r, 7);
+            assert!((pin - loss - pm).abs() < 1e-4 * pin.abs().max(1.0), "{kind}: P_in − loss = {}, T_e·ω = {pm}", pin - loss);
+        }
+    }
+
+    /// DC machines and BLDC at steady state: V·i = R·i² + T_e·ω.
+    #[test]
+    fn power_balance_dc_machines() {
+        let mut m = Mk::new(4.0, "rk45");
+        let mot = m.add("DCSepEx", &[]);
+        let va = m.add("Constant", &[("value", "220")]);
+        let tl = m.add("Constant", &[("value", "20")]);
+        let sc = m.add("Scope", &[("n", "3")]);
+        m.wire(va, 0, mot, 0);
+        m.wire(va, 0, mot, 1);
+        m.wire(tl, 0, mot, 2);
+        m.wire(mot, 0, sc, 0);
+        m.wire(mot, 1, sc, 1);
+        m.wire(mot, 3, sc, 2);
+        let r = m.run();
+        let (w, ia, te) = (last(&r, 0), last(&r, 1), last(&r, 2));
+        assert!((220.0 * ia - 0.6 * ia * ia - te * w).abs() < 1e-6 * 220.0 * ia, "sep. excited");
+        let mut m = Mk::new(0.3, "rk45");
+        let mot = m.add("BLDC", &[]);
+        let v = m.add("Constant", &[("value", "24")]);
+        let tl = m.add("Constant", &[("value", "0.5")]);
+        let sc = m.add("Scope", &[("n", "3")]);
+        m.wire(v, 0, mot, 0);
+        m.wire(tl, 0, mot, 1);
+        m.wire(mot, 0, sc, 0);
+        m.wire(mot, 1, sc, 1);
+        m.wire(mot, 2, sc, 2);
+        let r = m.run();
+        let (w, i, te) = (last(&r, 0), last(&r, 1), last(&r, 2));
+        assert!((24.0 * i - 2.0 * 0.05 * i * i - te * w).abs() < 1e-6 * 24.0 * i, "BLDC");
+    }
+
+    /// Switched reluctance motor: static torque ½·i²·dL/dθ at a held angle, and the energy balance
+    /// of a free rotor pulled into alignment (input − copper loss = kinetic + magnetic energy).
+    #[test]
+    fn srm_torque_and_energy() {
+        use std::f64::consts::PI;
+        let (r, lmax, lmin, nr) = (1.3, 0.06, 0.008, 4.0);
+        let l1 = 0.5 * (lmax - lmin);
+        let th0 = PI / 8.0 / 2.0; // a quarter of the way from unaligned to aligned for phase a
+        let mut m = Mk::new(0.5, "rk45");
+        let th0s = format!("{th0}");
+        let mot = m.add("SRM", &[("J", "1e12"), ("th0", &th0s)]);
+        let v = m.add("Constant", &[("value", "[13 0 0]")]);
+        let tl = m.add("Constant", &[("value", "0")]);
+        let sc = m.add("Scope", &[]);
+        m.wire(v, 0, mot, 0);
+        m.wire(tl, 0, mot, 1);
+        m.wire(mot, 1, sc, 0);
+        let res = m.run();
+        let want = 0.5 * 100.0 * l1 * nr * (nr * th0).sin();
+        assert!((last(&res, 0) - want).abs() < 1e-6 * want, "static torque {} vs {want}", last(&res, 0));
+
+        // Free rotor, b = 0: integrate the input power less copper loss with an Integrator.
+        let mut m = Mk::new(0.3, "rk45");
+        m.d.m.sim.rtol = 1e-10;
+        m.d.m.sim.atol = 1e-12;
+        let mot = m.add("SRM", &[("b", "0"), ("th0", &th0s)]);
+        let v = m.add("Constant", &[("value", "[13 0 0]")]);
+        let tl = m.add("Constant", &[("value", "0")]);
+        let dm = m.add("Demux", &[("n", "3")]);
+        let pw = m.add("Fcn", &[("expr", "13*u - 1.3*u^2")]);
+        let e = m.add("Integrator", &[]);
+        let sc = m.add("Scope", &[("n", "4")]);
+        m.wire(v, 0, mot, 0);
+        m.wire(tl, 0, mot, 1);
+        m.wire(mot, 2, dm, 0);
+        m.wire(dm, 0, pw, 0);
+        m.wire(pw, 0, e, 0);
+        m.wire(e, 0, sc, 0);
+        m.wire(mot, 0, sc, 1);
+        m.wire(dm, 0, sc, 2);
+        m.wire(mot, 3, sc, 3);
+        let res = m.run();
+        let (ein, w, i, th) = (last(&res, 0), last(&res, 1), last(&res, 2), last(&res, 3));
+        let l = 0.5 * (lmax + lmin) - l1 * (nr * th).cos();
+        let stored = 0.5 * 0.008 * w * w + 0.5 * l * i * i;
+        assert!((ein - stored).abs() < 1e-5 * ein, "energy in {ein} vs kinetic + magnetic {stored}");
+        let _ = r;
+    }
+
+    /// DC link: steady voltage drop R_s·i_load; a diode rectifier lets regeneration charge it.
+    /// Inverter DC current: V_dc·i_dc equals the power into the motor at every point.
+    #[test]
+    fn dc_link_and_inverter_current() {
+        let mut m = Mk::new(1.0, "rk45");
+        let vs = m.add("Constant", &[("value", "600")]);
+        let il = m.add("Constant", &[("value", "10")]);
+        let regen = m.add("Constant", &[("value", "-10")]);
+        let a = m.add("DCLink", &[]);
+        let b = m.add("DCLink", &[("source", "diode rectifier (charges only)")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(vs, 0, a, 0);
+        m.wire(il, 0, a, 1);
+        m.wire(vs, 0, b, 0);
+        m.wire(regen, 0, b, 1);
+        m.wire(a, 0, sc, 0);
+        m.wire(b, 0, sc, 1);
+        let r = m.run();
+        assert!((last(&r, 0) - 599.0).abs() < 1e-4, "{}", last(&r, 0));
+        assert!((last(&r, 1) - (600.0 + 10.0 / 0.002)).abs() < 1e-4, "regeneration charges the link: {}", last(&r, 1));
+
+        let mut m = Mk::new(0.2, "rk45");
+        let mot = m.add("PMSM3", &[]);
+        let src = m.add("ThreePhase", &[("Vll", "300"), ("f", "20")]);
+        let g = m.add("Gain", &[("k", "1/300")]);
+        let vdc = m.add("Constant", &[("value", "600")]);
+        let inv = m.add("Inverter", &[]);
+        let idc = m.add("InverterDC", &[]);
+        let tl = m.add("Constant", &[("value", "0")]);
+        let sc = m.add("Scope", &[("n", "3")]);
+        m.wire(src, 0, g, 0);
+        m.wire(g, 0, inv, 0);
+        m.wire(vdc, 0, inv, 1);
+        m.wire(inv, 0, mot, 0);
+        m.wire(tl, 0, mot, 1);
+        m.wire(g, 0, idc, 0);
+        m.wire(mot, 2, idc, 1);
+        m.wire(idc, 0, sc, 0);
+        m.wire(inv, 0, sc, 1);
+        m.wire(mot, 2, sc, 2);
+        let r = m.run();
+        for i in 0..r.t.len() {
+            let p: f64 = (0..3).map(|k| r.y[1 + k][i] * r.y[4 + k][i]).sum();
+            assert!((600.0 * r.y[0][i] - p).abs() < 1e-9 * p.abs().max(1.0), "t = {}: {} vs {p}", r.t[i], 600.0 * r.y[0][i]);
+        }
+    }
+
+    /// Sensor: first-order bandwidth, gain and offset; repeatable noise with the set spread.
+    #[test]
+    fn sensor() {
+        let mut m = Mk::new(0.1, "rk45");
+        let s = m.add("Step", &[("time", "0")]);
+        let a = m.add("Sensor", &[("k", "2"), ("offset", "0.5"), ("bw", "100")]);
+        let b = m.add("Sensor", &[("sd", "0.1"), ("ts", "0.0001")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(s, 0, a, 0);
+        m.wire(s, 0, b, 0);
+        m.wire(a, 0, sc, 0);
+        m.wire(b, 0, sc, 1);
+        let r = m.run();
+        let wc = 2.0 * std::f64::consts::PI * 100.0;
+        assert!(max_err(&r, 0, |t| 0.5 + 2.0 * (1.0 - (-wc * t).exp())) < 1e-6);
+        // The logged values at the sample times (between them the noise holds).
+        let n: Vec<f64> = samples(&r, 1, 1e-4, 1000).iter().skip(1).map(|v| v - 1.0).collect();
+        let mean = n.iter().sum::<f64>() / n.len() as f64;
+        let sd = (n.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n.len() as f64).sqrt();
+        assert!(mean.abs() < 0.01 && (sd - 0.1).abs() < 0.01, "noise mean {mean}, sd {sd}");
+        let r2 = m.run();
+        assert_eq!(r.y[1], r2.y[1], "same seed, same noise");
+    }
+
     /// Encoder: the angle is quantised to 2π/(4·PPR), and the speed estimate is within one count
     /// per sample time.
     #[test]
