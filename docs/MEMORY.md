@@ -71,7 +71,7 @@
 | `tests_ui/run.cjs` | 30 UI checks of the built window with a mocked bridge (the fixture also holds the induction motor start's diagram) |
 | `tests_ui/realapp.sh` | Screenshots of the real app under Xvfb (xdotool steps) |
 | `docs/verification/2026-10-27.md`, `2026-10-28.md` | Verification records: 0.1.0 (solvers, blocks) and 0.1.2 (motors and drives): what was checked, numbers, what was not |
-| `docs/PLAN-0.1.md`, `docs/PLAN-0.1.x.md`, `docs/site.json`, `CHANGELOG.md` | The plans, the public summary and roadmap, the change log |
+| `docs/PLAN-0.1.md`, `docs/PLAN-0.1.x.md`, `docs/PLAN-0.2.md`, `docs/site.json`, `CHANGELOG.md` | The plans, the public summary and roadmap, the change log |
 
 ### Release flow
 
@@ -194,6 +194,9 @@
 
 ### 2026-10-29: Session 5 (0.1.3)
 - The user: the Windows publisher becomes "Datum" for the whole family. Only `src-tauri/tauri.conf.json` wrote it (the installer takes it from there; the About page and `docs/FAMILY.md`, a link to the hub, do not). Copyright unchanged. Released 0.1.3; the planned 0.1.3–0.1.5 moved to 0.1.4–0.1.6 (site.json, this roadmap).
+
+### 2026-10-29: Session 6 (plan for a bigger build)
+- The user: "can we plan a little bigger build?" Wrote `docs/PLAN-0.2.md`: one release 0.2.0 that merges discrete control, wires and scopes (the planned 0.1.4–0.1.6) with masks and copied My blocks; the engine changes behind it (sample times, scoped mask parameters, signal logging, file version 2); order, size and risks. Six questions are waiting for the user's answers. Nothing built.
 
 ## 5. Known limits and next steps
 
