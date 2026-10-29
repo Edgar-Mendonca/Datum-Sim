@@ -19,6 +19,7 @@ fn main() {
         "subdiagram": view::view(&m, sub).unwrap(),
         "motor": view::view(&examples::get("imdol").unwrap(), 0).unwrap(),
         "started": { "gen": 1, "chans": chans, "warnings": [], "start": m.sim.start, "stop": m.sim.stop },
+        "rates": compile::rate_view(&m, &compile::compile(&m, None, &BTreeMap::new()).unwrap()),
         "results": { "chans": r.chans, "stats": r.stats, "n": r.t.len(), "t0": r.t[0], "t1": r.t.last(), "last": r.y.iter().map(|y| y.last().cloned().unwrap_or(0.0)).collect::<Vec<_>>(), "sweep": null },
         "series": { "t": t, "y": y },
         "sub": sub,

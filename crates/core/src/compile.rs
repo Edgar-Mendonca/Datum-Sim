@@ -508,6 +508,52 @@ fn rates(flat: &[Flat], rts: &[Box<dyn Rt>]) -> Vec<(u32, Rate)> {
     (0..n).map(|i| (flat[i].id, r[i])).collect()
 }
 
+/// One block's rate as the window shows it: "constant", "continuous", "discrete" (with ts) or
+/// "mixed". Subsystems take the combined rate of everything inside them.
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct RateView {
+    pub id: u32,
+    pub rate: &'static str,
+    pub ts: f64,
+}
+
+pub fn rate_view(m: &Model, sim: &Sim) -> Vec<RateView> {
+    let by: BTreeMap<u32, Rate> = sim.rates.iter().cloned().collect();
+    fn inside(d: &Diagram, by: &BTreeMap<u32, Rate>, out: &mut Vec<Rate>) {
+        for b in &d.blocks {
+            match &b.sub {
+                Some(s) => inside(s, by, out),
+                None => out.extend(by.get(&b.id).cloned()),
+            }
+        }
+    }
+    fn walk(d: &Diagram, by: &BTreeMap<u32, Rate>, v: &mut Vec<RateView>) {
+        for b in &d.blocks {
+            let r = match &b.sub {
+                Some(s) => {
+                    let mut rs = vec![];
+                    inside(s, by, &mut rs);
+                    walk(s, by, v);
+                    Some(combine(rs.into_iter()))
+                }
+                None => by.get(&b.id).cloned(),
+            };
+            if let Some(r) = r {
+                let (rate, ts) = match r {
+                    Rate::Constant | Rate::Inherit => ("constant", 0.0),
+                    Rate::Continuous => ("continuous", 0.0),
+                    Rate::Discrete(ts) => ("discrete", ts),
+                    Rate::Mixed => ("mixed", 0.0),
+                };
+                v.push(RateView { id: b.id, rate, ts });
+            }
+        }
+    }
+    let mut v = vec![];
+    walk(&m.root, &by, &mut v);
+    v
+}
+
 impl Sim {
     pub fn nx(&self) -> usize {
         self.x0.len()

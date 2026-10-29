@@ -24,6 +24,9 @@ pub fn list() -> Vec<Example> {
         Example { id: "syncmotor", name: "Synchronous motor on the grid (3.3 kV)", what: "A 1 MVA wound-field salient-pole motor on a 3.3 kV supply takes a load step: the rotor swings and the dampers settle it back to synchronous speed." },
         Example { id: "dcseries", name: "DC series motor: traction start", what: "A 600 V series motor starts a heavy load as its voltage is ramped up: high torque at low speed." },
         Example { id: "stepper", name: "Stepper motor: full steps", what: "A hybrid stepper driven with two-phase-on full steps at 200 steps per second." },
+        Example { id: "pmsmdigital", name: "PMSM: digital drive with a DC link", what: "Field-oriented control as a microcontroller runs it: a 10 kHz current loop and a 1 kHz speed loop, Goto/From tags, and a DC link fed by a diode rectifier that rises while the motor brakes." },
+        Example { id: "dcdigital", name: "DC motor: digital and continuous PID", what: "The same DC motor speed loop twice, with a continuous PID and a discrete PID at 5 ms: compare the responses and the staircase of the digital controller." },
+        Example { id: "srm", name: "Switched reluctance motor speed control", what: "A 6/4 switched reluctance motor with angle-based phase switching from an asymmetric bridge and a PI speed loop." },
         Example { id: "tank", name: "Pump and tank level control", what: "A pump fills a tank that drains through a valve (flow ∝ √level); a PI controller holds the level." },
         Example { id: "cruise", name: "Vehicle cruise control", what: "A car with aerodynamic drag and rolling resistance; a PI controller sets the drive force to hold the speed." },
         Example { id: "thermostat", name: "Room thermostat (relay)", what: "A heater switched by a relay with hysteresis keeps a room warm; switching times are located exactly." },
@@ -110,6 +113,9 @@ pub fn get(id: &str) -> Option<Model> {
         "syncmotor" => sync_motor(),
         "dcseries" => dc_series(),
         "stepper" => stepper(),
+        "pmsmdigital" => pmsm_digital(),
+        "dcdigital" => dc_digital(),
+        "srm" => srm(),
         "tank" => tank(),
         "cruise" => cruise(),
         "thermostat" => thermostat(),
@@ -635,5 +641,182 @@ fn stepper() -> Model {
     b.w(m, 2, s1, 0);
     b.w(m, 3, s2, 0);
     b.w(m, 4, s2, 1);
+    b.done()
+}
+
+fn pmsm_digital() -> Model {
+    let mut b = B::new(
+        "PMSM: digital drive with a DC link",
+        "The 15 kW interior-magnet motor of the field-oriented control example, now with discrete controllers: the current loops run at 10 kHz and the speed loop at 1 kHz (see View › Sample-time colours). Goto/From tags carry the electrical angle and the phase currents without long wires. The inverter draws its current from a DC link charged by a diode rectifier: when the speed reference falls to zero at 0.3 s the motor brakes, returns energy and the link voltage rises.",
+        0.5,
+    );
+    b.var("pp", "4", "", "Pole pairs");
+    b.var("Jm", "0.03", "kg·m²", "Inertia");
+    b.var("Kt", "1.5*pp*0.4", "N·m/A", "Torque constant 1.5·p·ψ");
+    b.var("wc", "2000", "rad/s", "Current loop bandwidth");
+    b.var("ws", "100", "rad/s", "Speed loop bandwidth");
+    b.var("Tc", "1e-4", "s", "Current loop sample time (10 kHz)");
+    b.var("Tw", "1e-3", "s", "Speed loop sample time (1 kHz)");
+    b.var("Vdc", "600", "V", "Rated DC link voltage");
+    let wr = b.blk("Step", "Speed up", 20.0, 40.0, &[("time", "0.01"), ("final", "150")]);
+    let wd = b.blk("Step", "Speed down", 20.0, 110.0, &[("time", "0.3"), ("final", "-150")]);
+    let wsum = b.blk("Sum", "Speed reference", 110.0, 60.0, &[("signs", "++")]);
+    let ew = b.blk("Sum", "", 170.0, 62.0, &[("signs", "+-")]);
+    let pw = b.blk("DiscretePID", "Speed PI 1 kHz", 230.0, 58.0, &[("P", "Jm*ws/Kt"), ("I", "Jm*ws/Kt*ws/4"), ("ts", "Tw"), ("upper", "40"), ("lower", "-40")]);
+    let idr = b.blk("Constant", "i_d reference", 230.0, 150.0, &[("value", "0")]);
+    let eq = b.blk("Sum", "", 360.0, 62.0, &[("signs", "+-")]);
+    let ed = b.blk("Sum", "", 360.0, 152.0, &[("signs", "+-")]);
+    let pq = b.blk("DiscretePID", "i_q PI 10 kHz", 420.0, 58.0, &[("P", "0.004*wc"), ("I", "0.15*wc"), ("ts", "Tc"), ("upper", "Vdc/2"), ("lower", "-Vdc/2")]);
+    let pd = b.blk("DiscretePID", "i_d PI 10 kHz", 420.0, 148.0, &[("P", "0.0025*wc"), ("I", "0.15*wc"), ("ts", "Tc"), ("upper", "Vdc/2"), ("lower", "-Vdc/2")]);
+    let mx = b.blk("Mux", "", 540.0, 70.0, &[]);
+    let ip = b.blk("InvPark", "", 580.0, 70.0, &[]);
+    let fth = b.blk("From", "", 480.0, 230.0, &[("tag", "theta_e")]);
+    let ic = b.blk("InvClarke", "", 670.0, 70.0, &[]);
+    let gm = b.blk("Gain", "Modulation", 750.0, 70.0, &[("k", "2/Vdc")]);
+    let inv = b.blk("Inverter", "Inverter", 850.0, 80.0, &[]);
+    let tl = b.blk("Step", "Load torque", 850.0, 190.0, &[("time", "0.15"), ("final", "30")]);
+    let m = b.motor("PMSM3", 1, "Motor 15 kW", 970.0, 80.0, &[]);
+    let gp = b.blk("Gain", "p", 1100.0, 200.0, &[("k", "pp")]);
+    let gth = b.blk("Goto", "", 1180.0, 200.0, &[("tag", "theta_e")]);
+    let gi = b.blk("Goto", "", 1180.0, 260.0, &[("tag", "i_abc")]);
+    let fi = b.blk("From", "", 600.0, 300.0, &[("tag", "i_abc")]);
+    let fth2 = b.blk("From", "", 600.0, 360.0, &[("tag", "theta_e")]);
+    let cl = b.blk("Clarke", "", 700.0, 300.0, &[]);
+    let pk = b.blk("Park", "", 800.0, 310.0, &[]);
+    let dm = b.blk("Demux", "i_dq", 900.0, 300.0, &[]);
+    let gd = b.blk("Goto", "", 940.0, 290.0, &[("tag", "i_d")]);
+    let gq = b.blk("Goto", "", 940.0, 340.0, &[("tag", "i_q")]);
+    let fd = b.blk("From", "", 260.0, 220.0, &[("tag", "i_d")]);
+    let fq = b.blk("From", "", 260.0, 260.0, &[("tag", "i_q")]);
+    let vs = b.blk("Constant", "Mains, rectified", 600.0, 440.0, &[("value", "Vdc")]);
+    let link = b.blk("DCLink", "DC link", 720.0, 430.0, &[("C", "0.002"), ("Rs", "0.05"), ("V0", "Vdc"), ("source", "diode rectifier (charges only)")]);
+    let fi2 = b.blk("From", "", 480.0, 500.0, &[("tag", "i_abc")]);
+    let idc = b.blk("InverterDC", "Inverter DC current", 560.0, 480.0, &[]);
+    let s1 = b.blk("Scope", "Speed", 1180.0, 20.0, &[("n", "2")]);
+    let s2 = b.blk("Scope", "i_d, i_q", 1180.0, 100.0, &[("n", "2")]);
+    let s3 = b.blk("Scope", "DC link voltage", 900.0, 440.0, &[]);
+    b.w(wr, 0, wsum, 0);
+    b.w(wd, 0, wsum, 1);
+    b.w(wsum, 0, ew, 0);
+    b.w(ew, 0, pw, 0);
+    b.w(pw, 0, eq, 0);
+    b.w(idr, 0, ed, 0);
+    b.w(eq, 0, pq, 0);
+    b.w(ed, 0, pd, 0);
+    b.w(fq, 0, eq, 1);
+    b.w(fd, 0, ed, 1);
+    b.w(pd, 0, mx, 0);
+    b.w(pq, 0, mx, 1);
+    b.w(mx, 0, ip, 0);
+    b.w(fth, 0, ip, 1);
+    b.w(ip, 0, ic, 0);
+    b.w(ic, 0, gm, 0);
+    b.w(gm, 0, inv, 0);
+    b.w(link, 0, inv, 1);
+    b.w(inv, 0, m, 0);
+    b.w(tl, 0, m, 1);
+    b.w(m, 3, gp, 0);
+    b.w(gp, 0, gth, 0);
+    b.w(m, 2, gi, 0);
+    b.w(fi, 0, cl, 0);
+    b.w(cl, 0, pk, 0);
+    b.w(fth2, 0, pk, 1);
+    b.w(pk, 0, dm, 0);
+    b.w(dm, 0, gd, 0);
+    b.w(dm, 1, gq, 0);
+    b.w(m, 0, ew, 1);
+    b.w(vs, 0, link, 0);
+    b.w(gm, 0, idc, 0);
+    b.w(fi2, 0, idc, 1);
+    b.w(idc, 0, link, 1);
+    b.w(m, 0, s1, 0);
+    b.w(wsum, 0, s1, 1);
+    b.w(dm, 0, s2, 0);
+    b.w(dm, 1, s2, 1);
+    b.w(link, 0, s3, 0);
+    b.done()
+}
+
+fn dc_digital() -> Model {
+    let mut b = B::new(
+        "DC motor: digital and continuous PID",
+        "Two copies of the DC motor speed loop. The upper one has the continuous PID of the DC motor example; the lower one a discrete PID sampled every 5 ms with the same gains. The digital loop follows closely but its voltage is a staircase, and a slower sample time (try Ts = 20 ms) makes it ring.",
+        5.0,
+    );
+    motor_vars(&mut b);
+    b.var("Ts", "0.005", "s", "Controller sample time");
+    let r = b.blk("Step", "Speed reference", 20.0, 120.0, &[("time", "0"), ("final", "1")]);
+    let tl = b.blk("Step", "Load torque", 20.0, 260.0, &[("time", "3"), ("final", "0.05")]);
+    let mut speeds = vec![];
+    let mut volts = vec![];
+    for (k, digital) in [false, true].iter().enumerate() {
+        let y = 40.0 + 160.0 * k as f64;
+        let e = b.blk("Sum", "", 140.0, y + 2.0, &[("signs", "+-")]);
+        let c = if *digital {
+            b.blk("DiscretePID", "Discrete PID", 200.0, y, &[("P", "100"), ("I", "200"), ("D", "10"), ("ts", "Ts"), ("upper", "24"), ("lower", "-24")])
+        } else {
+            b.blk("PID", "Continuous PID", 200.0, y, &[("P", "100"), ("I", "200"), ("D", "10"), ("upper", "24"), ("lower", "-24")])
+        };
+        let m = b.blk("DCMotor", if *digital { "Motor (digital)" } else { "Motor (continuous)" }, 340.0, y, &[("R", "R"), ("L", "L"), ("Ke", "Ke"), ("Kt", "Kt"), ("J", "J"), ("b", "b")]);
+        b.w(r, 0, e, 0);
+        b.w(e, 0, c, 0);
+        b.w(c, 0, m, 0);
+        b.w(tl, 0, m, 1);
+        b.w(m, 0, e, 1);
+        speeds.push(m);
+        volts.push(c);
+    }
+    let s1 = b.blk("Scope", "Speed", 520.0, 40.0, &[("n", "3")]);
+    let s2 = b.blk("Scope", "Voltage", 520.0, 180.0, &[("n", "2")]);
+    b.w(speeds[0], 0, s1, 0);
+    b.w(speeds[1], 0, s1, 1);
+    b.w(r, 0, s1, 2);
+    b.w(volts[0], 0, s2, 0);
+    b.w(volts[1], 0, s2, 1);
+    b.done()
+}
+
+fn srm() -> Model {
+    let mut b = B::new(
+        "Switched reluctance motor speed control",
+        "A 400 V, 4 kW 6/4 switched reluctance motor (typical values) on a 540 V asymmetric bridge. Each phase is switched on while its inductance rises (electrical angle Nr·θ − k·120° between θon and θoff) at a voltage set by the speed PI, and off (−540 V, the diodes return the energy) for the rest of the turn. Speed reference 150 rad/s; a 10 N·m load at 0.6 s.",
+        1.5,
+    );
+    b.var("Vdc", "540", "V", "DC link voltage");
+    b.var("thon", "0.15*pi", "rad", "Turn-on angle (electrical)");
+    b.var("thoff", "0.75*pi", "rad", "Turn-off angle (electrical)");
+    let wr = b.blk("Step", "Speed reference", 20.0, 40.0, &[("time", "0"), ("final", "150")]);
+    let e = b.blk("Sum", "", 120.0, 42.0, &[("signs", "+-")]);
+    let c = b.blk("PID", "Speed PI", 180.0, 38.0, &[("P", "10"), ("I", "60"), ("upper", "Vdc"), ("lower", "0")]);
+    let m = b.motor("SRM", 0, "SRM 4 kW 6/4", 620.0, 60.0, &[]);
+    let mut ph = vec![];
+    for k in 0..3 {
+        let a = format!("mod(4*u1 - {k}*2*pi/3, 2*pi)");
+        let expr = format!("if({a} >= thon, if({a} < thoff, u2, -Vdc), -Vdc)");
+        let f = b.blk("Fcn", &format!("Phase {}", ["a", "b", "c"][k]), 380.0, 20.0 + 70.0 * k as f64, &[("expr", &expr), ("n", "2")]);
+        ph.push(f);
+    }
+    let mx = b.blk("Mux", "", 540.0, 50.0, &[("n", "3")]);
+    let tl = b.blk("Step", "Load torque", 540.0, 200.0, &[("time", "0.6"), ("final", "10")]);
+    let gth = b.blk("Goto", "", 800.0, 160.0, &[("tag", "theta")]);
+    let fth = b.blk("From", "", 260.0, 160.0, &[("tag", "theta")]);
+    let s1 = b.blk("Scope", "Speed", 800.0, 20.0, &[("n", "2")]);
+    let s2 = b.blk("Scope", "Torque", 800.0, 240.0, &[]);
+    let s3 = b.blk("Scope", "Phase currents", 800.0, 320.0, &[]);
+    b.w(wr, 0, e, 0);
+    b.w(e, 0, c, 0);
+    for (k, f) in ph.iter().enumerate() {
+        b.w(fth, 0, *f, 0);
+        b.w(c, 0, *f, 1);
+        b.w(*f, 0, mx, k);
+    }
+    b.w(mx, 0, m, 0);
+    b.w(tl, 0, m, 1);
+    b.w(m, 0, e, 1);
+    b.w(m, 3, gth, 0);
+    b.w(m, 0, s1, 0);
+    b.w(wr, 0, s1, 1);
+    b.w(m, 1, s2, 0);
+    b.w(m, 2, s3, 0);
     b.done()
 }

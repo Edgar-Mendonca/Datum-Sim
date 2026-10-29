@@ -22,7 +22,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.addInitScript(f => {
     const opts = { autosave: 0, beta: false, theme: "light", openLast: false, solver: "rk45", stop: 10, snap: true, grid: true, paper: "A4", landscape: true, company: "" };
     const handlers = {};
-    const m = { state: f.state, library: f.library, examples_list: f.examples_list, options: opts, startup_file: null, recovery: null, check_update: null, recent: [], version: "test", check: [], results: f.results, series: f.series, sweep_series: [] };
+    const m = { state: f.state, library: f.library, examples_list: f.examples_list, options: opts, startup_file: null, recovery: null, check_update: null, recent: [], version: "test", check: [], results: f.results, series: f.series, sweep_series: [], rates: f.rates };
     window.__calls = [];
     window.__emit = (e, x) => (handlers[e] ?? []).forEach(h => h({ payload: x }));
     window.__TAURI__ = {
@@ -176,7 +176,18 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   check("choosing a rating sets every value in one undoable edit", !!batch && batch.Batch.length === pr.values.length && batch.Batch.every(o => o.SetParam && o.SetParam.id === mot.id), JSON.stringify(batch));
   await p.evaluate(() => { window.__motor = false; });
 
-  // 13. Every view and File page opens without errors.
+  // 13. Sample-time colours (0.1.4): the View tab colours blocks by rate and shows a legend.
+  await p.click('.tabs > button:text-is("View")');
+  await p.waitForTimeout(100);
+  await p.click(".ratechk");
+  await p.waitForTimeout(300);
+  check("sample-time colours mark the blocks", (await p.$$(".blk.rated")).length >= 1 && (await p.$$(".ratelegend span")).length >= 1, String((await p.$$(".blk.rated")).length));
+  check("the legend names the continuous rate", (await p.textContent(".ratelegend")).includes("Continuous"));
+  await p.click(".ratechk");
+  await p.waitForTimeout(200);
+  check("turning them off removes the colours", (await p.$$(".blk.rated")).length === 0 && (await p.$$(".ratelegend")).length === 0);
+
+  // 14. Every view and File page opens without errors.
   for (const v of ["Variables", "Scopes", "Results", "Issues", "Diagram"]) { await p.click(`.side button[title="${v}"]`); await p.waitForTimeout(150); }
   for (const k of ["print", "options", "roadmap", "about", "home"]) { await p.evaluate(() => document.querySelector(".tabs .file").click()); await p.waitForTimeout(100); await p.click(`.bs aside button:has-text("${{ print: "Print", options: "Options", roadmap: "Roadmap", about: "Updates", home: "Home" }[k]}")`); await p.waitForTimeout(200); }
   check("roadmap lists the planned releases", (await p.textContent(".bsmain")).length > 0);

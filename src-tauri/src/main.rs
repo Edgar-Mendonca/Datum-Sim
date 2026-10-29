@@ -229,6 +229,13 @@ fn check(st: State<St>) -> Vec<Issue> {
     }
 }
 
+/// Each block's sample-time rate, for the sample-time colours (empty while the model has errors).
+#[tauri::command]
+fn rates(st: State<St>) -> Vec<compile::RateView> {
+    let a = st.lock();
+    compile::compile(&a.doc.m, base_dir(&a).as_deref(), &BTreeMap::new()).map(|s| compile::rate_view(&a.doc.m, &s)).unwrap_or_default()
+}
+
 // ---------------------------------------------------------------- files
 
 fn pick(app: &AppHandle, name: &str, exts: &[&str]) -> Option<PathBuf> {
@@ -733,7 +740,7 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, open, save, save_file,
+            state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, open, save, save_file,
             run, control, results, series, sweep_series, run_sweep, export_csv, analyze, step_info, engine,
             options, set_options, autosave, recovery, recover, recent, startup_file, open_url, version, quit, check_update, install_update
         ])

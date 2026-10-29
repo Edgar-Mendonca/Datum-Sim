@@ -2,7 +2,7 @@
 // Geometry (ports, routed wires) comes from the engine; the window only draws and sends edits.
 import { For, Show, JSX, createSignal, createMemo, createEffect, onMount, onCleanup, batch, on } from "solid-js";
 import { BlockView, WireView, Pt, num } from "./api";
-import { dview, sel, setSel, act, parent, enter, out, opts, issues, results, chans, openMenu, defOf, lib, openDialog, closeDialog, setScopes, scopes, Item, running, setView, setBackstage } from "./store";
+import { dview, sel, setSel, act, parent, enter, out, opts, issues, results, chans, openMenu, defOf, lib, openDialog, closeDialog, setScopes, scopes, Item, running, setView, setBackstage, showRates, rateColours } from "./store";
 import { C } from "./cmds";
 import { helpCard } from "./help";
 
@@ -51,7 +51,7 @@ const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…"
 /** The letters inside each motor's circle. */
 const MOTOR: Record<string, string> = {
   DCMotor: "M", DCSepEx: "DC", DCShunt: "DC", DCSeries: "DC", DCCompound: "DC", InductionSC: "IM", InductionDC: "IM", InductionWR: "IM",
-  PMSM: "PM", PMSM3: "PM", SynRM: "RM", SyncField: "SM", BLDC: "BL", Stepper: "ST",
+  PMSM: "PM", PMSM3: "PM", SynRM: "RM", SyncField: "SM", BLDC: "BL", Stepper: "ST", SRM: "SR",
 };
 
 const glyph = (kind: string, w: number, h: number): JSX.Element | null => {
@@ -73,6 +73,11 @@ const glyph = (kind: string, w: number, h: number): JSX.Element | null => {
     case "Abs": return P(`M${x0} ${y1}L${cx} ${y0}L${x1} ${y1}`);
     case "Sign": return P(`M${x0} ${y0}H${cx}V${y1}H${x1}`);
     case "Scope": case "XY": return <><rect x={6} y={6} width={w - 12} height={h - 18} rx={2} class="bscreen" />{kind === "Scope" ? <path d={`M10 ${h / 2 - 2}c4 0 4-10 8-10s4 14 8 14 4-6 ${w - 34} -6`} class="bwave" /> : <circle cx={w / 2} cy={h / 2 - 6} r={7} class="bwave" />}</>;
+    case "Square": return P(`M${x0} ${y0}H${x0 + gw * .25}V${y1}H${cx + gw * .25}V${y0}H${x1}`);
+    case "Triangle": return P(`M${x0} ${cy}L${x0 + gw / 4} ${y1}L${cx + gw / 4} ${y0}L${x1} ${cy}`);
+    case "Chirp": return P(`M${x0} ${cy}c3-12 6-12 8 0s4 12 6 0 3-10 4 0 2 10 3 0 2-9 2.5 0 1.5 9 2 0 1-8 1.5 0 1 8 1.4 0`);
+    case "RepSeq": return P(`M${x0} ${y0}L${cx - 2} ${y1}V${y0}L${x1 - 4} ${y1}V${y0}`);
+    case "Terminator": return P(`M${cx - 6} ${cy - 7}V${cy + 7}M${cx - 2} ${cy - 4}V${cy + 4}M${cx + 2} ${cy - 2}V${cy + 2}`);
     case "Inverter": return <>{P(`M${x0} ${y0}L${x1} ${y1}`)}<T x={x0 + 6} y={y1 + 4} size={12} bold>=</T><T x={x1 - 6} y={y0 - 4} size={12} bold>~</T></>;
     case "PWM": return P(`M${x0} ${y0}H${x0 + gw * .1}V${y1}H${x0 + gw * .4}V${y0}H${x0 + gw * .55}V${y1}H${x0 + gw * .7}V${y0}H${x1}`);
     default: {
@@ -93,6 +98,9 @@ const BlockArt = (p: { b: BlockView }) => {
     if (k === "Gain") return b().flip ? <path d={`M${w()} 0V${h()}L0 ${h() / 2}z`} class="bshape" /> : <path d={`M0 0V${h()}L${w()} ${h() / 2}z`} class="bshape" />;
     if (k === "Mux" || k === "Demux") return <rect width={w()} height={h()} class="bbar" />;
     if (k === "Inport" || k === "Outport") return <rect width={w()} height={h()} rx={h() / 2} class="bshape bport" />;
+    // Goto points away (a tag leaving), From points in.
+    if (k === "Goto") return <path d={b().flip ? `M${w()} 0H10L0 ${h() / 2}L10 ${h()}H${w()}z` : `M0 0H${w() - 10}L${w()} ${h() / 2}L${w() - 10} ${h()}H0z`} class="bshape" />;
+    if (k === "From") return <path d={b().flip ? `M${w()} 0H0V${h()}H${w()}L${w() - 10} ${h() / 2}z` : `M0 0H${w()}V${h()}H0L10 ${h() / 2}z`} class="bshape" />;
     return <rect width={w()} height={h()} rx={3} class="bshape" classList={{ bsub: b().sub }} />;
   };
   const inner = (): JSX.Element => {
@@ -102,7 +110,7 @@ const BlockArt = (p: { b: BlockView }) => {
     if (k === "Product") return <T x={cx} y={cy} size={14} bold>{b().label.includes("/") ? "÷" : "×"}</T>;
     if (k === "Divide") return <T x={cx} y={cy} size={14} bold>÷</T>;
     if (k === "Mux" || k === "Demux") return null;
-    if (k === "TransferFcn" || k === "ZPK") {
+    if (k === "TransferFcn" || k === "ZPK" || k === "DiscreteTF") {
       const [n, d] = b().label.split("\n");
       return <><T x={cx} y={cy - 8} size={10}>{clip(n, 14)}</T><line x1={8} x2={w() - 8} y1={cy} y2={cy} class="bfrac" /><T x={cx} y={cy + 8} size={10}>{clip(d, 14)}</T></>;
     }
@@ -112,6 +120,8 @@ const BlockArt = (p: { b: BlockView }) => {
     }
     if (k === "Subsystem") return <T x={cx} y={cy} size={10} bold>{clip(b().name, 16)}</T>;
     if (k === "PID") return <T x={cx} y={cy} size={12} bold>PID</T>;
+    if (k === "DiscretePID") return <T x={cx} y={cy} size={12} bold>PID(z)</T>;
+    if (k === "Goto" || k === "From") return <T x={cx} y={cy} size={10} bold>{clip(b().label, 10)}</T>;
     const g = glyph(k, w(), h());
     if (g) return g;
     return <T x={cx} y={cy} size={k === "Integrator" || k === "Derivative" ? 12 : 10}>{clip(b().label || defOf(k)?.name || k, Math.max(4, Math.floor(w() / 6.5)))}</T>;
@@ -378,7 +388,8 @@ export const Canvas = () => {
           <Show when={drag()?.k !== "move"}><For each={branchDots()}>{p => <circle cx={p[0]} cy={p[1]} r={3.2} class="wdot" />}</For></Show>
           <For each={v()?.blocks ?? []}>{b => {
             const o = () => off(b.id);
-            return <g transform={`translate(${b.x + o()[0]} ${b.y + o()[1]})`} class="blk" classList={{ sel: selSet().has(b.id), err: errSet().has(b.id), warn: warnSet().has(b.id), hover: hover() === b.id }}
+            const rc = () => (showRates() ? rateColours().by.get(b.id) : undefined);
+            return <g transform={`translate(${b.x + o()[0]} ${b.y + o()[1]})`} class="blk" classList={{ sel: selSet().has(b.id), err: errSet().has(b.id), warn: warnSet().has(b.id), hover: hover() === b.id, rated: !!rc() }} style={rc() ? { "--rate": rc() } : undefined}
               onMouseEnter={() => setHover(b.id)} onMouseLeave={() => setHover(null)}>
               <title>{`${b.name} (${defOf(b.kind)?.name ?? b.kind})${issues().filter(i => i.id === b.id).map(i => "\n" + i.msg).join("")}`}</title>
               <BlockArt b={b} />
@@ -409,6 +420,7 @@ export const Canvas = () => {
           <span><button class="btn sm" onClick={() => setBackstage("home")}>Open an example</button></span></div>
       </Show>
       <MiniMap />
+      <Show when={showRates() && rateColours().legend.length}><div class="ratelegend"><b>Sample times</b><For each={rateColours().legend}>{([c, l]) => <span><i style={{ background: c }} />{l}</span>}</For></div></Show>
       <div class="zoomctl"><button title="Zoom out" onClick={() => zoomBy(1 / 1.2)}>−</button><span>{Math.round(zoom() * 100)}%</span><button title="Zoom in" onClick={() => zoomBy(1.2)}>+</button><button title="Fit the diagram to the window" onClick={fit}>Fit</button></div>
       <Show when={running()}><div class="runbadge" onClick={() => setView("scopes")}>Running…</div></Show>
     </div>

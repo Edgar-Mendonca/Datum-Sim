@@ -825,3 +825,10 @@ tr.behind td { background: var(--err-bg); }
 .libghost.over { border-color: var(--blue); color: var(--blue); }
 .libi { cursor: grab; user-select: none; }
 .wdot { fill: var(--text2); pointer-events: none; }
+
+/* Sample-time colours (View › Sample-time colours) */
+.blk.rated .bshape, .blk.rated .bbar { stroke: var(--rate); stroke-width: 2.2; }
+.ratelegend { position: absolute; left: 10px; bottom: 10px; background: var(--bg2); border: 1px solid var(--line); border-radius: 4px; padding: 6px 9px; font-size: 11px; display: flex; flex-direction: column; gap: 3px; z-index: 3; }
+.ratelegend b { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.ratelegend span { display: flex; align-items: center; gap: 6px; }
+.ratelegend i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }

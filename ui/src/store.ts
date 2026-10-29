@@ -31,13 +31,33 @@ export const [dview, setDview] = createSignal<DView | null>(null);
 export const [sel, setSel] = createSignal<number[]>([]);
 export const selBlocks = () => { const s = new Set(sel()); return dview()?.blocks.filter(b => s.has(b.id)) ?? []; };
 export const selWires = () => { const s = new Set(sel()); return dview()?.wires.filter(w => s.has(w.id)) ?? []; };
+// ---------- sample-time colours ----------
+export interface RateView { id: number; rate: "constant" | "continuous" | "discrete" | "mixed"; ts: number }
+export const [showRates, setShowRatesRaw] = createSignal(false);
+export const [rates, setRates] = createSignal<RateView[]>([]);
+export const refreshRates = async () => { if (showRates()) setRates(await invoke<RateView[]>("rates").catch(() => [] as RateView[])); };
+export const setShowRates = (on: boolean) => { setShowRatesRaw(on); if (on) refreshRates(); else setRates([]); };
+const RATE_COLOURS = ["#DC2626", "#16A34A", "#2563EB", "#D97706", "#0891B2", "#9333EA", "#DB2777"];
+/** Colours: each discrete sample time (fastest first) gets its own; constants magenta, mixed amber. */
+export const rateColours = () => {
+  const ts = [...new Set(rates().filter(r => r.rate === "discrete").map(r => r.ts))].sort((a, b) => a - b);
+  const col = (r: RateView) => r.rate === "discrete" ? RATE_COLOURS[ts.indexOf(r.ts) % RATE_COLOURS.length] : r.rate === "constant" ? "#C026D3" : r.rate === "mixed" ? "#CA8A04" : "var(--text)";
+  const by = new Map(rates().map(r => [r.id, col(r)]));
+  const legend: [string, string][] = [];
+  if (rates().some(r => r.rate === "continuous")) legend.push(["var(--text)", "Continuous"]);
+  ts.forEach((t, i) => legend.push([RATE_COLOURS[i % RATE_COLOURS.length], `Ts = ${+t.toPrecision(6)} s`]));
+  if (rates().some(r => r.rate === "constant")) legend.push(["#C026D3", "Constant"]);
+  if (rates().some(r => r.rate === "mixed")) legend.push(["#CA8A04", "Several rates"]);
+  return { by, legend };
+};
+
 let pending = 0;
 export const refreshView = async () => {
   if (!out()) return;
   const n = ++pending;
   try {
     const v = await invoke<DView>("diagram", { parent: parent() });
-    if (n === pending) setDview(v);
+    if (n === pending) { setDview(v); refreshRates(); }
   } catch {
     // The subsystem was deleted or undone away: go back to the top.
     if (parent() !== 0) { setParent(0); refreshView(); }

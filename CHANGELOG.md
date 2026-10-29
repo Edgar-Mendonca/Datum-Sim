@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.4 — 2026-10-29
+
+Discrete control: controllers that run at a sample time, as in a microcontroller, and more motor and drive blocks.
+
+**Discrete control**
+- Discrete transfer function and discrete state space.
+- Discrete integrator (forward Euler, backward Euler or trapezoidal) with limits and a reset input.
+- Discrete PID with a filtered derivative, output limits and anti-windup (clamping or back-calculation).
+- Rate transition, to pass a signal between sample times (hold, or a one-sample delay).
+- **Sample-time colours** (View › Sample-time colours): every block is coloured by how often its output changes, with a legend: continuous, each sample time, constant, or several rates.
+
+**Blocks**
+- A reset input on the Integrator (rising, falling or either edge), located exactly.
+- Goto and From: send a signal by name without a wire, within one diagram or across the whole model.
+- Sources: square wave, triangle wave, chirp (frequency sweep), repeating sequence.
+- Terminator, to end an output you do not need.
+
+**Motors and drives**
+- Switched reluctance motor (6/4, 12/8 …) with an asymmetric bridge, and typical ratings.
+- DC link (with a diode rectifier that only charges it), inverter DC current, and a current sensor with gain, offset, bandwidth and noise.
+
+**Worked examples**: a digital PMSM drive (10 kHz current loop, 1 kHz speed loop) whose DC link rises while the motor brakes; a DC motor with a digital and a continuous PID side by side; switched reluctance motor speed control.
+
+**Checked**: the discrete blocks against their difference equations; power balance for the induction, synchronous, DC and BLDC machines; the switched reluctance motor's torque and energy balance. See [the verification record](https://github.com/Edgar-Mendonca/Datum-Sim/blob/HEAD/docs/verification/2026-10-29.md).
+
+**Fixed**
+- A signal resting at exactly zero (such as a reset input between pulses) could make the variable-step solvers take endless tiny steps.
+
 ## 0.1.3 — 2026-10-29
 
 - Windows now lists the publisher as Datum.

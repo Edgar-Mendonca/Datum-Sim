@@ -242,6 +242,10 @@ mod tests {
                     let (w, i) = (last(0), last(1));
                     assert!((0.0053 * i * i - 300.0 - 0.02 * w * w).abs() < 0.01 * 0.0053 * i * i, "dc series {w} {i}");
                 }
+                // Braked to standstill, carrying the load on i_q; the DC link rose while braking.
+                "pmsmdigital" => assert!(last(0).abs() < 2.0 && (last(3) - 12.5).abs() < 0.5 && last(4) > 650.0, "pmsmdigital {} {} {}", last(0), last(3), last(4)),
+                "dcdigital" => assert!((last(0) - 1.0).abs() < 0.01 && (last(1) - 1.0).abs() < 0.01, "dcdigital {} {}", last(0), last(1)),
+                "srm" => assert!((last(0) - 150.0).abs() < 4.5, "srm speed {}", last(0)),
                 // Twenty full steps of π/100, give or take the last one in progress.
                 "stepper" => assert!((last(0) - 0.2 * std::f64::consts::PI).abs() < 0.02, "stepper angle {}", last(0)),
                 "thermostat" => {
@@ -818,6 +822,13 @@ mod tests {
         assert_eq!(rate(i), Rate::Continuous);
         assert_eq!(rate(sum), Rate::Mixed);
         assert_eq!(rate(z2), Rate::Discrete(0.02));
+        // A subsystem shows the combined rate of its contents.
+        let sub = m.d.apply(Op::Group { ids: vec![dtf, gd] }).unwrap()[0];
+        let sim = compile(&m.d.m, None, &none()).unwrap();
+        let v = crate::compile::rate_view(&m.d.m, &sim);
+        let s = v.iter().find(|r| r.id == sub).expect("the subsystem has a rate");
+        assert_eq!((s.rate, s.ts), ("discrete", 0.1));
+        assert!(v.iter().any(|r| r.id == dtf && r.rate == "discrete"), "blocks inside are listed too");
     }
 
     // ------------------------------------------------------------ motor extras and power balance

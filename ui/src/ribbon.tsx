@@ -1,7 +1,7 @@
 // Title bar, quick access toolbar, Tell Me and the ribbon (Model · Simulate · Analyze · View · Help,
 // with Format as a contextual tab when blocks are selected). Copied from Datum Plan's ribbon.
 import { For, Show, JSX, createSignal, createMemo, onMount } from "solid-js";
-import { call, out, tab, setTab, setBackstage, view, openMenu, Item, openDialog, closeDialog, theme, setTheme, running, paused, selBlocks, opts, setOpts, scopes, setScopes, lib } from "./store";
+import { call, out, tab, setTab, setBackstage, view, openMenu, Item, openDialog, closeDialog, theme, setTheme, running, paused, selBlocks, opts, setOpts, scopes, setScopes, lib, showRates, setShowRates } from "./store";
 import { C, ALL_CMDS } from "./cmds";
 import * as D from "./dialogs";
 import { Icon } from "./ui";
@@ -125,7 +125,8 @@ export const Ribbon = () => (
       <G l="Views" h="views"><B big i="model" l="Diagram" run={() => C.view("model")} on={view() === "model"} /><B big i="scope" l="Scopes" run={() => C.view("scopes")} on={view() === "scopes"} />
         <S><B i="var" l="Variables" run={C.vars} on={view() === "vars"} /><B i="results" l="Results" run={() => C.view("results")} on={view() === "results"} /><B i="issues" l="Issues" run={() => C.view("issues")} on={view() === "issues"} /></S></G>
       <G l="Zoom" h="zoom"><S><B i="zin" l="Zoom In" run={C.zoomIn} /><B i="zout" l="Zoom Out" run={C.zoomOut} /><B i="fit" l="Fit" run={C.fit} /></S></G>
-      <G l="Show" h="show"><S><label class="chk"><input type="checkbox" checked={opts().grid} onChange={e => setOpts({ ...opts(), grid: e.currentTarget.checked })} />Grid</label><label class="chk"><input type="checkbox" checked={opts().snap} onChange={e => setOpts({ ...opts(), snap: e.currentTarget.checked })} />Snap to grid</label><label class="chk"><input type="checkbox" checked={scopes().length > 0} onChange={e => setScopes(e.currentTarget.checked ? [] : [])} disabled={!scopes().length} />Scopes dock</label></S></G>
+      <G l="Show" h="show"><S><label class="chk"><input type="checkbox" checked={opts().grid} onChange={e => setOpts({ ...opts(), grid: e.currentTarget.checked })} />Grid</label><label class="chk"><input type="checkbox" checked={opts().snap} onChange={e => setOpts({ ...opts(), snap: e.currentTarget.checked })} />Snap to grid</label><label class="chk"><input type="checkbox" checked={scopes().length > 0} onChange={e => setScopes(e.currentTarget.checked ? [] : [])} disabled={!scopes().length} />Scopes dock</label></S>
+        <S><label class="chk" title="Colour each block by how often its output changes: continuous, each sample time, constant"><input type="checkbox" class="ratechk" checked={showRates()} onChange={e => setShowRates(e.currentTarget.checked)} />Sample-time colours</label></S></G>
     </Show>
     <Show when={tab() === "format"}>
       <G l="Block" h="blocks"><B big i="flip" l="Flip" run={C.flip} /><B big i="rename" l="Rename" run={C.rename} /><S><B i="align" l="Align Left" run={() => C.align("left")} /><B i="align" l="Align Top" run={() => C.align("top")} /><B i="align" l="Align Centres" run={() => C.align("middle")} /></S></G>
