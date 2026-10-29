@@ -31,6 +31,10 @@ export const [dview, setDview] = createSignal<DView | null>(null);
 export const [sel, setSel] = createSignal<number[]>([]);
 export const selBlocks = () => { const s = new Set(sel()); return dview()?.blocks.filter(b => s.has(b.id)) ?? []; };
 export const selWires = () => { const s = new Set(sel()); return dview()?.wires.filter(w => s.has(w.id)) ?? []; };
+// ---------- My blocks: the user's saved subsystems ----------
+export const [myBlocks, setMyBlocks] = createSignal<import("./api").MyBlock[]>([]);
+export const refreshMyBlocks = async () => setMyBlocks(await invoke<import("./api").MyBlock[]>("myblocks").catch(() => []));
+
 // ---------- sample-time colours ----------
 export interface RateView { id: number; rate: "constant" | "continuous" | "discrete" | "mixed"; ts: number }
 export const [showRates, setShowRatesRaw] = createSignal(false);

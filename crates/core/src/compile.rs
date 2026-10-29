@@ -35,6 +35,8 @@ struct Flat {
     out_names: Vec<String>,
     /// The diagram it sits in ("" for the top level, "Motor/" inside a subsystem named Motor).
     parent: String,
+    /// The names its parameters can use: 0 = the model's variables, else a masked subsystem's.
+    scope: usize,
 }
 
 pub struct Node {
@@ -167,14 +169,19 @@ fn eval_vars(m: &Model, over: &BTreeMap<String, f64>) -> Result<BTreeMap<String,
 /// Flatten the diagram tree into a list of blocks with resolved input sources.
 /// Flattened blocks, and each subsystem's (in, out) pass-through nodes.
 type Subs = BTreeMap<u32, (Vec<usize>, Vec<usize>)>;
+/// Masked subsystems in the order they nest: (the scope they sit in, the subsystem). Scope k + 1
+/// is the inside of entry k.
+type Scopes = Vec<(usize, Block)>;
 
-fn flatten(m: &Model, issues: &mut Vec<Issue>) -> (Vec<Flat>, Subs) {
+fn flatten(m: &Model, issues: &mut Vec<Issue>) -> (Vec<Flat>, Subs, Scopes) {
     let mut flat: Vec<Flat> = Vec::new();
     // block id → flat index; subsystem id → (in pass nodes, out pass nodes)
     let mut at: BTreeMap<u32, usize> = BTreeMap::new();
     let mut subs: BTreeMap<u32, (Vec<usize>, Vec<usize>)> = BTreeMap::new();
+    let mut scopes: Scopes = vec![];
 
-    fn nodes(d: &Diagram, prefix: &str, flat: &mut Vec<Flat>, at: &mut BTreeMap<u32, usize>, subs: &mut BTreeMap<u32, (Vec<usize>, Vec<usize>)>, inside: bool) {
+    #[allow(clippy::too_many_arguments)]
+    fn nodes(d: &Diagram, prefix: &str, flat: &mut Vec<Flat>, at: &mut BTreeMap<u32, usize>, subs: &mut BTreeMap<u32, (Vec<usize>, Vec<usize>)>, inside: bool, scopes: &mut Scopes, scope: usize) {
         for b in &d.blocks {
             let name = format!("{prefix}{}", b.name);
             // Notes are only for reading.
@@ -183,7 +190,14 @@ fn flatten(m: &Model, issues: &mut Vec<Issue>) -> (Vec<Flat>, Subs) {
             }
             if b.kind == "Subsystem" {
                 let sd = b.sub.clone().unwrap_or_default();
-                nodes(&sd, &format!("{name}/"), flat, at, subs, true);
+                // A mask opens a scope: its parameters, for the blocks inside.
+                let inner = if b.mask.is_some() {
+                    scopes.push((scope, b.clone()));
+                    scopes.len()
+                } else {
+                    scope
+                };
+                nodes(&sd, &format!("{name}/"), flat, at, subs, true, scopes, inner);
                 let (ins, outs) = blocks::sub_ports(&sd);
                 let map = |ids: Vec<u32>| ids.iter().filter_map(|i| at.get(i).cloned()).collect::<Vec<_>>();
                 subs.insert(b.id, (map(ins), map(outs)));
@@ -210,10 +224,10 @@ fn flatten(m: &Model, issues: &mut Vec<Issue>) -> (Vec<Flat>, Subs) {
                 block.params.insert("value".into(), "0".into());
             }
             at.insert(b.id, flat.len());
-            flat.push(Flat { id: b.id, name, kind: kind.into(), block, inputs: vec![None; ni], nout: no, out_names, parent: prefix.to_string() });
+            flat.push(Flat { id: b.id, name, kind: kind.into(), block, inputs: vec![None; ni], nout: no, out_names, parent: prefix.to_string(), scope });
         }
     }
-    nodes(&m.root, "", &mut flat, &mut at, &mut subs, false);
+    nodes(&m.root, "", &mut flat, &mut at, &mut subs, false, &mut scopes, 0);
 
     fn wires(d: &Diagram, flat: &mut [Flat], at: &BTreeMap<u32, usize>, subs: &BTreeMap<u32, (Vec<usize>, Vec<usize>)>, issues: &mut Vec<Issue>) {
         for w in &d.wires {
@@ -244,7 +258,32 @@ fn flatten(m: &Model, issues: &mut Vec<Issue>) -> (Vec<Flat>, Subs) {
     }
     wires(&m.root, &mut flat, &at, &subs, issues);
     goto_from(&mut flat, issues);
-    (flat, subs)
+    (flat, subs, scopes)
+}
+
+/// The names each scope offers: the model's variables, then each mask's parameters evaluated in
+/// the scope around it (an inner mask's names hide the outer ones and the model's).
+fn scope_vars(vars: &BTreeMap<String, Mat>, scopes: &Scopes, issues: &mut Vec<Issue>) -> Vec<BTreeMap<String, Mat>> {
+    let mut out = vec![vars.clone()];
+    for (parent, b) in scopes {
+        let mut v = out[*parent].clone();
+        for p in b.mask.as_ref().map_or(&[][..], |m| &m.params[..]) {
+            if !p.choices.is_empty() {
+                continue;
+            }
+            let text = blocks::param(b, &p.key);
+            let outer = &out[*parent];
+            match expr::eval(&text, &|n| outer.get(n).cloned()) {
+                Ok(x) if x.d.iter().all(|y| !y.is_nan()) => {
+                    v.insert(p.key.clone(), x);
+                }
+                Ok(_) => issues.push(err(b.id, format!("{}: {}: the value is not a number", b.name, if p.label.is_empty() { &p.key } else { &p.label }))),
+                Err(e) => issues.push(err(b.id, format!("{}: {}: {e}", b.name, if p.label.is_empty() { &p.key } else { &p.label }))),
+            }
+        }
+        out.push(v);
+    }
+    out
 }
 
 /// Each From becomes a pass-through fed by the signal into the Goto with its tag.
@@ -299,12 +338,13 @@ fn params<'a>(f: &Flat, vars: &'a BTreeMap<String, Mat>, base: Option<&'a Path>)
 pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> Result<Sim, Vec<Issue>> {
     let vars = eval_vars(m, over)?;
     let mut issues = vec![];
-    let (flat, subs) = flatten(m, &mut issues);
+    let (flat, subs, scopes) = flatten(m, &mut issues);
+    let svars = scope_vars(&vars, &scopes, &mut issues);
     let n = flat.len();
     // Parameters
     let mut pvs = Vec::with_capacity(n);
     for f in &flat {
-        match params(f, &vars, base) {
+        match params(f, &svars[f.scope], base) {
             Ok(p) => pvs.push(Some(p)),
             Err(e) => {
                 issues.push(err(f.id, format!("{}: {e}", f.name)));
@@ -825,8 +865,16 @@ fn rows(m: &Mat) -> Vec<Vec<f64>> {
 pub fn linear(m: &Model, id: u32) -> Result<LinSys, String> {
     let b = m.block(id).ok_or("Select a block first.")?.clone();
     let vars = eval_vars(m, &BTreeMap::new()).map_err(|e| e.into_iter().map(|i| i.msg).collect::<Vec<_>>().join("; "))?;
-    let f = Flat { id, name: b.name.clone(), kind: b.kind.clone(), block: b.clone(), inputs: vec![], nout: 1, out_names: vec![], parent: String::new() };
-    let p = params(&f, &vars, None).map_err(|e| format!("{}: {e}", b.name))?;
+    // Inside a masked subsystem the block sees the mask's parameters.
+    let (flat, _, scopes) = flatten(m, &mut vec![]);
+    let mut issues = vec![];
+    let svars = scope_vars(&vars, &scopes, &mut issues);
+    let scope = flat.iter().find(|f| f.id == id).map_or(0, |f| f.scope);
+    if let Some(i) = issues.first() {
+        return Err(i.msg.clone());
+    }
+    let f = Flat { id, name: b.name.clone(), kind: b.kind.clone(), block: b.clone(), inputs: vec![], nout: 1, out_names: vec![], parent: String::new(), scope };
+    let p = params(&f, &svars[scope], None).map_err(|e| format!("{}: {e}", b.name))?;
     let s = |k: &str| p.m.get(k).and_then(|v| v.s().ok()).ok_or_else(|| format!("{}: {k} must be a single number", b.name));
     let lin = match b.kind.as_str() {
         "TransferFcn" | "ZPK" | "StateSpace" => {

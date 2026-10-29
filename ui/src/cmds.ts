@@ -22,6 +22,12 @@ export const C = {
   // ---------- editing ----------
   addBlock: async (kind: string, at?: Pt) => {
     const p = at ?? viewCenter();
+    // A saved block from My blocks: a copy is pasted in.
+    if (kind.startsWith("my:")) {
+      const o = await call<Out>("add_myblock", { file: kind.slice(3), parent: parent(), x: Math.round(p[0] / 10) * 10, y: Math.round(p[1] / 10) * 10 });
+      if (o) { setOut(o); await refreshView(); setSel(o.created.filter(id => dview()?.blocks.some(b => b.id === id))); }
+      return;
+    }
     const o = await act({ Add: { parent: parent(), kind, x: p[0], y: p[1] } });
     if (o?.created.length) setSel(o.created);
   },
@@ -54,6 +60,8 @@ export const C = {
     openMenu(at, [{ label: "No colour", run: () => act({ SetColor: { ids, color: "" } }) }, ...(lib().colours ?? []).map(([k, tint]) => ({ label: `● ${k[0].toUpperCase()}${k.slice(1)}`, swatch: tint, run: () => act({ SetColor: { ids, color: k } }) }))]);
   },
   note: () => C.addBlock("Note"),
+  mask: () => { const b = selBlocks()[0]; if (!b?.sub) return toast("Select a subsystem to mask (Create subsystem first)."); D.maskEditor(b); },
+  saveMyBlock: () => { const b = selBlocks()[0]; if (!b?.sub) return toast("Select a subsystem to save to My blocks."); D.saveMyBlock(b); },
   find: () => findDialog(),
   nameSignal: () => { const w = dview()?.wires.find(x => sel().includes(x.id)); if (!w) return toast("Select a wire to name its signal."); nameWire(w); },
   setSim: (k: string, v: number | string | boolean) => { const s = out()?.sim; if (s) act({ SetSim: { sim: { ...s, [k]: v } } }); },
@@ -160,7 +168,7 @@ export const ALL_CMDS: [string, () => void, string?][] = [
   ["Run", C.run, "F5"], ["Stop", C.stop], ["Pause / Resume", C.pause], ["Step", C.step], ["Check model", C.check],
   ["Save", () => C.save(), "Ctrl+S"], ["Save As", () => C.save(true)], ["Open", C.open, "Ctrl+O"], ["New model", () => setBackstage("home"), "Ctrl+N"], ["Print / PDF", C.print, "Ctrl+P"],
   ["Undo", C.undo, "Ctrl+Z"], ["Redo", C.redo, "Ctrl+Y"], ["Add block", C.quickAdd, "Double-click"], ["Delete", C.del, "Del"], ["Copy", C.copy, "Ctrl+C"], ["Paste", C.paste, "Ctrl+V"], ["Cut", C.cut, "Ctrl+X"],
-  ["Find a block or signal", C.find, "Ctrl+F"], ["Name the signal on a wire", C.nameSignal], ["Add a note", C.note], ["Distribute horizontally", () => C.distribute("x")], ["Distribute vertically", () => C.distribute("y")],
+  ["Find a block or signal", C.find, "Ctrl+F"], ["Mask the subsystem", C.mask], ["Save to My blocks", C.saveMyBlock], ["Name the signal on a wire", C.nameSignal], ["Add a note", C.note], ["Distribute horizontally", () => C.distribute("x")], ["Distribute vertically", () => C.distribute("y")],
   ["Flip block", C.flip, "Ctrl+R"], ["Rename block", C.rename, "F2"], ["Create subsystem", C.group, "Ctrl+G"], ["Ungroup subsystem", () => C.ungroup()],
   ["Model variables", C.vars], ["Parameter sweep", C.sweep], ["Bode plot", () => C.analyze("bode")], ["Step response", () => C.analyze("step")], ["Poles and zeros", () => C.analyze("pz")],
   ["Step-response specifications", C.stepInfo], ["Export results as CSV", () => C.exportCsv()], ["Send results to Datum Plot", C.toPlot],

@@ -7,6 +7,7 @@ import { invoke } from "./api";
 import { C } from "./cmds";
 import { helpCard } from "./help";
 import { Dialog } from "./ui";
+import * as D from "./dialogs";
 
 const GRID = 10;
 export const [zoom, setZoom] = createSignal(1);
@@ -121,7 +122,7 @@ const BlockArt = (p: { b: BlockView }) => {
       const v = displayValue(b().id);
       return <T x={cx} y={cy} size={12} bold>{v}</T>;
     }
-    if (k === "Subsystem") return <T x={cx} y={cy} size={10} bold>{clip(b().name, 16)}</T>;
+    if (k === "Subsystem") return <T x={cx} y={cy} size={b().mask ? 12 : 10} bold>{clip(b().mask ? b().label || b().name : b().name, 16)}</T>;
     if (k === "Note") return <foreignObject x={6} y={4} width={Math.max(10, w() - 12)} height={Math.max(10, h() - 8)}><div class="notetext">{b().params.text ?? ""}</div></foreignObject>;
     if (k === "PID") return <T x={cx} y={cy} size={12} bold>PID</T>;
     if (k === "DiscretePID") return <T x={cx} y={cy} size={12} bold>PID(z)</T>;
@@ -367,7 +368,9 @@ export const Canvas = () => {
     if ((e.target as Element).closest("[data-wire]")) return;
     const b = blockAt(p);
     if (!b) { quickInsert(p); return; }
-    if (b.sub) enter(b.id);
+    // A masked subsystem is a block: double-click edits its parameters; look under the mask to go in.
+    if (b.sub && b.mask) { setSel([b.id]); document.querySelector<HTMLInputElement>(".insp input, .insp select")?.focus(); }
+    else if (b.sub) enter(b.id);
     else if (b.kind === "Scope" || b.kind === "XY") { if (!scopes().includes(b.id)) setScopes([...scopes(), b.id]); }
     else { setSel([b.id]); document.querySelector<HTMLInputElement>(".insp input, .insp select")?.focus(); }
   };
@@ -446,7 +449,7 @@ export const Canvas = () => {
       return openMenu(e, [{ label: "Name the signal…", icon: "rename", run: () => nameWire(wr) }, { label: "Straighten (remove bends)", run: () => act({ SetPts: { id: wr.id, pts: [] } }), off: !wr.pts.length }, "-", { label: "Delete", icon: "del", run: C.del, keys: "Del" }]);
     }
     const items: Item[] = b ? [
-      ...(b.sub ? [{ label: "Open subsystem", run: () => enter(b.id) } as Item] : []),
+      ...(b.sub ? [{ label: b.mask ? "Look under the mask" : "Open subsystem", run: () => enter(b.id) } as Item, { label: b.mask ? "Edit the mask…" : "Add a mask…", run: () => D.maskEditor(b) } as Item, { label: "Save to My blocks…", run: () => D.saveMyBlock(b) } as Item] : []),
       ...(b.kind === "Scope" || b.kind === "XY" ? [{ label: "Open scope", icon: "scope", run: () => setScopes([...new Set([...scopes(), b.id])]) } as Item] : []),
       { label: "Rename…", icon: "rename", run: C.rename, keys: "F2" }, { label: "Flip", icon: "flip", run: C.flip, keys: "Ctrl+R" }, { label: "Colour…", run: () => C.colourMenu({ x: e.clientX, y: e.clientY }) },
       "-", { label: "Cut", icon: "cut", run: C.cut, keys: "Ctrl+X" }, { label: "Copy", icon: "copy", run: C.copy, keys: "Ctrl+C" }, { label: "Delete", icon: "del", run: C.del, keys: "Del" },
@@ -516,7 +519,7 @@ export const Canvas = () => {
               onMouseEnter={() => setHover(b.id)} onMouseLeave={() => setHover(null)}>
               <title>{`${b.name} (${defOf(b.kind)?.name ?? b.kind})${issues().filter(i => i.id === b.id).map(i => "\n" + i.msg).join("")}`}</title>
               <BlockArt b={b} />
-              <text x={b.w / 2} y={b.h + 11} class="bname" text-anchor="middle">{b.kind === "Subsystem" || b.kind === "Note" ? "" : b.name}</text>
+              <text x={b.w / 2} y={b.h + 11} class="bname" text-anchor="middle">{(b.kind === "Subsystem" && !b.mask) || b.kind === "Note" ? "" : b.name}</text>
               <Show when={sel().length === 1 && selSet().has(b.id) && b.kind !== "Sum"}><rect data-size={b.id} x={b.w - 4} y={b.h - 4} width={8} height={8} class="bsize" /></Show>
             </g>;
           }}</For>

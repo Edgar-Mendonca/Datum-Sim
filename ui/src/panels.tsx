@@ -1,8 +1,9 @@
 // The Library panel (blocks to drag in) and the Inspector (the selected block's parameters, or the
 // model's settings when nothing is selected).
-import { For, Show, createSignal, createMemo, createEffect, on } from "solid-js";
-import { Def, BlockView, Issue, num, invoke } from "./api";
-import { lib, selBlocks, selWires, act, out, defOf, issues, results, chans, setView, sel, enter, setIssues } from "./store";
+import { For, Show, createSignal, createMemo, createEffect, on, onMount } from "solid-js";
+import { Def, BlockView, Issue, num, invoke, MyBlock } from "./api";
+import { lib, selBlocks, selWires, act, out, defOf, issues, results, chans, setView, sel, enter, setIssues, myBlocks, refreshMyBlocks, openMenu, toast, call } from "./store";
+import * as D from "./dialogs";
 import { C } from "./cmds";
 import { dropBlock } from "./canvas";
 import { Help, helpCard } from "./help";
@@ -35,9 +36,25 @@ export const LibGhost = () => (
   <Show when={ghost()}>{g => <div class="libghost" classList={{ over: g().over }} style={{ left: `${g().x - g().d.w / 2}px`, top: `${g().y - g().d.h / 2}px`, width: `${g().d.w}px`, height: `${g().d.h}px` }}><span>{g().d.name}</span></div>}</Show>
 );
 
+/** A masked subsystem read as a block definition, so the Inspector shows it like any block. */
+export const maskDef = (b: BlockView): Def => ({
+  kind: "Subsystem", name: b.name, cat: "", what: b.mask?.help || "A masked subsystem.", how: "", w: b.w, h: b.h, planned: "",
+  params: (b.mask?.params ?? []).map(p => ({ key: p.key, label: p.label || p.key, def: p.def, unit: p.unit, hint: p.hint, kind: p.choices.length ? "choice" : "num", choices: p.choices })),
+  presets: b.mask?.presets ?? [],
+});
+
+/** My blocks are dragged like library blocks: their kind is "my:" and the file. */
+const myDef = (m: MyBlock): Def => ({ kind: `my:${m.file}`, name: m.name, cat: "My blocks", what: m.what || "Your saved block.", how: "", params: [], w: 100, h: 70, planned: "", presets: [] });
+
 export const LibraryPanel = () => {
   const [q, setQ] = createSignal("");
   const [shut, setShut] = createSignal<string[]>([]);
+  onMount(refreshMyBlocks);
+  const mine = createMemo(() => { const s = q().toLowerCase(); return myBlocks().filter(m => !s || m.name.toLowerCase().includes(s) || m.what.toLowerCase().includes(s)); });
+  const mineMenu = (e: MouseEvent, m: MyBlock) => { e.preventDefault(); openMenu(e, [
+    { label: "Add to the diagram", run: () => C.addBlock(`my:${m.file}`) },
+    { label: "Remove from My blocks", run: async () => { await call("delete_myblock", { file: m.file }); refreshMyBlocks(); toast(`Removed ${m.name} from My blocks. Models that use it keep their copy.`, true); } },
+  ]); };
   const groups = createMemo(() => {
     const s = q().toLowerCase();
     return lib().cats.map(c => [c, lib().blocks.filter(d => d.cat === c && (!s || d.name.toLowerCase().includes(s) || d.what.toLowerCase().includes(s) || d.kind.toLowerCase().includes(s)))] as [string, Def[]]).filter(g => g[1].length);
@@ -47,6 +64,18 @@ export const LibraryPanel = () => {
       <header><b>Library</b><Help k="library" /></header>
       <input class="libq" placeholder="Search blocks" value={q()} onInput={e => setQ(e.currentTarget.value)} />
       <div class="libl">
+        <Show when={mine().length}>
+          <section class="mylib">
+            <button class="libc" onClick={() => setShut(shut().includes("My blocks") ? shut().filter(x => x !== "My blocks") : [...shut(), "My blocks"])}><b class="car">{shut().includes("My blocks") && !q() ? "▸" : "▾"}</b>My blocks</button>
+            <Show when={!shut().includes("My blocks") || q()}>
+              <For each={mine()}>{m => (
+                <div class="libi mine" title={m.what || m.name} onMouseDown={e => e.button === 0 && startDrag(e, myDef(m))} onDblClick={() => C.addBlock(`my:${m.file}`)} onContextMenu={e => mineMenu(e, m)}>
+                  <Icon n="sub" /><span>{m.name}</span>
+                </div>
+              )}</For>
+            </Show>
+          </section>
+        </Show>
         <For each={groups()}>{([cat, defs]) => (
           <section>
             <button class="libc" onClick={() => setShut(shut().includes(cat) ? shut().filter(x => x !== cat) : [...shut(), cat])}><b class="car">{shut().includes(cat) && !q() ? "▸" : "▾"}</b>{cat}</button>
@@ -109,7 +138,7 @@ const Param = (p: { b: BlockView; def: Def; k: number }) => {
 
 export const Inspector = () => {
   const b = () => selBlocks()[0];
-  const def = () => (b() ? defOf(b()!.kind) : undefined);
+  const def = () => (b() ? (b()!.mask ? maskDef(b()!) : defOf(b()!.kind)) : undefined);
   const [name, setName] = createSignal("");
   createEffect(on(b, x => setName(x?.name ?? "")));
   const blockIssues = () => issues().filter(i => i.id === b()?.id);
@@ -121,13 +150,16 @@ export const Inspector = () => {
   return (
     <aside class="insp">
       <Show when={b() && def()} fallback={<ModelPanel />}>
-        <header><b>{def()!.name}</b><button class="help" title={`About ${def()!.name}`} onClick={() => helpCard(`block:${b()!.kind}`)}>?</button></header>
+        <header><b>{b()!.mask ? `${def()!.name} (masked)` : def()!.name}</b><button class="help" title={`About ${def()!.name}`} onClick={() => (b()!.mask ? D.maskHelp(b()!) : helpCard(`block:${b()!.kind}`))}>?</button></header>
         <div class="ibody">
           <div class="iprow"><label>Name</label><input value={name()} onChange={e => act({ Rename: { id: b()!.id, name: e.currentTarget.value } }).then(o => { if (!o) setName(b()!.name); })} /></div>
           <p class="muted iwhat">{def()!.what}</p>
           <Show when={def()!.presets?.length}><Presets b={b()!} def={def()!} /></Show>
           <For each={def()!.params}>{(_, k) => <Param b={b()!} def={def()!} k={k()} />}</For>
-          <Show when={b()!.sub}><p><button class="btn sm" onClick={() => enter(b()!.id)}><Icon n="sub" /> Open subsystem</button> <button class="btn sm" onClick={() => C.ungroup(b()!.id)}>Ungroup</button></p></Show>
+          <Show when={b()!.sub}>
+            <p class="ibtns"><button class="btn sm" onClick={() => enter(b()!.id)}><Icon n="sub" /> {b()!.mask ? "Look under the mask" : "Open subsystem"}</button><Show when={!b()!.mask}><button class="btn sm" onClick={() => C.ungroup(b()!.id)}>Ungroup</button></Show></p>
+            <p class="ibtns"><button class="btn sm maskbtn" onClick={() => D.maskEditor(b()!)}>{b()!.mask ? "Edit the mask…" : "Add a mask…"}</button><button class="btn sm mybtn" onClick={() => D.saveMyBlock(b()!)}>Save to My blocks…</button></p>
+          </Show>
           <Show when={["TransferFcn", "ZPK", "StateSpace", "PID", "DCMotor", "Gain", "Integrator"].includes(b()!.kind)}>
             <h4>Analyze</h4><p class="ibtns"><button class="btn sm" onClick={() => C.analyze("bode")}><Icon n="bode" /> Bode</button><button class="btn sm" onClick={() => C.analyze("step")}><Icon n="specs" /> Step</button><button class="btn sm" onClick={() => C.analyze("pz")}>Poles &amp; zeros</button></p>
           </Show>

@@ -30,7 +30,7 @@ Draw a model as blocks and wires, press Run, and see how the system behaves over
 - **Discrete control**: discrete transfer function, state space, integrator and PID, rate transition; the diagram can colour every block by its sample time.
 - **Motors**: DC (permanent-magnet, separately excited, shunt, series, compound), induction (squirrel-cage, double-cage, wound-rotor), synchronous (permanent-magnet, reluctance, wound-field with dampers), switched reluctance, BLDC and stepper motors, with typical values for low, medium and high voltage ratings.
 - **Drives**: three-phase source, inverter (average or switched), DC link, PWM, Clarke and Park transforms, encoder, current sensor; worked examples from a direct-on-line start to field-oriented control.
-- **Subsystems**: group blocks into one, open them, nest them; Goto/From tags send signals without wires.
+- **Subsystems**: group blocks into one, open them, nest them; give them a **mask** (parameters of their own, help, typical ratings) and keep them in **My blocks**, your own library. Goto/From tags send signals without wires.
 - **Five solvers**: from fixed-step Euler to variable-step and stiff; the variable-step solvers find switching times exactly.
 - **Live scopes** with two measuring cursors, step-response marks, comparison of earlier runs, stacked plots and PNG or SVG pictures; a probe reads any wire after a run. Parameter sweeps, and results as CSV for Datum Plot.
 - **Analysis** from the built-in Python engine: Bode plots and stability margins, step responses, poles and zeros, rise time, overshoot and settling time.

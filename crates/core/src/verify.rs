@@ -246,6 +246,11 @@ mod tests {
                 "pmsmdigital" => assert!(last(0).abs() < 2.0 && (last(3) - 12.5).abs() < 0.5 && last(4) > 650.0, "pmsmdigital {} {} {}", last(0), last(3), last(4)),
                 "dcdigital" => assert!((last(0) - 1.0).abs() < 0.01 && (last(1) - 1.0).abs() < 0.01, "dcdigital {} {}", last(0), last(1)),
                 "srm" => assert!((last(0) - 150.0).abs() < 4.5, "srm speed {}", last(0)),
+                // Each copy at its own no-load speed V/(Ke + R·b/Kt) with its own values.
+                "masked" => {
+                    let w = |r: f64, ke: f64, kt: f64, b: f64| 12.0 / (ke + r * b / kt);
+                    assert!((last(0) - w(2.0, 0.01, 0.01, 1e-6)).abs() < 1e-3 * last(0) && (last(1) - w(0.2, 0.12, 0.12, 5e-5)).abs() < 1e-3 * last(1), "masked {} {}", last(0), last(1));
+                }
                 // Twenty full steps of π/100, give or take the last one in progress.
                 "stepper" => assert!((last(0) - 0.2 * std::f64::consts::PI).abs() < 0.02, "stepper angle {}", last(0)),
                 "thermostat" => {
@@ -890,6 +895,98 @@ mod tests {
         assert!(hits.iter().any(|h| h.id == g && h.parent == sub && !h.path.is_empty()), "{hits:?}");
         assert!(crate::view::find(&m.d.m, "DEMAND").iter().any(|h| h.id == s), "a named signal finds its source");
         assert!(crate::view::find(&m.d.m, "  ").is_empty());
+    }
+
+    fn mask(params: &[(&str, &str)]) -> crate::model::Mask {
+        crate::model::Mask {
+            params: params.iter().map(|(k, d)| crate::model::MaskParam { key: (*k).into(), label: format!("Value {k}"), def: (*d).into(), ..Default::default() }).collect(),
+            icon: "K·u".into(),
+            help: "Multiplies by K.".into(),
+            presets: vec![crate::model::MaskPreset { name: "Double".into(), values: vec![("K".into(), "2".into())] }],
+        }
+    }
+
+    /// Masks (0.2.0): the blocks inside use the mask's parameters by name; an inner mask hides an
+    /// outer one and the model's variables; values are set like any block's; errors point at the
+    /// subsystem; bad masks are refused; the file keeps the mask; a format 1 file still opens.
+    #[test]
+    fn masks_scope_their_parameters() {
+        let mut m = Mk::new(1.0, "rk45");
+        m.d.m.vars.push(crate::model::Var { name: "K".into(), expr: "100".into(), ..Default::default() });
+        let one = m.add("Constant", &[("value", "1")]);
+        let g = m.add("Gain", &[("k", "K")]);
+        let sc = m.add("Scope", &[]);
+        m.wire(one, 0, g, 0);
+        m.wire(g, 0, sc, 0);
+        assert_eq!(last(&m.run(), 0), 100.0, "the model's K");
+        let sub = m.d.apply(Op::Group { ids: vec![g] }).unwrap()[0];
+        m.d.apply(Op::SetMask { id: sub, mask: Some(mask(&[("K", "3")])) }).unwrap();
+        assert_eq!(last(&m.run(), 0), 3.0, "the mask's default hides the model's K");
+        m.d.apply(Op::SetParam { id: sub, key: "K".into(), value: "4*2".into() }).unwrap();
+        assert_eq!(last(&m.run(), 0), 8.0, "a value set on the masked block");
+        // A mask parameter can use the model's variables.
+        m.d.apply(Op::SetParam { id: sub, key: "K".into(), value: "K/50".into() }).unwrap();
+        assert_eq!(last(&m.run(), 0), 2.0, "K/50 with the outer K = 100");
+        // Nested: grouping makes a new outer subsystem; its mask's K hides the model's K for
+        // everything inside, so the inner mask's K/50 is now 7/50.
+        let outer = m.d.apply(Op::Group { ids: vec![sub] }).unwrap()[0];
+        m.d.apply(Op::SetMask { id: outer, mask: Some(mask(&[("K", "7"), ("G", "2")])) }).unwrap();
+        assert!((last(&m.run(), 0) - 0.14).abs() < 1e-12, "K/50 in the outer mask's scope");
+        // An error in a mask value points at the subsystem.
+        m.d.apply(Op::SetParam { id: sub, key: "K".into(), value: "Q+1".into() }).unwrap();
+        let e = compile(&m.d.m, None, &none()).err().unwrap();
+        assert!(e.iter().any(|i| i.id == sub && i.msg.contains("unknown name 'Q'")), "{e:?}");
+        // Refused: unknown parameters, bad names, duplicates, presets of unknown keys, non-subsystems.
+        assert!(m.d.apply(Op::SetParam { id: sub, key: "nope".into(), value: "1".into() }).is_err());
+        for bad in [mask(&[("2x", "1")]), mask(&[("t", "1")]), mask(&[("u3", "1")]), mask(&[("A", "1"), ("A", "2")]), mask(&[("A", "1")])] {
+            assert!(m.d.apply(Op::SetMask { id: sub, mask: Some(bad.clone()) }).is_err(), "{bad:?}");
+        }
+        assert!(m.d.apply(Op::SetMask { id: one, mask: Some(mask(&[("K", "1")])) }).is_err());
+        // The file keeps the mask and its values; the view shows the mask's parameters.
+        m.d.apply(Op::SetParam { id: sub, key: "K".into(), value: "5".into() }).unwrap();
+        let back = crate::model::from_json(&crate::model::to_json(&m.d.m)).unwrap();
+        assert_eq!(back.block(sub).unwrap().mask.as_ref().unwrap().params[0].key, "K");
+        assert_eq!(back.block(sub).unwrap().params.get("K").map(|s| s.as_str()), Some("5"));
+        let v = crate::view::view(&m.d.m, outer).unwrap();
+        let bv = v.blocks.iter().find(|b| b.id == sub).unwrap();
+        assert_eq!((bv.params.get("K").map(|s| s.as_str()), bv.label.as_str()), (Some("5"), "K·u"));
+        // Removing the mask drops its values; the inside then sees the model's K again.
+        m.d.apply(Op::SetMask { id: outer, mask: None }).unwrap();
+        m.d.apply(Op::SetMask { id: sub, mask: None }).unwrap();
+        assert!(m.d.m.block(sub).unwrap().params.is_empty());
+        assert_eq!(last(&m.run(), 0), 100.0);
+        // A format 1 file opens (and is saved as format 2).
+        let mut old: serde_json::Value = serde_json::from_str(&crate::model::to_json(&m.d.m)).unwrap();
+        old["format"] = serde_json::json!(1);
+        let o = crate::model::from_json(&old.to_string()).unwrap();
+        assert_eq!(o.format, crate::model::FORMAT);
+        assert_eq!(crate::model::FORMAT, 2);
+    }
+
+    /// My blocks: a masked subsystem saved as a library clip pastes back as an independent copy
+    /// (copied, not linked) with its mask, at the place asked for; plain blocks are refused.
+    #[test]
+    fn my_blocks_copy_a_subsystem() {
+        let mut m = Mk::new(1.0, "rk45");
+        let one = m.add("Constant", &[("value", "1")]);
+        let g = m.add("Gain", &[("k", "K")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(one, 0, g, 0);
+        m.wire(g, 0, sc, 0);
+        let sub = m.d.apply(Op::Group { ids: vec![g] }).unwrap()[0];
+        m.d.apply(Op::SetMask { id: sub, mask: Some(mask(&[("K", "3")])) }).unwrap();
+        assert!(m.d.block_clip(one).is_err(), "only subsystems");
+        let clip = m.d.block_clip(sub).unwrap();
+        let made = m.d.apply(Op::Paste { parent: 0, clip, dx: 400.0, dy: 120.0 }).unwrap();
+        let copy = *made.iter().find(|id| m.d.m.block(**id).is_some_and(|b| b.kind == "Subsystem")).unwrap();
+        let b = m.d.m.block(copy).unwrap().clone();
+        assert_eq!((b.x, b.y), (400.0, 120.0));
+        assert!(b.mask.is_some() && copy != sub, "a copy with its mask and its own id");
+        m.d.apply(Op::SetParam { id: copy, key: "K".into(), value: "5".into() }).unwrap();
+        m.wire(one, 0, copy, 0);
+        m.wire(copy, 0, sc, 1);
+        let r = m.run();
+        assert_eq!((last(&r, 0), last(&r, 1)), (3.0, 5.0), "each copy keeps its own values");
     }
 
     // ------------------------------------------------------------ motor extras and power balance

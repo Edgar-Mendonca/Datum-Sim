@@ -26,6 +26,9 @@ pub struct BlockView {
     pub params: BTreeMap<String, String>,
     pub sub: bool,
     pub color: String,
+    /// A masked subsystem's mask (its parameters are in `params`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mask: Option<crate::model::Mask>,
 }
 
 #[derive(Serialize)]
@@ -90,9 +93,10 @@ pub fn view(m: &Model, parent: u32) -> Option<View> {
     for b in &d.blocks {
         let (ins, outs) = blocks::port_xy(b);
         let (in_names, out_names) = blocks::port_names(b);
-        let params = blocks::def(&b.kind)
-            .map(|def| def.params.iter().map(|p| (p.key.to_string(), blocks::param(b, p.key))).collect())
-            .unwrap_or_default();
+        let params = match &b.mask {
+            Some(mk) => mk.params.iter().map(|p| (p.key.clone(), blocks::param(b, &p.key))).collect(),
+            None => blocks::def(&b.kind).map(|def| def.params.iter().map(|p| (p.key.to_string(), blocks::param(b, p.key))).collect()).unwrap_or_default(),
+        };
         blocks_v.push(BlockView {
             id: b.id,
             kind: b.kind.clone(),
@@ -110,6 +114,7 @@ pub fn view(m: &Model, parent: u32) -> Option<View> {
             params,
             sub: b.sub.is_some(),
             color: b.color.clone(),
+            mask: b.mask.clone(),
         });
     }
     // Wires may run over notes: they are only text.

@@ -1,8 +1,8 @@
 // Dialogs and pages: rename, variables, sweep, analyses, step specifications, issues, help pages.
 import { For, Show, createSignal, createResource, JSX } from "solid-js";
 import uPlot from "uplot";
-import { num, Var, Out } from "./api";
-import { openDialog, closeDialog, act, call, out, setOut, toast, issues, results, chans, setLiveTick, setResults } from "./store";
+import { num, Var, Out, Mask, MaskParam, BlockView } from "./api";
+import { openDialog, closeDialog, act, call, out, setOut, toast, issues, results, chans, setLiveTick, setResults, refreshMyBlocks } from "./store";
 import { invoke } from "./api";
 import { C } from "./cmds";
 import { Dialog, Icon } from "./ui";
@@ -13,6 +13,71 @@ export const rename = (id: number, name: string) => openDialog(() => {
   const [v, setV] = createSignal(name);
   return <Dialog title="Rename block" ok={async () => (await act({ Rename: { id, name: v() } })) ? undefined : false}>
     <div class="form"><label>Name</label><input value={v()} onInput={e => setV(e.currentTarget.value)} /></div>
+  </Dialog>;
+});
+
+/** The mask editor: a subsystem's own parameters (names the blocks inside use), the text on the
+ *  block, its help, and typical ratings saved from the current values. */
+export const maskEditor = (b: BlockView) => openDialog(() => {
+  const m0: Mask = b.mask ?? { params: [], icon: "", help: "", presets: [] };
+  const [rows, setRows] = createSignal<(MaskParam & { ch: string })[]>(m0.params.map(p => ({ ...p, ch: p.choices.join(", ") })));
+  const [icon, setIcon] = createSignal(m0.icon), [help, setHelp] = createSignal(m0.help);
+  const [presets, setPresets] = createSignal(m0.presets);
+  const put = (i: number, k: keyof MaskParam | "ch", v: string) => setRows(r => r.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const mask = (): Mask => ({
+    params: rows().map(r => ({ key: r.key.trim(), label: r.label.trim(), def: r.def.trim(), unit: r.unit.trim(), hint: r.hint.trim(), choices: r.ch.split(",").map(x => x.trim()).filter(Boolean) })),
+    icon: icon(), help: help(), presets: presets(),
+  });
+  const [rname, setRname] = createSignal("");
+  const saveRating = () => {
+    const name = rname().trim(); if (!name) return toast("Give the rating a name, for example 400 V · 11 kW.");
+    setRname("");
+    const vals: [string, string][] = rows().filter(r => r.key.trim()).map(r => [r.key.trim(), b.params[r.key.trim()] ?? r.def]);
+    setPresets(p => [...p.filter(x => x.name !== name), { name, values: vals }]);
+  };
+  return <Dialog title={`Mask: ${b.name}`} wide okText="Save mask" ok={async () => (await act({ SetMask: { id: b.id, mask: mask() } })) ? undefined : false}
+    extra={<Show when={b.mask}><button class="btn" onClick={() => { closeDialog(); act({ SetMask: { id: b.id, mask: null } }); }}>Remove the mask</button></Show>}>
+    <p class="muted">A mask gives this subsystem parameters of its own. The blocks inside use them by name (for example a Gain of <span class="mono">R*2</span>); set their values on the block like any other block's.</p>
+    <table class="tbl maskt"><thead><tr><th>Name</th><th>Label</th><th>Default</th><th>Unit</th><th>Choices (comma-separated)</th><th /></tr></thead><tbody>
+      <For each={rows()}>{(r, i) => <tr>
+        <td><input class="mono mk-key" value={r.key} placeholder="R" onInput={e => put(i(), "key", e.currentTarget.value)} /></td>
+        <td><input value={r.label} placeholder="Resistance R" onInput={e => put(i(), "label", e.currentTarget.value)} /></td>
+        <td><input class="mono" value={r.def} placeholder="1" onInput={e => put(i(), "def", e.currentTarget.value)} /></td>
+        <td><input value={r.unit} placeholder="Ω" onInput={e => put(i(), "unit", e.currentTarget.value)} /></td>
+        <td><input value={r.ch} placeholder="(a number)" onInput={e => put(i(), "ch", e.currentTarget.value)} /></td>
+        <td><button class="x" title="Remove" onClick={() => setRows(x => x.filter((_, j) => j !== i()))}>×</button></td></tr>}</For>
+    </tbody></table>
+    <p><button class="btn sm mk-add" onClick={() => setRows(r => [...r, { key: "", label: "", def: "1", unit: "", hint: "", choices: [], ch: "" }])}>Add a parameter</button></p>
+    <div class="form"><label>Text on the block</label><input class="mk-icon" value={icon()} placeholder={b.name} onInput={e => setIcon(e.currentTarget.value)} />
+      <label>Help</label><textarea rows="3" value={help()} placeholder="What this block is and how to use it (its ? card)." onInput={e => setHelp(e.currentTarget.value)} /></div>
+    <h4>Typical ratings</h4>
+    <Show when={presets().length} fallback={<p class="muted">None yet. Set the block's values, then save them here as a rating.</p>}>
+      <ul class="plain"><For each={presets()}>{p => <li>{p.name} <button class="x" onClick={() => setPresets(x => x.filter(y => y.name !== p.name))}>×</button></li>}</For></ul>
+    </Show>
+    <p class="inline"><input class="mk-rname" value={rname()} placeholder="Rating name, e.g. 400 V · 11 kW" onInput={e => setRname(e.currentTarget.value)} /> <button class="btn sm" onClick={saveRating}>Save the block's current values as this rating</button></p>
+  </Dialog>;
+});
+
+/** A masked block's ? card: its own help and parameters. */
+export const maskHelp = (b: BlockView) => openDialog(() => (
+  <Dialog title={b.name}>
+    <div class="helpcard"><p>{b.mask?.help || "A masked subsystem."}</p>
+      <Show when={b.mask?.params.length}><h4>Parameters</h4><ul><For each={b.mask!.params}>{p => <li><span class="mono">{p.key}</span>{p.label && p.label !== p.key ? ` · ${p.label}` : ""}{p.unit ? ` (${p.unit})` : ""}{p.hint ? `: ${p.hint}` : ""}</li>}</For></ul></Show>
+      <p class="muted">Look under the mask (Inspector, or right-click) to see the blocks inside.</p></div>
+  </Dialog>
+));
+
+/** Save a subsystem to My blocks under a name; it is copied into every model it is used in. */
+export const saveMyBlock = (b: BlockView) => openDialog(() => {
+  const [n, setN] = createSignal(b.name);
+  return <Dialog title="Save to My blocks" okText="Save" ok={async () => {
+    const p = await call<string>("save_myblock", { id: b.id, name: n() });
+    if (!p) return false;
+    toast(`Saved to My blocks: ${n()}`, true);
+    refreshMyBlocks();
+  }}>
+    <p class="muted">The block appears in the Library under My blocks, for every model. A model gets its own copy each time you add it, so changing the saved block later does not change models that already use it.</p>
+    <div class="form"><label>Name</label><input class="mb-name" value={n()} onInput={e => setN(e.currentTarget.value)} /></div>
   </Dialog>;
 });
 

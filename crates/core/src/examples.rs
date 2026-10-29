@@ -1,6 +1,6 @@
 //! Worked examples and templates, built in code so they always match the current block library.
 
-use crate::model::{Block, Diagram, Model, Var, Wire};
+use crate::model::{Block, Diagram, Mask, MaskParam, MaskPreset, Model, Var, Wire};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -27,6 +27,7 @@ pub fn list() -> Vec<Example> {
         Example { id: "pmsmdigital", name: "PMSM: digital drive with a DC link", what: "Field-oriented control as a microcontroller runs it: a 10 kHz current loop and a 1 kHz speed loop, Goto/From tags, and a DC link fed by a diode rectifier that rises while the motor brakes." },
         Example { id: "dcdigital", name: "DC motor: digital and continuous PID", what: "The same DC motor speed loop twice, with a continuous PID and a discrete PID at 5 ms: compare the responses and the staircase of the digital controller." },
         Example { id: "srm", name: "Switched reluctance motor speed control", what: "A 6/4 switched reluctance motor with angle-based phase switching from an asymmetric bridge and a PI speed loop." },
+        Example { id: "masked", name: "A masked motor block, used twice", what: "The DC motor built from blocks, masked as a block of its own with parameters and typical ratings, and used for two different motors in one model." },
         Example { id: "tank", name: "Pump and tank level control", what: "A pump fills a tank that drains through a valve (flow ∝ √level); a PI controller holds the level." },
         Example { id: "cruise", name: "Vehicle cruise control", what: "A car with aerodynamic drag and rolling resistance; a PI controller sets the drive force to hold the speed." },
         Example { id: "thermostat", name: "Room thermostat (relay)", what: "A heater switched by a relay with hysteresis keeps a room warm; switching times are located exactly." },
@@ -116,6 +117,7 @@ pub fn get(id: &str) -> Option<Model> {
         "pmsmdigital" => pmsm_digital(),
         "dcdigital" => dc_digital(),
         "srm" => srm(),
+        "masked" => masked(),
         "tank" => tank(),
         "cruise" => cruise(),
         "thermostat" => thermostat(),
@@ -818,5 +820,52 @@ fn srm() -> Model {
     b.w(wr, 0, s1, 1);
     b.w(m, 1, s2, 0);
     b.w(m, 2, s3, 0);
+    b.done()
+}
+
+/// The DC motor's mask: its parameters (the names the blocks inside use) and two ratings.
+fn motor_mask() -> Mask {
+    let p = |key: &str, label: &str, def: &str, unit: &str| MaskParam { key: key.into(), label: label.into(), def: def.into(), unit: unit.into(), ..Default::default() };
+    let rating = |name: &str, v: &[(&str, &str)]| MaskPreset { name: name.into(), values: v.iter().map(|(k, x)| (k.to_string(), x.to_string())).collect() };
+    Mask {
+        params: vec![p("R", "Armature resistance R", "1", "Ω"), p("L", "Armature inductance L", "0.5", "H"), p("Ke", "Back-EMF constant Ke", "0.01", "V·s/rad"),
+                     p("Kt", "Torque constant Kt", "0.01", "N·m/A"), p("J", "Rotor inertia J", "0.01", "kg·m²"), p("b", "Viscous friction b", "0.1", "N·m·s/rad")],
+        icon: "DC motor".into(),
+        help: "A permanent-magnet DC motor built from blocks (look under the mask to see them). Inputs: voltage V and load torque T_L. Outputs: speed ω and current i.".into(),
+        presets: vec![
+            rating("12 V hobby motor", &[("R", "2"), ("L", "0.0005"), ("Ke", "0.01"), ("Kt", "0.01"), ("J", "1e-5"), ("b", "1e-6")]),
+            rating("48 V 750 W", &[("R", "0.2"), ("L", "0.0003"), ("Ke", "0.12"), ("Kt", "0.12"), ("J", "0.0005"), ("b", "5e-5")]),
+        ],
+    }
+}
+
+fn masked() -> Model {
+    let mut b = B::new(
+        "A masked motor block, used twice",
+        "The DC motor subsystem of the DC motor example, with a mask: it is now a block with its own parameters (select it to see them in the Inspector) and typical ratings. The two copies share the blocks inside but each has its own values: a 12 V hobby motor and a 48 V 750 W motor, both started by a 12 V step. Look under the mask (right-click) to see the blocks; save it to My blocks to use it in other models.",
+        1.5,
+    );
+    let v = b.blk("Step", "12 V step", 20.0, 80.0, &[("time", "0.02"), ("final", "12")]);
+    let tl = b.blk("Constant", "No load", 20.0, 200.0, &[("value", "0")]);
+    let mut motors = vec![];
+    for (k, (name, preset)) in [("Small motor", 0usize), ("Large motor", 1usize)].iter().enumerate() {
+        let id = motor_sub(&mut b, 220.0, 40.0 + 140.0 * k as f64);
+        let mk = motor_mask();
+        let values = mk.presets[*preset].values.clone();
+        if let Some(blk) = b.d().blocks.iter_mut().find(|x| x.id == id) {
+            blk.name = (*name).into();
+            blk.params = values.into_iter().collect();
+            blk.mask = Some(mk);
+        }
+        motors.push(id);
+    }
+    let s1 = b.blk("Scope", "Speeds", 440.0, 60.0, &[("n", "2")]);
+    let s2 = b.blk("Scope", "Currents", 440.0, 200.0, &[("n", "2")]);
+    for (k, m) in motors.iter().enumerate() {
+        b.w(v, 0, *m, 0);
+        b.w(tl, 0, *m, 1);
+        b.w(*m, 0, s1, k);
+        b.w(*m, 1, s2, k);
+    }
     b.done()
 }

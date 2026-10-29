@@ -3,7 +3,7 @@
 //! ops in, whole-model snapshots for undo).
 
 use crate::blocks;
-use crate::model::{Block, Diagram, Model, SimSettings, Var, Wire};
+use crate::model::{Block, Diagram, Mask, Model, SimSettings, Var, Wire};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -25,6 +25,9 @@ pub enum Op {
     NameWire { id: u32, name: String },
     /// Fill colour of blocks ("" = none).
     SetColor { ids: Vec<u32>, color: String },
+    /// Give a subsystem a mask, change it, or remove it (None). Values set for parameters that
+    /// are gone are dropped.
+    SetMask { id: u32, mask: Option<Mask> },
     /// Paste a clip made by `copy` into a diagram, shifted by (dx, dy).
     Paste { parent: u32, clip: String, dx: f64, dy: f64 },
     /// Put these blocks into a new subsystem; wires crossing the edge get In and Out ports.
@@ -108,6 +111,18 @@ impl Doc {
     }
 
     /// A clip of these blocks (and the wires between them) for the clipboard.
+    /// One subsystem as a library clip (My blocks): moved to (0, 0), so a Paste with (dx, dy)
+    /// puts its corner there. The model keeps a copy of what it pastes (copied, not linked).
+    pub fn block_clip(&self, id: u32) -> Result<String, String> {
+        let b = self.m.block(id).ok_or("Select a subsystem first.")?;
+        if b.kind != "Subsystem" {
+            return Err("Only a subsystem can be saved to My blocks: select blocks and use Create subsystem first.".into());
+        }
+        let mut b = b.clone();
+        (b.x, b.y) = (0.0, 0.0);
+        serde_json::to_string(&Clip { blocks: vec![b], wires: vec![] }).map_err(|e| e.to_string())
+    }
+
     pub fn copy(&self, ids: &[u32]) -> String {
         let Some(parent) = ids.first().and_then(|i| self.m.parent_of(*i)) else { return String::new() };
         let Some(d) = self.m.diagram(parent) else { return String::new() };
@@ -118,6 +133,35 @@ impl Doc {
         };
         serde_json::to_string(&clip).unwrap_or_default()
     }
+}
+
+/// A mask's parameters need names the blocks inside can use, once each.
+fn check_mask(mk: &Mask) -> Result<(), String> {
+    if mk.params.len() > 100 || mk.presets.len() > 50 || mk.icon.len() > 200 || mk.help.len() > 20_000 {
+        return Err("The mask is too large.".into());
+    }
+    let mut seen = HashSet::new();
+    for p in &mk.params {
+        let ok = p.key.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_') && p.key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !ok {
+            return Err(format!("'{}' cannot be a parameter name: use letters, digits and _ and start with a letter.", p.key));
+        }
+        if matches!(p.key.as_str(), "t" | "u" | "pi" | "e" | "inf" | "nan") || p.key.starts_with('u') && p.key[1..].chars().all(|c| c.is_ascii_digit()) && p.key.len() > 1 {
+            return Err(format!("'{}' is a reserved name (time, inputs or a constant).", p.key));
+        }
+        if !seen.insert(p.key.as_str()) {
+            return Err(format!("Two parameters are called '{}'.", p.key));
+        }
+        if !p.choices.is_empty() && !p.choices.contains(&p.def) {
+            return Err(format!("The default of '{}' must be one of its choices.", p.key));
+        }
+    }
+    for pr in &mk.presets {
+        if let Some((k, _)) = pr.values.iter().find(|(k, _)| !mk.params.iter().any(|p| &p.key == k)) {
+            return Err(format!("The rating '{}' sets '{k}', which is not a parameter.", pr.name));
+        }
+    }
+    Ok(())
 }
 
 fn diagram(m: &mut Model, parent: u32) -> Result<&mut Diagram, String> {
@@ -216,6 +260,22 @@ fn exec(m: &mut Model, op: Op, created: &mut Vec<u32>) -> Result<(), String> {
         }
         Op::SetParam { id, key, value } => {
             let b = m.block_mut(id).ok_or("The block no longer exists.")?;
+            if value.len() > 100_000 {
+                return Err("The value is too long.".into());
+            }
+            // A masked subsystem's parameters are its mask's.
+            if let Some(mask) = &b.mask {
+                let p = mask.params.iter().find(|p| p.key == key).ok_or_else(|| format!("'{}' has no parameter '{key}'.", b.name))?;
+                if !p.choices.is_empty() && !p.choices.contains(&value) {
+                    return Err(format!("'{value}' is not one of the choices."));
+                }
+                if value == p.def {
+                    b.params.remove(&key);
+                } else {
+                    b.params.insert(key, value);
+                }
+                return Ok(());
+            }
             let def = blocks::def(&b.kind).ok_or("Unknown block type.")?;
             let p = def.params.iter().find(|p| p.key == key).ok_or_else(|| format!("{} has no parameter '{key}'.", def.name))?;
             if value.len() > 100_000 {
@@ -301,6 +361,19 @@ fn exec(m: &mut Model, op: Op, created: &mut Vec<u32>) -> Result<(), String> {
             for w in d.wires.iter_mut().filter(|w| w.from == from) {
                 w.name = name.clone();
             }
+        }
+        Op::SetMask { id, mask } => {
+            let b = m.block_mut(id).ok_or("The block no longer exists.")?;
+            if b.kind != "Subsystem" {
+                return Err("Only a subsystem can have a mask.".into());
+            }
+            if let Some(mk) = &mask {
+                check_mask(mk)?;
+                b.params.retain(|k, _| mk.params.iter().any(|p| &p.key == k));
+            } else {
+                b.params.clear();
+            }
+            b.mask = mask;
         }
         Op::SetColor { ids, color } => {
             if !color.is_empty() && !blocks::COLOURS.iter().any(|(k, _)| *k == color) {

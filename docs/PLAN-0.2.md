@@ -1,6 +1,6 @@
 # Plan 0.2: a bigger build
 
-Written 2026-10-29 (session 6), after 0.1.3. Status: **answered (§7); being built.**
+Written 2026-10-29 (session 6), after 0.1.3. Status: **built and released** (0.1.4, 0.1.5, 0.1.6, 0.2.0; see MEMORY).
 
 ## 1. The idea
 

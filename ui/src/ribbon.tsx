@@ -95,7 +95,7 @@ export const Ribbon = () => (
     <Show when={tab() === "model"}>
       <G l="Clipboard" h="clipboard"><B big i="paste" l="Paste" run={C.paste} off={!out()?.clip} /><S><B i="cut" l="Cut" run={C.cut} /><B i="copy" l="Copy" run={C.copy} /></S></G>
       <G l="Blocks" h="blocks"><B big i="block" l="Add Block" run={C.quickAdd} title="Find a block by name and add it (or double-click the diagram)" /><S><B i="del" l="Delete" run={C.del} /><B i="flip" l="Flip" run={C.flip} /><B i="rename" l="Rename" run={C.rename} /></S></G>
-      <G l="Subsystems" h="subsystems"><B big i="sub" l="Create Subsystem" run={C.group} /><S><B i="ungroup" l="Ungroup" run={() => C.ungroup()} /><Planned i="sub" l="Mask" v="0.2" /></S></G>
+      <G l="Subsystems" h="subsystems"><B big i="sub" l="Create Subsystem" run={C.group} /><S><B i="ungroup" l="Ungroup" run={() => C.ungroup()} /><B i="sub" l="Mask" run={C.mask} title="Give the selected subsystem parameters of its own, a text on the block, help and typical ratings" /></S></G>
       <G l="Variables" h="vars"><B big i="var" l="Variables" run={C.vars} on={view() === "vars"} /></G>
       <G l="Arrange" h="arrange"><S><B i="align" l="Align Left" run={() => C.align("left")} /><B i="align" l="Align Top" run={() => C.align("top")} /><B i="align" l="Align Centres" run={() => C.align("middle")} /></S><S><B i="fit" l="Fit Diagram" run={C.fit} /><B i="grid" l={`Snap ${opts().snap ? "on" : "off"}`} on={opts().snap} run={() => setOpts({ ...opts(), snap: !opts().snap })} /><B i="search" l="Find" run={C.find} title="Find a block or a signal (Ctrl+F)" /></S></G>
       <G l="Examples" h="blocks"><B big i="open" l="Examples" dd={exampleMenu} /></G>

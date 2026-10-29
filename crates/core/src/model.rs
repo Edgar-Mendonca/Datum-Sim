@@ -4,7 +4,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const FORMAT: u32 = 1;
+/// 2 (0.2.0): masks on subsystems. Format 1 files open unchanged.
+pub const FORMAT: u32 = 2;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -79,6 +80,44 @@ pub struct Block {
     /// A fill colour the user chose ("" = none): one of the names in `blocks::COLOURS`.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub color: String,
+    /// A subsystem's mask: its own parameters, picture text, help and typical ratings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mask: Option<Mask>,
+}
+
+/// A mask makes a subsystem a block of its own: parameters (set like any block's, stored in the
+/// subsystem's `params`) that the blocks inside use by name.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Mask {
+    pub params: Vec<MaskParam>,
+    /// Text drawn on the block ("" = the subsystem's name).
+    pub icon: String,
+    /// What the block is and how to use it: its ? card.
+    pub help: String,
+    /// Typical values, as for the motors.
+    pub presets: Vec<MaskPreset>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MaskParam {
+    /// The name the blocks inside use (R, Kt, ratio …).
+    pub key: String,
+    pub label: String,
+    /// The default value (an expression in the model's variables and outer masks).
+    pub def: String,
+    pub unit: String,
+    pub hint: String,
+    /// When not empty: a choice, and the value is one of these (as text, not evaluated).
+    pub choices: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MaskPreset {
+    pub name: String,
+    pub values: Vec<(String, String)>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -223,7 +262,8 @@ pub fn to_json(m: &Model) -> String {
     serde_json::to_string_pretty(m).unwrap_or_default()
 }
 
-/// Bring older formats up to date. Format 1 is the first; later versions add steps here.
+/// Bring older formats up to date. Format 1 is the first; format 2 only adds masks, which
+/// format 1 files do not have, so they need no change.
 fn migrate(v: serde_json::Value) -> Result<serde_json::Value, String> {
     let f = v.get("format").and_then(|f| f.as_u64()).unwrap_or(1);
     if f > FORMAT as u64 {

@@ -33,7 +33,7 @@
 | File | What it does |
 | --- | --- |
 | `crates/core/src/expr.rs` | Our expression parser: numbers, variables, + − * / ^, comparisons, functions, matrices `[1 2; 3 4]`; fast slot evaluation for the Function block |
-| `crates/core/src/model.rs` | Model, diagrams, blocks, wires, variables, run settings; `.dsim` read (migrations, repair of damaged files) and write |
+| `crates/core/src/model.rs` | Model, diagrams, blocks (colour, mask), wires (name), variables, run settings; `.dsim` format 2 read (migrations from 1, repair of damaged files) and write |
 | `crates/core/src/doc.rs` | Edit operations (add, move, resize, set parameter, rename, flip, delete, connect, bend points, paste, group into a subsystem, ungroup, variables, settings, batch) with snapshot undo; copy |
 | `crates/core/src/discrete.rs` | Discrete blocks (0.1.4): discrete TF and state space, discrete integrator (3 methods, limits, reset), discrete PID (filtered D, clamping/back-calculation); square, triangle, chirp, repeating-sequence sources. Discrete blocks keep their own state and change only at sample hits |
 | `crates/core/src/blocks.rs` | The block library: names, categories, parameters with units and hints, help text, sizes, ports, port names and positions, labels, typical ratings (from `motors.rs`); planned blocks |
@@ -70,7 +70,7 @@
 | `ui/src/styles.css`, `ui/src/ui.tsx`, `ui/index.html` | Plan's styles (orange accent) and components; the icon sprite |
 | `py/worker.py`, `py/datum_sim/linear.py` | The Python worker and the linear analyses (python-control) |
 | `py/tests/test_worker.py` | Python tests against closed-form answers and the protocol |
-| `tests_ui/run.cjs` | 53 UI checks of the built window with a mocked bridge (the fixture also holds the induction motor start's diagram) |
+| `tests_ui/run.cjs` | 60 UI checks of the built window with a mocked bridge (the fixture also holds the induction motor start's diagram) |
 | `tests_ui/realapp.sh` | Screenshots of the real app under Xvfb (xdotool steps) |
 | `docs/verification/2026-10-27.md`, `2026-10-28.md`, `2026-10-29.md` | Verification records: 0.1.0 (solvers, blocks), 0.1.2 (motors and drives), 0.1.4 (discrete control, motor extras, power balance): what was checked, numbers, what was not |
 | `docs/PLAN-0.1.md`, `docs/PLAN-0.1.x.md`, `docs/PLAN-0.2.md`, `docs/site.json`, `CHANGELOG.md` | The plans, the public summary and roadmap, the change log |
@@ -128,6 +128,9 @@
 | 0.1.2 | Machines in their natural frames: induction in the stationary αβ frame with flux linkages as states (no speed-dependent frame, wound-rotor voltages turned by p·θ); synchronous machines in the rotor dq frame with Park inside; three-phase signals are width-3 vectors; transforms amplitude-invariant | Exact steady states against the equivalent circuit; one signal type; inductance matrices inverted once at build |
 | 0.1.2 | **Typical ratings** live in the engine (`motors::presets`, served with the library) and the Inspector applies one as a single `Batch` of `SetParam` | One owner for the numbers, testable, one undo step; values come from per-unit typical data (Zb = V²/S, J = 2H·S/ω²), stated as typical, never as a real machine |
 | 0.1.2 | A new library group **Drives** (source, inverter, PWM, transforms, encoder); motors stay in **Motors** | The user's "all motor types" brings drive pieces that are not motors |
+| 0.2.0 | **Masks** are on the subsystem block (`Block.mask`: params, icon text, help, presets); values live in the block's `params` like any block's. Flattening opens a scope per masked subsystem; `scope_vars` evaluates each mask's values in the scope around it, so inner names hide outer ones and the model's variables | One evaluation path for every block; errors point at the subsystem |
+| 0.2.0 | **My blocks** are `.dsimblock` files (name, help, a library clip of the subsystem moved to 0, 0) in a folder (Options; default the app's data folder); adding one pastes a copy | The user's choice: copied, not linked (PLAN-0.1.x §5); a shared folder works for teams |
+| 0.2.0 | File **format 2** (masks); format 1 files need no change | Older apps refuse a format 2 file with a clear message instead of losing the masks |
 | 0.1.6 | **Signal names** live on wires (`Wire.name`); NameWire names every wire from the same output; flattening uses the name for the source's output name, so legends, results and the probe show it | One signal, one name, wherever it is read |
 | 0.1.6 | Moving a wire segment writes the whole moved path's corners as the wire's bend points; the router keeps a wire through its bend points | No new routing mode; undo, files and printing work unchanged |
 | 0.1.6 | Notes are a block kind (`Note`) that flattening skips; colours are `Block.color` from `blocks::COLOURS` | Notes move, copy, undo and print like blocks; one owner for the colours |
@@ -164,8 +167,8 @@
 | 0.1.4 | Discrete control: discrete TF/SS, integrator, PID, rate transition, sample-time colours; integrator reset; Goto/From; sources; SRM, DC link, inverter DC current, sensor; power-balance checks (PLAN-0.2 A) | ✅ |
 | 0.1.5 | Scopes: cursors, y-zoom, stacked plots, compare runs, signal probe, step marks, SVG (PLAN-0.2 C) | ✅ |
 | 0.1.6 | Wires and diagram: branch from a wire, segments, signal names, notes, find, colours (PLAN-0.2 B) | ✅ |
-| 0.2 | Masks and My blocks (copied), file version 2 (PLAN-0.2 D) | 🔜 |
-| 0.3 | Control design: trim, linearise whole models, Nyquist, root locus, PID tuning, live tuning; buses; algebraic-loop solving | ⬜ |
+| 0.2 | Masks and My blocks (copied), file version 2 (PLAN-0.2 D) | ✅ |
+| 0.3 | Control design (next): trim, linearise whole models, Nyquist, root locus, PID tuning, live tuning; buses; algebraic-loop solving | ⬜ |
 | 0.4 | Physical components (mechanical, rotational, electrical, hydraulic, thermal), DAEs | ⬜ |
 | 0.5 | FMU import and export; Modelica through an external compiler | ⬜ |
 | 0.6 | State machines, Python blocks, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
@@ -229,6 +232,11 @@
 - Built part B: wire names (engine and window), segment moving, branching from a wire, removing bends, notes, Find, Distribute, block colours, wire context menu.
 - Checked: 67 Rust tests, 53 UI checks (7 new), clippy; the real app (notes; naming a signal; the name in the Inspector). Fixed on the way: notes no longer push wires aside; wire double-clicks are detected by two presses.
 - Released 0.1.6. Next: 0.2.0 masks and My blocks.
+
+### 2026-10-29: Session 6 (0.2.0)
+- Built part D: masks (engine scopes, SetMask with checks, Inspector, mask editor with ratings, look under the mask, ? card, Model › Mask) and My blocks (save, list in the Library, drag or double-click to add a copy, remove, folder in Options); file format 2; the masked motor example.
+- Checked: 69 Rust tests (3 new: mask scopes and errors, nested masks, file format; My blocks copies; the example), 60 UI checks (7 new), clippy; the real app (the masked example: two copies with their own values, Inspector, mask editor).
+- The bigger build (PLAN-0.2) is complete: 0.1.4, 0.1.5, 0.1.6 and 0.2.0 released. Next on the roadmap: 0.3 control design.
 
 ## 5. Known limits and next steps
 

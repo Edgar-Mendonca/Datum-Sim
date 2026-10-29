@@ -49,6 +49,7 @@ const ExampleArt = (p: { id: string }) => {
     pmsmdigital: "M8 46h4v-6h4v-8h4v-8h4v-6h4v-2h40v4h4v6h4v6h4v6h4v6h4",
     dcdigital: "M8 46h6v-10h6v-8h6v-6h6v-4h6v-2h48",
     srm: "M8 46C16 46 20 18 30 18H56L60 26 66 20 72 22 92 21",
+    masked: "M8 46C14 46 16 14 26 14H92M8 46C22 46 30 30 44 30H92",
     tank: "M8 34H30C40 34 44 16 56 16H92",
     cruise: "M8 32H24C34 32 40 18 52 18H92",
     thermostat: "M8 46C18 26 24 20 36 20L44 28 52 20 60 28 68 20 76 28 84 20 92 28",
@@ -136,6 +137,9 @@ const OptionsPage = () => {
       <Sec t="Printing" about="Defaults for File › Print.">
         <Opt l="Paper" hint="Default paper for printouts."><span class="inline"><Pick value={o().paper || "A4"} set={v => put("paper", v)} options={PAPERS.map(p => p[0])} /><Pick value={o().landscape === false ? "0" : "1"} set={v => put("landscape", v === "1")} options={[["1", "Landscape"], ["0", "Portrait"]]} /></span></Opt>
         <Opt l="Company" hint="Shown in the header of printouts."><Text value={o().company} set={v => put("company", v)} /></Opt>
+      </Sec>
+      <Sec t="My blocks" about="Subsystems you save (Inspector › Save to My blocks) appear in the Library for every model. A model gets its own copy of a block each time you add it.">
+        <Opt l="Folder" hint="Where the saved blocks are kept: leave it empty for the app's own folder, or give a folder you share with others (a network drive, for example)."><Text value={o().blocksDir ?? ""} placeholder="(the app's own folder)" set={v => put("blocksDir", v)} /></Opt>
       </Sec>
       <Sec t="Updates" about="Datum Sim checks GitHub for new versions when it starts. Updates install from File › Updates.">
         <Opt l="Beta versions" hint="Get new features early. They may have bugs."><Check label="Get beta versions" value={o().beta} set={v => put("beta", v)} /></Opt>

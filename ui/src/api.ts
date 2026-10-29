@@ -16,12 +16,15 @@ export interface Out {
 }
 export interface BlockView {
   id: number; kind: string; name: string; x: number; y: number; w: number; h: number; flip: boolean; label: string;
-  ins: Pt[]; outs: Pt[]; in_names: string[]; out_names: string[]; params: Record<string, string>; sub: boolean; color?: string;
+  ins: Pt[]; outs: Pt[]; in_names: string[]; out_names: string[]; params: Record<string, string>; sub: boolean; color?: string; mask?: Mask;
 }
 export interface WireView { id: number; from: [number, number]; to: [number, number]; pts: Pt[]; path: Pt[]; name?: string }
 export interface DView { parent: number; path: [number, string][]; blocks: BlockView[]; wires: WireView[] }
 export interface ParamDef { key: string; label: string; def: string; unit: string; hint: string; kind: "num" | "text" | "choice"; choices: string[] }
 export interface Preset { name: string; values: [string, string][] }
+export interface MaskParam { key: string; label: string; def: string; unit: string; hint: string; choices: string[] }
+export interface Mask { params: MaskParam[]; icon: string; help: string; presets: Preset[] }
+export interface MyBlock { file: string; name: string; what: string }
 export interface Def { kind: string; name: string; cat: string; what: string; how: string; params: ParamDef[]; w: number; h: number; planned: string; presets: Preset[] }
 export interface Library { cats: string[]; blocks: Def[]; colours?: [string, string][] }
 export interface Issue { id: number; msg: string; warn: boolean }
@@ -32,7 +35,7 @@ export interface Series { t: number[]; y: number[] }
 export interface Example { id: string; name: string; what: string }
 export interface Options {
   autosave: number; beta: boolean; theme: string; openLast: boolean; solver: string; stop: number; snap: boolean; grid: boolean;
-  paper: string; landscape: boolean; company: string;
+  paper: string; landscape: boolean; company: string; blocksDir?: string;
 }
 export interface Started { gen: number; chans: Chan[]; warnings: Issue[]; start: number; stop: number }
 export interface Live { gen: number; t: number[]; y: number[][]; progress: number }

@@ -37,11 +37,13 @@ struct Options {
     paper: String,
     landscape: bool,
     company: String,
+    /// The My blocks folder ("" = the app's own data folder).
+    blocks_dir: String,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { autosave: 5, beta: false, theme: "auto".into(), open_last: false, solver: "rk45".into(), stop: 10.0, snap: true, grid: true, paper: "A4".into(), landscape: true, company: String::new() }
+        Self { autosave: 5, beta: false, theme: "auto".into(), open_last: false, solver: "rk45".into(), stop: 10.0, snap: true, grid: true, paper: "A4".into(), landscape: true, company: String::new(), blocks_dir: String::new() }
     }
 }
 
@@ -234,6 +236,90 @@ fn check(st: State<St>) -> Vec<Issue> {
         Ok(s) => s.warnings,
         Err(e) => e,
     }
+}
+
+// ---------------------------------------------------------------- My blocks
+
+/// A saved block in the My blocks folder: one `.dsimblock` file (a library clip and a few words).
+#[derive(Serialize, Deserialize, Default)]
+#[serde(default)]
+struct MyBlockFile {
+    format: u32,
+    name: String,
+    what: String,
+    clip: String,
+}
+
+#[derive(Serialize)]
+struct MyBlock {
+    file: String,
+    name: String,
+    what: String,
+}
+
+fn blocks_dir(app: &AppHandle, a: &App) -> Result<PathBuf, String> {
+    let d = if a.opts.blocks_dir.trim().is_empty() { dir(app, true).ok_or("No data folder.")?.join("blocks") } else { PathBuf::from(a.opts.blocks_dir.trim()) };
+    std::fs::create_dir_all(&d).map_err(|e| format!("Could not use the My blocks folder {}: {e}", d.display()))?;
+    Ok(d)
+}
+
+/// The blocks in the My blocks folder, by name.
+#[tauri::command]
+fn myblocks(app: AppHandle, st: State<St>) -> R<Vec<MyBlock>> {
+    let d = blocks_dir(&app, &st.lock())?;
+    let mut out = vec![];
+    for e in std::fs::read_dir(&d).map_err(|e| e.to_string())?.flatten() {
+        let p = e.path();
+        if p.extension().and_then(|x| x.to_str()) != Some("dsimblock") {
+            continue;
+        }
+        let Ok(f) = std::fs::read_to_string(&p).map_err(|_| ()).and_then(|t| serde_json::from_str::<MyBlockFile>(&t).map_err(|_| ())) else { continue };
+        out.push(MyBlock { file: p.display().to_string(), name: f.name, what: f.what });
+    }
+    out.sort_by_key(|b| b.name.to_lowercase());
+    Ok(out)
+}
+
+/// Save a subsystem (masked or not) to My blocks under a name.
+#[tauri::command]
+fn save_myblock(app: AppHandle, st: State<St>, id: u32, name: String) -> R<String> {
+    let a = st.lock();
+    let name = name.trim().to_string();
+    if name.is_empty() || name.len() > 80 || name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|']) {
+        return Err("Give the block a name without / \\ : * ? \" < > |.".into());
+    }
+    let clip = a.doc.block_clip(id)?;
+    let what = a.doc.m.block(id).and_then(|b| b.mask.as_ref().map(|m| m.help.clone())).unwrap_or_default();
+    let path = blocks_dir(&app, &a)?.join(format!("{name}.dsimblock"));
+    let f = MyBlockFile { format: 1, name: name.clone(), what, clip };
+    std::fs::write(&path, serde_json::to_string_pretty(&f).unwrap_or_default()).map_err(|e| format!("Could not save {}: {e}", path.display()))?;
+    Ok(path.display().to_string())
+}
+
+/// Put a copy of a saved block into the open diagram with its corner at (x, y).
+#[tauri::command]
+fn add_myblock(st: State<St>, file: String, parent: u32, x: f64, y: f64) -> R<Out> {
+    let text = std::fs::read_to_string(&file).map_err(|e| format!("Could not read {file}: {e}"))?;
+    let f: MyBlockFile = serde_json::from_str(&text).map_err(|_| format!("{file} is not a saved Datum Sim block."))?;
+    let mut a = st.lock();
+    if a.run.running {
+        return Err("Stop the running simulation first.".into());
+    }
+    let created = a.doc.apply(Op::Paste { parent, clip: f.clip, dx: x, dy: y })?;
+    let mut o = out(&a);
+    o.created = created;
+    Ok(o)
+}
+
+/// Remove a saved block from My blocks (models that use it keep their copy).
+#[tauri::command]
+fn delete_myblock(app: AppHandle, st: State<St>, file: String) -> R<()> {
+    let d = blocks_dir(&app, &st.lock())?;
+    let p = PathBuf::from(&file);
+    if p.parent() != Some(d.as_path()) || p.extension().and_then(|x| x.to_str()) != Some("dsimblock") {
+        return Err("That file is not in the My blocks folder.".into());
+    }
+    std::fs::remove_file(&p).map_err(|e| format!("Could not remove {}: {e}", p.display()))
 }
 
 /// Blocks (and named signals) anywhere in the model, for Find.
@@ -797,7 +883,7 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, find, open, save, save_file,
+            state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, find, myblocks, save_myblock, add_myblock, delete_myblock, open, save, save_file,
             run, control, results, series, value_at, step_marks, runs, run_series, sweep_series, run_sweep, export_csv, analyze, step_info, engine,
             options, set_options, autosave, recovery, recover, recent, startup_file, open_url, version, quit, check_update, install_update
         ])

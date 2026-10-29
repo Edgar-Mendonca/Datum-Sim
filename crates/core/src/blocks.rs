@@ -342,6 +342,9 @@ pub fn param(b: &Block, key: &str) -> String {
     if let Some(v) = b.params.get(key) {
         return v.clone();
     }
+    if let Some(p) = b.mask.as_ref().and_then(|m| m.params.iter().find(|p| p.key == key)) {
+        return p.def.clone();
+    }
     def(&b.kind).and_then(|d| d.params.into_iter().find(|p| p.key == key)).map(|p| p.def.to_string()).unwrap_or_default()
 }
 
@@ -447,6 +450,9 @@ pub fn port_xy(b: &Block) -> (Vec<(f64, f64)>, Vec<(f64, f64)>) {
 /// A short text shown on the block (its key parameter).
 pub fn label(b: &Block) -> String {
     let p = |k: &str| param(b, k);
+    if let Some(m) = &b.mask {
+        return m.icon.clone();
+    }
     match b.kind.as_str() {
         "Constant" => p("value"),
         "Gain" => p("k"),

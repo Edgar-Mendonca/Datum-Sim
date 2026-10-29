@@ -6,13 +6,13 @@
   "tagline": "Model and simulate dynamic systems: block diagrams, control and motors.",
   "for": "Control, mechanical, electrical, process and mechatronics engineers, researchers and students.",
   "about": [
-    "Datum Sim models and simulates dynamic systems. You draw the system as blocks and wires: sources, transfer functions, state space, continuous and discrete PID controllers, lookup tables, and a motor library with DC, induction, synchronous, switched reluctance, BLDC and stepper motors, inverters and transforms. Then press Run and watch the signals on live scopes.",
+    "Datum Sim models and simulates dynamic systems. You draw the system as blocks and wires: sources, transfer functions, state space, continuous and discrete PID controllers, lookup tables, and a motor library with DC, induction, synchronous, switched reluctance, BLDC and stepper motors, inverters and transforms. Group blocks into subsystems, give them parameters of their own with a mask, and keep them in your own library. Then press Run and watch the signals on live scopes.",
     "Five solvers cover everything from simple fixed-step runs to stiff systems; the variable-step solvers find switching times exactly. Discrete controllers run at their own sample times, and the diagram can colour every block by its rate. Motors come with typical values for low, medium and high voltage ratings. Scopes have measuring cursors, step-response marks and comparison of earlier runs, and a probe reads any wire after a run. Parameter sweeps run in the app's own engine, step-response specifications and Bode plots come from a built-in Python engine, and the solvers, main blocks and motors are checked against known answers."
   ],
   "steps": [
     {
       "title": "Draw the model",
-      "text": "Drag blocks and motors from the library, wire them together and set their parameters, or pick a motor's typical rating. Name signals, add notes and colour the blocks."
+      "text": "Drag blocks, motors and your own saved blocks from the library, wire them together and set their parameters, or pick a typical rating. Name signals, add notes and colour the blocks."
     },
     {
       "title": "Run",
@@ -33,7 +33,7 @@
     "Motor library: DC (separately excited, shunt, series, compound), induction (squirrel-cage, double-cage, wound-rotor), synchronous (permanent-magnet, reluctance, wound-field with dampers), switched reluctance, BLDC and stepper",
     "Typical ratings for low, medium and high voltage motors, filled in with one choice",
     "Drives: three-phase source, inverter (average or switched), DC link, PWM, Clarke and Park transforms, encoder, current sensor",
-    "Subsystems, and Goto/From tags to send signals without wires",
+    "Subsystems with masks (parameters of their own, help and typical ratings), My blocks for your own library, and Goto/From tags to send signals without wires",
     "Five solvers, from fixed-step Euler to variable-step and stiff; the variable-step solvers find switching times exactly",
     "Parameter sweeps, plus step-response specifications and Bode plots from the built-in Python engine",
     "The solvers, main blocks and motors checked against known answers, including power balance for the induction, synchronous, DC and BLDC motors"
@@ -43,18 +43,9 @@
   ],
   "roadmap": [
     {
-      "v": "0.2",
-      "title": "Reusable models",
-      "when": "Next",
-      "items": [
-        "Masks: a subsystem with its own parameters, help and typical ratings",
-        "My blocks: your own library of masked subsystems"
-      ]
-    },
-    {
       "v": "0.3",
       "title": "Control design",
-      "when": "Later",
+      "when": "Next",
       "items": [
         "Operating points and linearisation of whole models",
         "Nyquist and root locus",

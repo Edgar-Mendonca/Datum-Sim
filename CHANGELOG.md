@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.0 — 2026-10-29
+
+Reusable models: masks and My blocks.
+
+**Masks**
+- Give a subsystem a **mask** (Model › Mask, or the Inspector): parameters of its own with labels, units and defaults, a text on the block, its own help card, and typical ratings saved from the block's values.
+- The blocks inside use the parameters by name; a parameter's value can use the model's variables and the parameters of masks around it. A masked subsystem is set in the Inspector like any block, and errors point at it.
+- Look under the mask (right-click or the Inspector) to see and change the blocks inside.
+
+**My blocks**
+- Save any subsystem to **My blocks**; it appears at the top of the Library for every model. Drag it in or double-click it: each model gets its own copy, so changing a saved block later never changes models that already use it.
+- Options › My blocks chooses the folder, so a team can share one on a network drive.
+
+**Worked example**: a masked DC motor block used for two different motors in one model.
+
+**Files**: models are saved in file format 2 (it can hold masks). Files from earlier versions open as before.
+
 ## 0.1.6 — 2026-10-29
 
 Wires and the diagram: easier to draw, read and find your way in.

@@ -855,3 +855,11 @@ tr.behind td { background: var(--err-bg); }
 .notetext { font: 11px/1.35 var(--sans); color: var(--text); white-space: pre-wrap; overflow: hidden; height: 100%; word-break: break-word; }
 .findpal kbd { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pnone { padding: 8px 12px; }
+
+/* Masks and My blocks (0.2.0) */
+.maskt input { width: 100%; min-width: 60px; }
+.maskt td { padding: 2px 4px; }
+.maskt .mk-key { width: 70px; }
+ul.plain { list-style: none; padding: 0; margin: 4px 0; }
+.libi.mine svg { color: var(--blue); }
+.inline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

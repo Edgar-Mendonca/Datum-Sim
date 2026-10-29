@@ -29,7 +29,15 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
       core: {
         invoke: async (c, a) => {
           window.__calls.push([c, a]);
-          if (c === "diagram") return window.__motor ? f.motor : a.parent === f.sub ? f.subdiagram : f.diagram;
+          if (c === "diagram") {
+            if (window.__motor) return f.motor;
+            if (a.parent === f.sub) return f.subdiagram;
+            // A masked DC motor subsystem (0.2.0 checks).
+            if (window.__masked) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.id === f.sub ? { ...b, label: "DC motor", params: { R: "1", L: "0.5" }, mask: { params: [{ key: "R", label: "Resistance R", def: "1", unit: "Ω", hint: "", choices: [] }, { key: "L", label: "Inductance L", def: "0.5", unit: "H", hint: "", choices: [] }], icon: "DC motor", help: "A DC motor.", presets: [{ name: "Small", values: [["R", "2"], ["L", "0.1"]] }] } } : b) };
+            return f.diagram;
+          }
+          if (c === "myblocks") return [{ file: "/blocks/Motor.dsimblock", name: "Motor (saved)", what: "A saved motor." }];
+          if (c === "save_myblock" || c === "add_myblock") return c === "save_myblock" ? "/blocks/x.dsimblock" : { ...f.state, created: [998] };
           if (c === "new_model") return f.state;
           // The run ends before its start call returns (a model with no states takes 0.1 ms).
           if (c === "run") {
@@ -196,6 +204,44 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   check("probe signals do not open scopes of their own", (await p.$$(".dock .scope")).length === nScopes, String((await p.$$(".dock .scope")).length));
   await p.evaluate(() => { window.__probeRun = false; });
   await p.click('.tabs > button:text-is("Model")');
+
+  // 8d. Masks and My blocks (0.2.0).
+  await p.evaluate(() => { window.__masked = true; });
+  const subB = fix.diagram.blocks.find(b => b.id === fix.sub);
+  const sbx = await box(subB.name + " (");
+  await p.mouse.click(sbx.x, sbx.y);
+  // Any edit makes the window fetch the diagram again (now with the mask).
+  await p.keyboard.press("ArrowRight");
+  await p.waitForTimeout(400);
+  await p.mouse.click(sbx.x, sbx.y);
+  await p.waitForTimeout(250);
+  check("a masked subsystem shows its own parameters in the Inspector", (await p.textContent(".insp header")).includes("(masked)") && (await p.textContent(".insp")).includes("Resistance R"));
+  check("a masked subsystem offers its typical ratings", (await p.$$eval(".insp select.presets option", els => els.map(e => e.textContent))).includes("Small"));
+  await p.fill('.insp .iprow:has-text("Resistance R") input', "3.3");
+  await p.keyboard.press("Enter");
+  await p.waitForTimeout(200);
+  const mp = (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).reverse().find(o => o.SetParam);
+  check("a mask parameter is set like a block parameter", !!mp && mp.SetParam.id === fix.sub && mp.SetParam.key === "R" && mp.SetParam.value === "3.3", JSON.stringify(mp));
+  await p.click(".insp .maskbtn");
+  await p.waitForTimeout(200);
+  await p.click(".dlg .mk-add");
+  await p.waitForTimeout(100);
+  const keys = await p.$$(".dlg .mk-key");
+  await keys[keys.length - 1].fill("Ke");
+  await p.click('.dlg .btn.pri');
+  await p.waitForTimeout(250);
+  const sm = (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).reverse().find(o => o.SetMask);
+  check("the mask editor saves the parameters", !!sm && sm.SetMask.id === fix.sub && sm.SetMask.mask.params.map(x => x.key).join(",") === "R,L,Ke" && sm.SetMask.mask.presets.length === 1, JSON.stringify(sm)?.slice(0, 300));
+  await p.click(".insp .mybtn");
+  await p.waitForTimeout(150);
+  await p.click('.dlg .btn.pri');
+  await p.waitForTimeout(250);
+  check("Save to My blocks saves the subsystem", (await p.evaluate(() => window.__calls.filter(c => c[0] === "save_myblock"))).some(c => c[1].id === fix.sub));
+  await p.evaluate(() => { window.__masked = false; });
+  check("the Library lists My blocks", (await p.textContent(".lib")).includes("My blocks") && (await p.textContent(".lib")).includes("Motor (saved)"));
+  await p.dblclick('.libi.mine');
+  await p.waitForTimeout(250);
+  check("adding a saved block pastes a copy of it", (await p.evaluate(() => window.__calls.filter(c => c[0] === "add_myblock"))).some(c => c[1].file === "/blocks/Motor.dsimblock"));
 
   // 8c. Wires and diagram tools (0.1.6).
   const lastOp = async pred => (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).reverse().find(pred);
