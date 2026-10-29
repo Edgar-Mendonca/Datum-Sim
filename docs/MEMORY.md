@@ -126,6 +126,7 @@
 | 0.1.2 | Machines in their natural frames: induction in the stationary αβ frame with flux linkages as states (no speed-dependent frame, wound-rotor voltages turned by p·θ); synchronous machines in the rotor dq frame with Park inside; three-phase signals are width-3 vectors; transforms amplitude-invariant | Exact steady states against the equivalent circuit; one signal type; inductance matrices inverted once at build |
 | 0.1.2 | **Typical ratings** live in the engine (`motors::presets`, served with the library) and the Inspector applies one as a single `Batch` of `SetParam` | One owner for the numbers, testable, one undo step; values come from per-unit typical data (Zb = V²/S, J = 2H·S/ω²), stated as typical, never as a real machine |
 | 0.1.2 | A new library group **Drives** (source, inverter, PWM, transforms, encoder); motors stay in **Motors** | The user's "all motor types" brings drive pieces that are not motors |
+| 0.1.3 | **Publisher "Datum"** in `tauri.conf.json` (`bundle.publisher`); copyright stays "© 2026 Edgar Mendonca". Discrete control, wires and scopes move to 0.1.4, 0.1.5 and 0.1.6 | The user's family-wide change (hub FAMILY §9); a patch release takes the next number |
 | 0.1.2 | Zero-crossing functions keep their last non-zero sign in the solver | A crossing landing exactly on 0 was lost (switched inverter test) |
 | 0.1.1 | `site.json` has `about` and `steps` for the family site's app page (`/apps/sim`), kept true with every release (CLAUDE.md release step 6); README links to that page | The user's request; FAMILY §10. Checking found three overclaims, corrected: sweeps run in Rust (not Python), only the variable-step solvers locate switching exactly, and not every block has its own test yet |
 
@@ -144,9 +145,10 @@
 | 0.1.x | Check on a Windows PC: installer, Python first start, printing to PDF, updater | ✅ (the user: "it works"; library drag-and-drop did not) |
 | 0.1.1 | Library drag-and-drop fixed on Windows; live parameter checks; dock re-fit; branch dots | ✅ |
 | 0.1.2 | Motor library: all DC, induction and synchronous types, BLDC, stepper, drive pieces, LV/MV/HV presets (PLAN-0.1.x §6) | ✅ (switched reluctance, DC link and current sensor blocks, power-balance checks: later) |
-| 0.1.3 | Discrete control: discrete TF, integrator, PID, rate transition, sample-time colours; integrator reset; Goto/From | 🔜 |
-| 0.1.4 | Wires and diagram: segments, signal names, notes, find | ⬜ |
-| 0.1.5 | Scopes: cursors, y-zoom, stacked plots, compare runs, SVG | ⬜ |
+| 0.1.3 | Windows publisher name "Datum" (family-wide change) | ✅ |
+| 0.1.4 | Discrete control: discrete TF, integrator, PID, rate transition, sample-time colours; integrator reset; Goto/From | 🔜 |
+| 0.1.5 | Wires and diagram: segments, signal names, notes, find | ⬜ |
+| 0.1.6 | Scopes: cursors, y-zoom, stacked plots, compare runs, SVG | ⬜ |
 | 0.2 | Masks, copied user libraries, buses, algebraic-loop solving, signal probe | ⬜ |
 | 0.3 | Control design: trim, linearise whole models, Nyquist, root locus, PID tuning, live tuning | ⬜ |
 | 0.4 | Physical components (mechanical, rotational, electrical, hydraulic, thermal), DAEs | ⬜ |
@@ -189,6 +191,9 @@
 - Checked: 49 Rust tests (12 new: induction torque against the equivalent circuit for cage, double cage and wound rotor at three slips; DC, synchronous, PMSM3, BLDC, stepper, inverter, encoder, presets), 30 UI checks (3 new), clippy, cargo deny, Python tests; the real app under Xvfb (DOL start, FOC, Inspector ratings). Record: `docs/verification/2026-10-28.md`.
 - Bugs found by the checks and fixed: the preset formatter cut zeros off whole numbers (Nr 50 → 5); a zero-crossing landing exactly on zero was lost by the solver.
 - Released 0.1.2 (see the release flow); `site.json` about, steps, highlights and roadmap updated.
+
+### 2026-10-29: Session 5 (0.1.3)
+- The user: the Windows publisher becomes "Datum" for the whole family. Only `src-tauri/tauri.conf.json` wrote it (the installer takes it from there; the About page and `docs/FAMILY.md`, a link to the hub, do not). Copyright unchanged. Released 0.1.3; the planned 0.1.3–0.1.5 moved to 0.1.4–0.1.6 (site.json, this roadmap).
 
 ## 5. Known limits and next steps
 

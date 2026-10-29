@@ -39,7 +39,7 @@
   ],
   "roadmap": [
     {
-      "v": "0.1.3",
+      "v": "0.1.4",
       "title": "Discrete control",
       "when": "Next",
       "items": [
@@ -50,7 +50,7 @@
       ]
     },
     {
-      "v": "0.1.4",
+      "v": "0.1.5",
       "title": "Wires and diagram",
       "when": "Soon",
       "items": [
@@ -61,7 +61,7 @@
       ]
     },
     {
-      "v": "0.1.5",
+      "v": "0.1.6",
       "title": "Scopes",
       "when": "Soon",
       "items": [

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 — 2026-10-29
+
+- Windows now lists the publisher as Datum.
+
 ## 0.1.2 — 2026-10-28
 
 The motor library: DC, induction and synchronous motors, BLDC and stepper motors, and the pieces of a drive.
