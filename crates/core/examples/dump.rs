@@ -13,7 +13,7 @@ fn main() {
     let (t, y) = compile::decimate_multi(&r.t, &all, r.t[0], *r.t.last().unwrap(), 400);
     println!("{}", serde_json::json!({
         "state": { "name": m.name, "notes": m.notes, "vars": m.vars, "sim": m.sim, "path": null, "dirty": false, "undo": false, "redo": false, "clip": false, "running": false, "rev": 1, "created": [] },
-        "library": { "cats": blocks::CATS, "blocks": blocks::library() },
+        "library": { "cats": blocks::CATS, "blocks": blocks::library(), "colours": blocks::COLOURS },
         "examples_list": examples::list(),
         "diagram": view::view(&m, 0).unwrap(),
         "subdiagram": view::view(&m, sub).unwrap(),

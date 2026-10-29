@@ -146,11 +146,12 @@ fn state(st: State<St>) -> Out {
 struct Library {
     cats: &'static [&'static str],
     blocks: Vec<blocks::Def>,
+    colours: &'static [(&'static str, &'static str)],
 }
 
 #[tauri::command]
 fn library() -> Library {
-    Library { cats: blocks::CATS, blocks: blocks::library() }
+    Library { cats: blocks::CATS, blocks: blocks::library(), colours: blocks::COLOURS }
 }
 
 #[tauri::command]
@@ -233,6 +234,12 @@ fn check(st: State<St>) -> Vec<Issue> {
         Ok(s) => s.warnings,
         Err(e) => e,
     }
+}
+
+/// Blocks (and named signals) anywhere in the model, for Find.
+#[tauri::command]
+fn find(st: State<St>, q: String) -> Vec<view::Hit> {
+    view::find(&st.lock().doc.m, &q)
 }
 
 /// Each block's sample-time rate, for the sample-time colours (empty while the model has errors).
@@ -790,7 +797,7 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, open, save, save_file,
+            state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, find, open, save, save_file,
             run, control, results, series, value_at, step_marks, runs, run_series, sweep_series, run_sweep, export_csv, analyze, step_info, engine,
             options, set_options, autosave, recovery, recover, recent, startup_file, open_url, version, quit, check_update, install_update
         ])

@@ -16,14 +16,14 @@ export interface Out {
 }
 export interface BlockView {
   id: number; kind: string; name: string; x: number; y: number; w: number; h: number; flip: boolean; label: string;
-  ins: Pt[]; outs: Pt[]; in_names: string[]; out_names: string[]; params: Record<string, string>; sub: boolean;
+  ins: Pt[]; outs: Pt[]; in_names: string[]; out_names: string[]; params: Record<string, string>; sub: boolean; color?: string;
 }
-export interface WireView { id: number; from: [number, number]; to: [number, number]; pts: Pt[]; path: Pt[] }
+export interface WireView { id: number; from: [number, number]; to: [number, number]; pts: Pt[]; path: Pt[]; name?: string }
 export interface DView { parent: number; path: [number, string][]; blocks: BlockView[]; wires: WireView[] }
 export interface ParamDef { key: string; label: string; def: string; unit: string; hint: string; kind: "num" | "text" | "choice"; choices: string[] }
 export interface Preset { name: string; values: [string, string][] }
 export interface Def { kind: string; name: string; cat: string; what: string; how: string; params: ParamDef[]; w: number; h: number; planned: string; presets: Preset[] }
-export interface Library { cats: string[]; blocks: Def[] }
+export interface Library { cats: string[]; blocks: Def[]; colours?: [string, string][] }
 export interface Issue { id: number; msg: string; warn: boolean }
 export interface Chan { sink: number; port: number; elem: number; name: string; probe?: boolean }
 export interface RunStats { steps: number; rejected: number; fevals: number; events: number; stopped: boolean; ms: number }

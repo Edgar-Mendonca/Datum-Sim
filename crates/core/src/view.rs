@@ -25,6 +25,7 @@ pub struct BlockView {
     /// Every parameter's text (the block's own or the default).
     pub params: BTreeMap<String, String>,
     pub sub: bool,
+    pub color: String,
 }
 
 #[derive(Serialize)]
@@ -34,6 +35,7 @@ pub struct WireView {
     pub to: (u32, usize),
     pub pts: Vec<(f64, f64)>,
     pub path: Vec<(f64, f64)>,
+    pub name: String,
 }
 
 #[derive(Serialize)]
@@ -42,6 +44,44 @@ pub struct View {
     pub path: Vec<(u32, String)>,
     pub blocks: Vec<BlockView>,
     pub wires: Vec<WireView>,
+}
+
+/// A block found by name or kind anywhere in the model, with the diagram it sits in.
+#[derive(Serialize, Debug)]
+pub struct Hit {
+    pub id: u32,
+    pub name: String,
+    pub kind: String,
+    /// The diagram to open (0 = the top level).
+    pub parent: u32,
+    /// Where it is, as "Subsystem/Inner" ("" at the top level).
+    pub path: String,
+}
+
+/// Blocks whose name, kind or kind's library name contains the text (case does not matter).
+/// Named signals are found too, by the block their wire leaves from.
+pub fn find(m: &Model, q: &str) -> Vec<Hit> {
+    let q = q.trim().to_lowercase();
+    let mut out = vec![];
+    if q.is_empty() {
+        return out;
+    }
+    fn walk(d: &crate::model::Diagram, parent: u32, path: &str, q: &str, out: &mut Vec<Hit>) {
+        for b in &d.blocks {
+            let lib = blocks::def(&b.kind).map(|d| d.name.to_lowercase()).unwrap_or_default();
+            let signal = d.wires.iter().any(|w| w.from.0 == b.id && w.name.to_lowercase().contains(q));
+            if b.name.to_lowercase().contains(q) || b.kind.to_lowercase().contains(q) || lib.contains(q) || signal {
+                out.push(Hit { id: b.id, name: b.name.clone(), kind: b.kind.clone(), parent, path: path.to_string() });
+            }
+            if let Some(s) = &b.sub {
+                let p = if path.is_empty() { b.name.clone() } else { format!("{path}/{}", b.name) };
+                walk(s, b.id, &p, q, out);
+            }
+        }
+    }
+    walk(&m.root, 0, "", &q, &mut out);
+    out.truncate(200);
+    out
 }
 
 pub fn view(m: &Model, parent: u32) -> Option<View> {
@@ -69,6 +109,7 @@ pub fn view(m: &Model, parent: u32) -> Option<View> {
             out_names,
             params,
             sub: b.sub.is_some(),
+            color: b.color.clone(),
         });
     }
     let rects: Vec<Rect> = d.blocks.iter().map(|b| Rect { x: b.x, y: b.y, w: b.w, h: b.h }).collect();
@@ -89,6 +130,6 @@ pub fn view(m: &Model, parent: u32) -> Option<View> {
         ok.push(w);
     }
     let paths = route::route(&rects, &reqs);
-    let wires = ok.into_iter().zip(paths).map(|(w, path)| WireView { id: w.id, from: w.from, to: w.to, pts: w.pts.clone(), path }).collect();
+    let wires = ok.into_iter().zip(paths).map(|(w, path)| WireView { id: w.id, from: w.from, to: w.to, pts: w.pts.clone(), path, name: w.name.clone() }).collect();
     Some(View { parent, path: m.path_of(parent), blocks: blocks_v, wires })
 }

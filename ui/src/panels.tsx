@@ -148,7 +148,8 @@ const ModelPanel = () => {
     <>
       <header><b>{selWires().length ? "Wire" : "Model"}</b><Help k="inspector" /></header>
       <div class="ibody">
-        <Show when={selWires().length}><p class="muted">A wire carries a signal from an output to an input. Drag it to add a bend point; press Delete to remove it.</p>
+        <Show when={selWires().length}><p class="muted">A wire carries a signal from an output to an input. Drag a segment to move it; double-click a bend to remove it; Alt-drag from the wire to branch the signal to another input; press Delete to remove it.</p>
+          <div class="iprow"><label>Signal name</label><input class="wnameinsp" value={selWires()[0].name ?? ""} placeholder="(none)" onChange={e => act({ NameWire: { id: selWires()[0].id, name: e.currentTarget.value } })} onKeyDown={e => { if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur(); }} /><small class="hint">Shown on the wire and in scope legends</small></div>
           <p><button class="btn sm" onClick={() => act({ SetPts: { id: selWires()[0].id, pts: [] } })}>Straighten (remove bend points)</button></p></Show>
         <Show when={s()}>
           <h4>Run <Help k="run" /></h4>

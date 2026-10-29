@@ -44,6 +44,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           if (c === "runs") return [{ id: 1, label: "Run 1 · 10:00:00" }, { id: 2, label: "Run 2 · 10:01:00" }];
           if (c === "run_series") return { t: f.series.t, y: a.names.map((_, k) => f.series.y[k] ?? f.series.y[0]) };
           if (c === "save_file") { window.__saved = a; return "/tmp/x"; }
+          if (c === "find") { const s = (a.q || "").toLowerCase(); return f.diagram.blocks.filter(b => s && (b.name.toLowerCase().includes(s) || b.kind.toLowerCase().includes(s))).map(b => ({ id: b.id, name: b.name, kind: b.kind, parent: 0, path: "" })); }
           if (c in m) return m[c];
           return null;
         },
@@ -194,6 +195,70 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(700);
   check("probe signals do not open scopes of their own", (await p.$$(".dock .scope")).length === nScopes, String((await p.$$(".dock .scope")).length));
   await p.evaluate(() => { window.__probeRun = false; });
+  await p.click('.tabs > button:text-is("Model")');
+
+  // 8c. Wires and diagram tools (0.1.6).
+  const lastOp = async pred => (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).reverse().find(pred);
+  const scr = async (x, y) => p.evaluate(([x, y]) => { const g = document.querySelector(".dsvg > g"); const q = new DOMPoint(x, y).matrixTransform(g.getScreenCTM()); return { x: q.x, y: q.y }; }, [x, y]);
+  const fb = fix.diagram.wires.find(w => w.path.length >= 6);
+  // An inner segment no other wire shares (they may run together where a signal branches).
+  const [sa, sb] = [fb.path[3], fb.path[4]];
+  const mid = await scr((sa[0] + sb[0]) / 2, (sa[1] + sb[1]) / 2);
+  const horiz = Math.abs(sa[1] - sb[1]) < 1e-9;
+  await p.mouse.move(mid.x, mid.y); await p.mouse.down();
+  await p.mouse.move(mid.x + (horiz ? 0 : 40), mid.y + (horiz ? 40 : 0), { steps: 5 }); await p.mouse.up();
+  await p.waitForTimeout(200);
+  const seg = await lastOp(o => o.SetPts && o.SetPts.id === fb.id);
+  const ortho = seg && seg.SetPts.pts.every((q, i, a) => i === 0 || q[0] === a[i - 1][0] || q[1] === a[i - 1][1]);
+  check("dragging a wire segment moves it sideways (bend points stay square)", !!seg && seg.SetPts.pts.length === fb.path.length - 2 && ortho, JSON.stringify(seg));
+  // Alt-drag from a wire branches its signal to an input.
+  // Away from the ports: the middle of the wire's longest segment.
+  const w0 = fix.diagram.wires[0], src0 = w0.path[0], dst = fix.diagram.blocks.find(b => b.kind === "Scope" && b.ins.length);
+  const li = w0.path.slice(1).map((q, i) => Math.hypot(q[0] - w0.path[i][0], q[1] - w0.path[i][1])).reduce((b, l, i, a) => (l > a[b] ? i : b), 0);
+  const wmid = [(w0.path[li][0] + w0.path[li + 1][0]) / 2, (w0.path[li][1] + w0.path[li + 1][1]) / 2];
+  const ws = await scr(wmid[0], wmid[1]), wt = await scr(dst.ins[0][0], dst.ins[0][1]);
+  await p.keyboard.down("Alt"); await p.mouse.move(ws.x, ws.y); await p.mouse.down();
+  await p.mouse.move(wt.x, wt.y, { steps: 6 }); await p.mouse.up(); await p.keyboard.up("Alt");
+  await p.waitForTimeout(200);
+  const br = await lastOp(o => o.Connect);
+  check("Alt-dragging from a wire branches the same signal", !!br && br.Connect.from[0] === w0.from[0] && br.Connect.from[1] === w0.from[1] && br.Connect.to[0] === dst.id, JSON.stringify(br) + " " + JSON.stringify(src0));
+  // Double-click a wire to name its signal.
+  const wm = await scr(wmid[0], wmid[1]);
+  await p.mouse.dblclick(wm.x, wm.y);
+  await p.waitForTimeout(200);
+  await p.fill(".wnamein", "speed demand");
+  await p.keyboard.press("Enter");
+  await p.waitForTimeout(200);
+  const nm = await lastOp(o => o.NameWire);
+  check("double-clicking a wire names its signal", !!nm && nm.NameWire.id === w0.id && nm.NameWire.name === "speed demand", JSON.stringify(nm));
+  // Find, colour, note, distribute.
+  await p.keyboard.press("Control+f");
+  await p.waitForTimeout(150);
+  await p.fill(".findpal input", "pid");
+  await p.waitForTimeout(250);
+  check("Find lists the blocks it matches", (await p.textContent(".findpal .pl")).includes("PID"));
+  await p.keyboard.press("Enter");
+  await p.waitForTimeout(400);
+  check("choosing a hit selects the block", (await p.textContent(".insp header")).includes("PID controller"));
+  await p.click('.ctxgrp button');
+  await p.waitForTimeout(100);
+  await p.click('.ribbon button:has-text("Block Colour")');
+  await p.waitForTimeout(150);
+  await p.click('.menu button:has-text("Blue")');
+  await p.waitForTimeout(150);
+  const col = await lastOp(o => o.SetColor);
+  check("blocks can be coloured", !!col && col.SetColor.color === "blue" && col.SetColor.ids.length === 1, JSON.stringify(col));
+  await p.click('.ribbon button:has-text("Note")');
+  await p.waitForTimeout(150);
+  check("Note adds a note block", !!(await lastOp(o => o.Add && o.Add.kind === "Note")));
+  await p.keyboard.press("Escape");
+  await p.evaluate(() => document.querySelector(".canvas").focus());
+  await p.keyboard.press("Control+a");
+  await p.waitForTimeout(100);
+  await p.click('.ribbon button:has-text("Distribute ↔")');
+  await p.waitForTimeout(150);
+  const dist = await lastOp(o => o.Batch && o.Batch.every(x => x.Move));
+  check("Distribute spaces the selected blocks evenly", !!dist && dist.Batch.length === fix.diagram.blocks.length, JSON.stringify(dist)?.slice(0, 200));
   await p.click('.tabs > button:text-is("Model")');
 
   // 9. Subsystems open with a path back.

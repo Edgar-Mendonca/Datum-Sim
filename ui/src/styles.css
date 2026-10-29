@@ -845,3 +845,13 @@ tr.behind td { background: var(--err-bg); }
 .scope header .btn { white-space: nowrap; flex: none; }
 .scope header .stitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 40px; }
 .scope header .stime { white-space: nowrap; flex: none; }
+
+/* Diagram tools (0.1.6) */
+.wname { font: 10px var(--sans); fill: var(--text2); paint-order: stroke; stroke: var(--bg2); stroke-width: 3px; pointer-events: none; }
+.blk.tinted .bshape { fill: var(--tint); }
+[data-theme="dark"] .blk.tinted .bshape { fill: color-mix(in srgb, var(--tint) 22%, var(--bg2)); }
+.bnote { fill: #FFFBEB; stroke: #E5C65C; stroke-dasharray: 4 3; }
+[data-theme="dark"] .bnote { fill: #2A2411; stroke: #8A7428; }
+.notetext { font: 11px/1.35 var(--sans); color: var(--text); white-space: pre-wrap; overflow: hidden; height: 100%; word-break: break-word; }
+.findpal kbd { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pnone { padding: 8px 12px; }

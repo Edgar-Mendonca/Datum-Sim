@@ -76,6 +76,9 @@ pub struct Block {
     /// The inside of a subsystem.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sub: Option<Diagram>,
+    /// A fill colour the user chose ("" = none): one of the names in `blocks::COLOURS`.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub color: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -88,6 +91,9 @@ pub struct Wire {
     pub to: (u32, usize),
     /// Bend points the user placed; the router goes through them.
     pub pts: Vec<(f64, f64)>,
+    /// The signal's name, shown on the wire and in scope legends ("" = none).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub name: String,
 }
 
 impl Diagram {

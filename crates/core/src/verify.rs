@@ -859,6 +859,39 @@ mod tests {
         assert!((crate::measure::value_at(&r.t, &r.y[ch(sub)], 0.5) - 1.5).abs() < 1e-9);
     }
 
+    /// Diagram tools (0.1.6): a wire's name names its signal (and every wire from the same output);
+    /// notes take no part in a run; colours are checked; Find looks inside subsystems; the file
+    /// keeps names and colours.
+    #[test]
+    fn wire_names_notes_colours_find() {
+        let mut m = Mk::new(1.0, "rk45");
+        let s = m.add("Step", &[("time", "0")]);
+        let g = m.add("Gain", &[("k", "2")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(s, 0, g, 0);
+        m.wire(s, 0, sc, 1);
+        m.wire(g, 0, sc, 0);
+        let w = m.d.m.root.wires.iter().find(|w| w.from == (s, 0) && w.to == (g, 0)).unwrap().id;
+        m.d.apply(Op::NameWire { id: w, name: "demand".into() }).unwrap();
+        assert!(m.d.m.root.wires.iter().filter(|w| w.from == (s, 0)).all(|w| w.name == "demand"), "both wires from the step carry the name");
+        let note = m.add("Note", &[("text", "Explains the loop")]);
+        let r = m.run();
+        assert_eq!(r.chans[1].name, "demand", "the legend uses the signal's name");
+        assert!(compile(&m.d.m, None, &none()).unwrap().nodes.iter().all(|n| n.id != note), "a note is not compiled");
+        assert!(m.d.apply(Op::NameWire { id: w, name: "a/b".into() }).is_err());
+        m.d.apply(Op::SetColor { ids: vec![g], color: "blue".into() }).unwrap();
+        assert!(m.d.apply(Op::SetColor { ids: vec![g], color: "teal-ish".into() }).is_err());
+        let back = crate::model::from_json(&crate::model::to_json(&m.d.m)).unwrap();
+        assert_eq!(back.root.block(g).unwrap().color, "blue");
+        assert!(back.root.wires.iter().any(|w| w.name == "demand"));
+        // Find: by name, by kind's library name, by signal name, inside a subsystem.
+        let sub = m.d.apply(Op::Group { ids: vec![g] }).unwrap()[0];
+        let hits = crate::view::find(&m.d.m, "gain");
+        assert!(hits.iter().any(|h| h.id == g && h.parent == sub && !h.path.is_empty()), "{hits:?}");
+        assert!(crate::view::find(&m.d.m, "DEMAND").iter().any(|h| h.id == s), "a named signal finds its source");
+        assert!(crate::view::find(&m.d.m, "  ").is_empty());
+    }
+
     // ------------------------------------------------------------ motor extras and power balance
 
     /// Steady state at a held speed: electrical power in − stator copper loss = air-gap power.

@@ -54,9 +54,12 @@ const fn c(key: &'static str, label: &'static str, choices: &'static [&'static s
     P { key, label, def: choices[0], unit: "", hint, kind: Pk::Choice, choices }
 }
 
+/// Block fill colours: (name, light tint). The dark theme darkens them in the window.
+pub const COLOURS: &[(&str, &str)] = &[("red", "#FDE2E1"), ("orange", "#FDE8D7"), ("yellow", "#FEF6C7"), ("green", "#DDF3E4"), ("blue", "#DCEBFB"), ("purple", "#EDE4FB"), ("grey", "#ECEDE8")];
+
 pub const CATS: &[&str] = &[
     "Sources", "Math", "Continuous", "Discontinuities", "Discrete", "Routing", "Lookup tables", "Sinks", "Subsystems",
-    "Motors", "Drives", "Physical (0.4)",
+    "Motors", "Drives", "Annotations", "Physical (0.4)",
 ];
 
 fn d(kind: &'static str, name: &'static str, cat: &'static str, what: &'static str, how: &'static str, params: Vec<P>) -> Def {
@@ -85,6 +88,7 @@ pub fn size(kind: &str) -> (f64, f64) {
         "ThreePhase" | "Inverter" | "PWM" => (70.0, 50.0),
         "TransferFcn" | "ZPK" | "StateSpace" | "Fcn" | "PID" | "DiscreteTF" | "DiscretePID" | "DiscreteIntegrator" => (90.0, 44.0),
         "Goto" | "From" => (60.0, 30.0),
+        "Note" => (180.0, 60.0),
         "Terminator" => (24.0, 24.0),
         "Lookup2D" | "Switch" => (60.0, 60.0),
         _ => (60.0, 40.0),
@@ -297,6 +301,9 @@ pub fn library() -> Vec<Def> {
         d("InvPark", "dq → αβ", "Drives", "Inverse Park transform: dq (width 2) at angle θ to αβ (width 2).", "θ is the electrical angle: pole pairs × the motor's angle θ.", vec![]),
         d("Encoder", "Encoder", "Drives", "An incremental encoder: the measured angle in steps of 2π/(4·PPR) and a speed estimate from the count change over each sample time.", "Input: the motor angle θ. Outputs: measured angle, estimated speed.",
             vec![n("ppr", "Pulses per revolution", "1024", "", "Four counts per pulse"), n("ts", "Speed sample time", "0.001", "s", "")]),
+        // Annotations
+        d("Note", "Note", "Annotations", "A text note on the diagram, for explanations, reviews and teaching. It takes no part in the run.", "Type the text in the Inspector; a blank line starts a new paragraph. Drag the corner to resize it.",
+            vec![t("text", "Text", "A note", "")]),
         // Physical (planned)
         planned("Mass", "Mass, spring, damper", "Physical (0.4)", "Mechanical components you connect by ports.", "0.4"),
         planned("Resistor", "R, L, C and sources", "Physical (0.4)", "Electrical components you connect by ports.", "0.4"),
@@ -363,6 +370,7 @@ pub fn ports(b: &Block) -> (usize, usize) {
         "Integrator" | "DiscreteIntegrator" => (if param(b, "reset") == "none" || param(b, "reset").is_empty() { 1 } else { 2 }, 1),
         "Square" | "Triangle" | "Chirp" | "RepSeq" | "From" => (0, 1),
         "Goto" | "Terminator" => (1, 0),
+        "Note" => (0, 0),
         "MinMax" | "Fcn" | "Mux" => (count(b, "n"), 1),
         "Demux" => (1, count(b, "n")),
         "Switch" => (3, 1),

@@ -95,6 +95,7 @@ const BlockArt = (p: { b: BlockView }) => {
   const b = () => p.b, w = () => p.b.w, h = () => p.b.h;
   const shape = (): JSX.Element => {
     const k = b().kind;
+    if (k === "Note") return <rect width={w()} height={h()} rx={2} class="bnote" />;
     if (k === "Sum") return <circle cx={w() / 2} cy={h() / 2} r={Math.min(w(), h()) / 2} class="bshape" />;
     if (k === "Gain") return b().flip ? <path d={`M${w()} 0V${h()}L0 ${h() / 2}z`} class="bshape" /> : <path d={`M0 0V${h()}L${w()} ${h() / 2}z`} class="bshape" />;
     if (k === "Mux" || k === "Demux") return <rect width={w()} height={h()} class="bbar" />;
@@ -120,6 +121,7 @@ const BlockArt = (p: { b: BlockView }) => {
       return <T x={cx} y={cy} size={12} bold>{v}</T>;
     }
     if (k === "Subsystem") return <T x={cx} y={cy} size={10} bold>{clip(b().name, 16)}</T>;
+    if (k === "Note") return <foreignObject x={6} y={4} width={Math.max(10, w() - 12)} height={Math.max(10, h() - 8)}><div class="notetext">{b().params.text ?? ""}</div></foreignObject>;
     if (k === "PID") return <T x={cx} y={cy} size={12} bold>PID</T>;
     if (k === "DiscretePID") return <T x={cx} y={cy} size={12} bold>PID(z)</T>;
     if (k === "Goto" || k === "From") return <T x={cx} y={cy} size={10} bold>{clip(b().label, 10)}</T>;
@@ -149,6 +151,87 @@ const displayValue = (id: number) => {
   return num(r.last[k]);
 };
 
+// ---------- wire geometry ----------
+/** The index of the path segment nearest to p. */
+const segAt = (path: Pt[], p: Pt) => {
+  let best = 0, bd = Infinity;
+  for (let i = 0; i + 1 < path.length; i++) {
+    const q = nearestSeg(path[i], path[i + 1], p), d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+};
+const nearestSeg = (a: Pt, b: Pt, p: Pt): Pt => {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy;
+  const t = l ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l)) : 0;
+  return [a[0] + t * dx, a[1] + t * dy];
+};
+const nearestOn = (path: Pt[], p: Pt): Pt => { const i = segAt(path, p); return nearestSeg(path[i], path[i + 1], p); };
+/** The path with segment `i` moved sideways (horizontal ones up or down, vertical ones left or
+ *  right), its neighbours stretched to meet it. Only inner segments move: the first and last stay
+ *  on their ports. Null when there is no such segment. */
+const movedPath = (path: Pt[], i: number, dx: number, dy: number): Pt[] | null => {
+  if (i < 1 || i > path.length - 3) return null;
+  const a = path[i], b = path[i + 1], horiz = Math.abs(a[1] - b[1]) < 1e-9;
+  const out = path.map(q => [q[0], q[1]] as Pt);
+  if (horiz) { const y = snap(a[1] + dy); out[i][1] = y; out[i + 1][1] = y; }
+  else { const x = snap(a[0] + dx); out[i][0] = x; out[i + 1][0] = x; }
+  return out;
+};
+/** Where a signal's name sits: above the middle of the wire's longest horizontal segment. */
+const labelAt = (w: WireView): Pt | null => {
+  let best: Pt | null = null, bl = 0;
+  for (let i = 0; i + 1 < w.path.length; i++) {
+    const a = w.path[i], b = w.path[i + 1];
+    if (Math.abs(a[1] - b[1]) < 1e-9 && Math.abs(b[0] - a[0]) > bl) { bl = Math.abs(b[0] - a[0]); best = [(a[0] + b[0]) / 2, a[1]]; }
+  }
+  return best ?? w.path[0];
+};
+/** Name the signal a wire carries (every wire from the same output takes the name). */
+export const nameWire = (w: WireView) => openDialog(() => {
+  const [t, setT] = createSignal(w.name ?? "");
+  const ok = () => { closeDialog(); act({ NameWire: { id: w.id, name: t() } }); };
+  let input!: HTMLInputElement;
+  onMount(() => { input.focus(); input.select(); });
+  return <div class="ov" onMouseDown={e => e.target === e.currentTarget && closeDialog()}><div class="dlg sm"><h2>Signal name</h2>
+    <p class="muted">Shown on the wire and in scope legends. Every wire from the same output carries it. Leave it empty to remove the name.</p>
+    <div class="iprow"><label>Name</label><input ref={input} class="wnamein" value={t()} onInput={e => setT(e.currentTarget.value)} onKeyDown={e => { if (e.key === "Enter") ok(); if (e.key === "Escape") closeDialog(); }} /></div>
+    <p class="btns"><button class="btn" onClick={closeDialog}>Cancel</button><button class="btn pri" onClick={ok}>Set</button></p></div></div>;
+});
+
+/** Find (Ctrl+F): blocks and named signals anywhere in the model; Enter opens the diagram and selects it. */
+export const findDialog = () => openDialog(() => {
+  const [q, setQ] = createSignal(""), [k, setK] = createSignal(0);
+  const [hits, setHits] = createSignal<{ id: number; name: string; kind: string; parent: number; path: string }[]>([]);
+  createEffect(on(q, async s => { setHits(await invoke<typeof hits extends () => infer T ? T : never>("find", { q: s }).catch(() => [])); setK(0); }));
+  const go = (i: number) => {
+    const h = hits()[i]; if (!h) return;
+    closeDialog();
+    enter(h.parent);
+    // Centre the block once its diagram is drawn.
+    const tries = { n: 0 };
+    const centre = () => {
+      const b = dview()?.parent === h.parent ? dview()!.blocks.find(x => x.id === h.id) : undefined;
+      if (!b || !svgEl) { if (tries.n++ < 20) setTimeout(centre, 50); return; }
+      const r = svgEl.getBoundingClientRect();
+      setPan([r.width / 2 - (b.x + b.w / 2) * zoom(), r.height / 2 - (b.y + b.h / 2) * zoom()]);
+      setSel([b.id]);
+    };
+    centre();
+  };
+  let input!: HTMLInputElement;
+  onMount(() => input.focus());
+  return (
+    <div class="ov top" onMouseDown={e => e.target === e.currentTarget && closeDialog()}>
+      <div class="pal findpal">
+        <input ref={input} placeholder="Find a block or a signal by name or type…" value={q()} onInput={e => setQ(e.currentTarget.value)}
+          onKeyDown={e => { if (e.key === "ArrowDown") { e.preventDefault(); setK(Math.min(hits().length - 1, k() + 1)); } else if (e.key === "ArrowUp") { e.preventDefault(); setK(Math.max(0, k() - 1)); } else if (e.key === "Enter") { e.preventDefault(); go(k()); } else if (e.key === "Escape") closeDialog(); }} />
+        <div class="pl"><For each={hits()} fallback={<Show when={q().trim()}><p class="muted pnone">Nothing called that.</p></Show>}>{(h, i) => <button classList={{ on: i() === k() }} onMouseEnter={() => setK(i())} onClick={() => go(i())}><span>{h.name}</span><kbd>{h.path ? `${h.path} · ` : ""}{defOf(h.kind)?.name ?? h.kind}</kbd></button>}</For></div>
+      </div>
+    </div>
+  );
+});
+
 // ---------- the editor ----------
 type Drag =
   | { k: "move"; ids: number[]; x0: number; y0: number; dx: number; dy: number }
@@ -156,7 +239,7 @@ type Drag =
   | { k: "box"; a: Pt; b: Pt; add: boolean }
   | { k: "pan"; cx: number; cy: number; p0: Pt }
   | { k: "size"; id: number; x0: number; y0: number; b: BlockView; w: number; h: number }
-  | { k: "bend"; id: number; a: Pt; b: Pt };
+  | { k: "bend"; id: number; a: Pt; b: Pt; seg: number };
 
 export const Canvas = () => {
   const [drag, setDrag] = createSignal<Drag | null>(null);
@@ -178,6 +261,13 @@ export const Canvas = () => {
   };
   const blockAt = (p: Pt) => [...(v()?.blocks ?? [])].reverse().find(b => p[0] >= b.x - 2 && p[0] <= b.x + b.w + 2 && p[1] >= b.y - 2 && p[1] <= b.y + b.h + 2);
 
+  let lastWire: { id: number; t: number } | null = null;
+  /** Double-click a bend to remove it; elsewhere on a wire to name its signal. */
+  const wireDouble = (w: WireView, p: Pt) => {
+    const k = w.pts.findIndex(q => Math.hypot(q[0] - p[0], q[1] - p[1]) < 8 / zoom());
+    if (k >= 0) act({ SetPts: { id: w.id, pts: w.pts.filter((_, i) => i !== k) } });
+    else nameWire(w);
+  };
   const down = (e: MouseEvent) => {
     if (!v()) return;
     (e.currentTarget as HTMLElement).focus?.();
@@ -202,9 +292,15 @@ export const Canvas = () => {
     }
     const wid = t.closest("[data-wire]")?.getAttribute("data-wire");
     if (wid) {
-      const id = +wid;
+      const id = +wid, w = v()!.wires.find(x => x.id === id)!;
+      // Alt-drag (or Ctrl-drag) from a wire starts a branch of the same signal.
+      if (e.altKey || (e.ctrlKey && !e.shiftKey)) { setDrag({ k: "wire", from: w.from, to: null, a: nearestOn(w.path, p), b: p }); return; }
+      // Two presses on the same wire are a double-click (the browser does not always report one on a wire).
+      const now = performance.now();
+      if (lastWire && lastWire.id === id && now - lastWire.t < 450) { lastWire = null; wireDouble(w, p); return; }
+      lastWire = { id, t: now };
       setSel(add ? (selSet().has(id) ? sel().filter(x => x !== id) : [...sel(), id]) : [id]);
-      setDrag({ k: "bend", id, a: p, b: p });
+      setDrag({ k: "bend", id, a: p, b: p, seg: segAt(w.path, p) });
       return;
     }
     const b = blockAt(p);
@@ -240,10 +336,12 @@ export const Canvas = () => {
     if (d.k === "move" && (d.dx || d.dy)) act({ Move: { ids: d.ids, dx: d.dx, dy: d.dy } });
     else if (d.k === "size" && (d.w !== d.b.w || d.h !== d.b.h)) act({ Resize: { id: d.id, x: d.b.x, y: d.b.y, w: d.w, h: d.h } });
     else if (d.k === "bend") {
-      // Dragging a wire puts a bend point where it is dropped.
       if (Math.hypot(d.b[0] - d.a[0], d.b[1] - d.a[1]) > 6 / zoom()) {
         const w = v()?.wires.find(x => x.id === d.id);
-        if (w) act({ SetPts: { id: w.id, pts: [...w.pts, [snap(d.b[0]), snap(d.b[1])]] } });
+        if (!w) return;
+        // An inner segment moves sideways; a wire without one gets a bend point where it is dropped.
+        const moved = movedPath(w.path, d.seg, d.b[0] - d.a[0], d.b[1] - d.a[1]);
+        act({ SetPts: { id: w.id, pts: moved ? moved.slice(1, -1) : [...w.pts, [snap(d.b[0]), snap(d.b[1])]] } });
       }
     } else if (d.k === "box") {
       const [x0, x1] = [Math.min(d.a[0], d.b[0]), Math.max(d.a[0], d.b[0])], [y0, y1] = [Math.min(d.a[1], d.b[1]), Math.max(d.a[1], d.b[1])];
@@ -266,6 +364,8 @@ export const Canvas = () => {
 
   const dbl = (e: MouseEvent) => {
     const p = toDiagram(e.clientX, e.clientY);
+    // A double-click on a wire is handled at the second press (see `down`).
+    if ((e.target as Element).closest("[data-wire]")) return;
     const b = blockAt(p);
     if (!b) { quickInsert(p); return; }
     if (b.sub) enter(b.id);
@@ -340,10 +440,16 @@ export const Canvas = () => {
     const p = toDiagram(e.clientX, e.clientY);
     const b = blockAt(p);
     if (b && !selSet().has(b.id)) setSel([b.id]);
+    const wid = (e.target as Element).closest("[data-wire]")?.getAttribute("data-wire");
+    const wr = wid ? v()!.wires.find(x => x.id === +wid) : undefined;
+    if (!b && wr) {
+      setSel([wr.id]);
+      return openMenu(e, [{ label: "Name the signal…", icon: "rename", run: () => nameWire(wr) }, { label: "Straighten (remove bends)", run: () => act({ SetPts: { id: wr.id, pts: [] } }), off: !wr.pts.length }, "-", { label: "Delete", icon: "del", run: C.del, keys: "Del" }]);
+    }
     const items: Item[] = b ? [
       ...(b.sub ? [{ label: "Open subsystem", run: () => enter(b.id) } as Item] : []),
       ...(b.kind === "Scope" || b.kind === "XY" ? [{ label: "Open scope", icon: "scope", run: () => setScopes([...new Set([...scopes(), b.id])]) } as Item] : []),
-      { label: "Rename…", icon: "rename", run: C.rename, keys: "F2" }, { label: "Flip", icon: "flip", run: C.flip, keys: "Ctrl+R" },
+      { label: "Rename…", icon: "rename", run: C.rename, keys: "F2" }, { label: "Flip", icon: "flip", run: C.flip, keys: "Ctrl+R" }, { label: "Colour…", run: () => C.colourMenu({ x: e.clientX, y: e.clientY }) },
       "-", { label: "Cut", icon: "cut", run: C.cut, keys: "Ctrl+X" }, { label: "Copy", icon: "copy", run: C.copy, keys: "Ctrl+C" }, { label: "Delete", icon: "del", run: C.del, keys: "Del" },
       "-", { label: "Create subsystem", icon: "sub", run: C.group, keys: "Ctrl+G" }, ...(b.sub ? [{ label: "Ungroup", icon: "ungroup", run: () => C.ungroup(b.id) } as Item] : []),
       "-", { label: `About ${defOf(b.kind)?.name ?? b.kind}`, icon: "help", run: () => helpCard(`block:${b.kind}`) },
@@ -357,7 +463,9 @@ export const Canvas = () => {
 
   // Wires attached to blocks being moved are drawn as simple previews until the drop.
   const preview = (w: WireView): string | null => {
-    const d = drag(); if (!d || d.k !== "move") return null;
+    const d = drag();
+    if (d?.k === "bend" && d.id === w.id) { const m = movedPath(w.path, d.seg, d.b[0] - d.a[0], d.b[1] - d.a[1]); return m ? pathD(m) : null; }
+    if (!d || d.k !== "move") return null;
     const fm = d.ids.includes(w.from[0]), tm = d.ids.includes(w.to[0]);
     if (!fm && !tm) return null;
     const a = w.path[0], b = w.path[w.path.length - 1];
@@ -397,17 +505,19 @@ export const Canvas = () => {
             return <g data-wire={w.id} class="wire" classList={{ sel: s() }} onMouseEnter={e => probeWire(w, e)} onMouseMove={e => probe() && probeWire(w, e)} onMouseLeave={() => { probeSeq++; setProbe(null); }}>
               <path d={pv() ?? pathD(w.path)} class="whit" />
               <path d={pv() ?? pathD(w.path)} class="wline" marker-end={s() ? "url(#arrs)" : "url(#arr)"} />
+              <Show when={w.name ? labelAt(w) : null}>{lp => <text x={lp()[0]} y={lp()[1] - 4} class="wname" text-anchor="middle">{w.name}</text>}</Show>
             </g>;
           }}</For>
           <Show when={drag()?.k !== "move"}><For each={branchDots()}>{p => <circle cx={p[0]} cy={p[1]} r={3.2} class="wdot" />}</For></Show>
           <For each={v()?.blocks ?? []}>{b => {
             const o = () => off(b.id);
             const rc = () => (showRates() ? rateColours().by.get(b.id) : undefined);
-            return <g transform={`translate(${b.x + o()[0]} ${b.y + o()[1]})`} class="blk" classList={{ sel: selSet().has(b.id), err: errSet().has(b.id), warn: warnSet().has(b.id), hover: hover() === b.id, rated: !!rc() }} style={rc() ? { "--rate": rc() } : undefined}
+            const fill = () => (b.color ? (lib().colours ?? []).find(c => c[0] === b.color)?.[1] : undefined);
+            return <g transform={`translate(${b.x + o()[0]} ${b.y + o()[1]})`} class="blk" classList={{ sel: selSet().has(b.id), err: errSet().has(b.id), warn: warnSet().has(b.id), hover: hover() === b.id, rated: !!rc(), tinted: !!fill() }} style={{ ...(rc() ? { "--rate": rc() } : {}), ...(fill() ? { "--tint": fill() } : {}) }}
               onMouseEnter={() => setHover(b.id)} onMouseLeave={() => setHover(null)}>
               <title>{`${b.name} (${defOf(b.kind)?.name ?? b.kind})${issues().filter(i => i.id === b.id).map(i => "\n" + i.msg).join("")}`}</title>
               <BlockArt b={b} />
-              <text x={b.w / 2} y={b.h + 11} class="bname" text-anchor="middle">{b.kind === "Subsystem" ? "" : b.name}</text>
+              <text x={b.w / 2} y={b.h + 11} class="bname" text-anchor="middle">{b.kind === "Subsystem" || b.kind === "Note" ? "" : b.name}</text>
               <Show when={sel().length === 1 && selSet().has(b.id) && b.kind !== "Sum"}><rect data-size={b.id} x={b.w - 4} y={b.h - 4} width={8} height={8} class="bsize" /></Show>
             </g>;
           }}</For>

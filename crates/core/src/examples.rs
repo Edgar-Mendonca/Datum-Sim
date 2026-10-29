@@ -82,7 +82,7 @@ impl B {
     }
     fn w(&mut self, from: u32, fp: usize, to: u32, tp: usize) {
         let id = self.m.id();
-        self.d().wires.push(Wire { id, from: (from, fp), to: (to, tp), pts: vec![] });
+        self.d().wires.push(Wire { id, from: (from, fp), to: (to, tp), ..Default::default() });
     }
     fn begin(&mut self) {
         self.stack.push(Diagram::default());

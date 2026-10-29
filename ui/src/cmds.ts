@@ -3,9 +3,9 @@ import { batch } from "solid-js";
 import { invoke, listen, Out, Started, Live, Done, ResultsInfo, Issue, Pt } from "./api";
 import {
   out, setOut, act, call, sel, setSel, selBlocks, parent, refreshView, setBackstage, loadOut, toast, setView, View, setIssues, setRunning, running, setPaused, paused,
-  setProgress, setResults, setChans, live, setLiveTick, scopes, setScopes, dview, setLastStatus, openDialog, enter, issues,
+  setProgress, setResults, setChans, live, setLiveTick, scopes, setScopes, dview, setLastStatus, openDialog, enter, issues, openMenu, lib,
 } from "./store";
-import { fit, zoomBy, viewCenter, quickInsert } from "./canvas";
+import { fit, zoomBy, viewCenter, quickInsert, findDialog, nameWire } from "./canvas";
 import * as D from "./dialogs";
 
 const blockIds = () => selBlocks().map(b => b.id);
@@ -41,6 +41,21 @@ export const C = {
         : bs.map(b => ({ Move: { ids: [b.id], dx: 0, dy: Math.round(bs[0].y + bs[0].h / 2 - b.y - b.h / 2) } }));
     act({ Batch: ops });
   },
+  /** Space three or more blocks evenly between the outermost ones (by their centres). */
+  distribute: (axis: "x" | "y") => {
+    const bs = [...selBlocks()]; if (bs.length < 3) return toast("Select three or more blocks to distribute.");
+    const c = (b: typeof bs[0]) => (axis === "x" ? b.x + b.w / 2 : b.y + b.h / 2);
+    bs.sort((a, b) => c(a) - c(b));
+    const c0 = c(bs[0]), step = (c(bs[bs.length - 1]) - c0) / (bs.length - 1);
+    act({ Batch: bs.map((b, i) => { const d = Math.round(c0 + i * step - c(b)); return { Move: { ids: [b.id], dx: axis === "x" ? d : 0, dy: axis === "y" ? d : 0 } }; }) });
+  },
+  colourMenu: (at: { x: number; y: number }) => {
+    const ids = selBlocks().map(b => b.id); if (!ids.length) return toast("Select the blocks to colour.");
+    openMenu(at, [{ label: "No colour", run: () => act({ SetColor: { ids, color: "" } }) }, ...(lib().colours ?? []).map(([k, tint]) => ({ label: `● ${k[0].toUpperCase()}${k.slice(1)}`, swatch: tint, run: () => act({ SetColor: { ids, color: k } }) }))]);
+  },
+  note: () => C.addBlock("Note"),
+  find: () => findDialog(),
+  nameSignal: () => { const w = dview()?.wires.find(x => sel().includes(x.id)); if (!w) return toast("Select a wire to name its signal."); nameWire(w); },
   setSim: (k: string, v: number | string | boolean) => { const s = out()?.sim; if (s) act({ SetSim: { sim: { ...s, [k]: v } } }); },
 
   // ---------- running ----------
@@ -145,6 +160,7 @@ export const ALL_CMDS: [string, () => void, string?][] = [
   ["Run", C.run, "F5"], ["Stop", C.stop], ["Pause / Resume", C.pause], ["Step", C.step], ["Check model", C.check],
   ["Save", () => C.save(), "Ctrl+S"], ["Save As", () => C.save(true)], ["Open", C.open, "Ctrl+O"], ["New model", () => setBackstage("home"), "Ctrl+N"], ["Print / PDF", C.print, "Ctrl+P"],
   ["Undo", C.undo, "Ctrl+Z"], ["Redo", C.redo, "Ctrl+Y"], ["Add block", C.quickAdd, "Double-click"], ["Delete", C.del, "Del"], ["Copy", C.copy, "Ctrl+C"], ["Paste", C.paste, "Ctrl+V"], ["Cut", C.cut, "Ctrl+X"],
+  ["Find a block or signal", C.find, "Ctrl+F"], ["Name the signal on a wire", C.nameSignal], ["Add a note", C.note], ["Distribute horizontally", () => C.distribute("x")], ["Distribute vertically", () => C.distribute("y")],
   ["Flip block", C.flip, "Ctrl+R"], ["Rename block", C.rename, "F2"], ["Create subsystem", C.group, "Ctrl+G"], ["Ungroup subsystem", () => C.ungroup()],
   ["Model variables", C.vars], ["Parameter sweep", C.sweep], ["Bode plot", () => C.analyze("bode")], ["Step response", () => C.analyze("step")], ["Poles and zeros", () => C.analyze("pz")],
   ["Step-response specifications", C.stepInfo], ["Export results as CSV", () => C.exportCsv()], ["Send results to Datum Plot", C.toPlot],

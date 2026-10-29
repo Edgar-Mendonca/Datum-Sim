@@ -177,6 +177,10 @@ fn flatten(m: &Model, issues: &mut Vec<Issue>) -> (Vec<Flat>, Subs) {
     fn nodes(d: &Diagram, prefix: &str, flat: &mut Vec<Flat>, at: &mut BTreeMap<u32, usize>, subs: &mut BTreeMap<u32, (Vec<usize>, Vec<usize>)>, inside: bool) {
         for b in &d.blocks {
             let name = format!("{prefix}{}", b.name);
+            // Notes are only for reading.
+            if b.kind == "Note" {
+                continue;
+            }
             if b.kind == "Subsystem" {
                 let sd = b.sub.clone().unwrap_or_default();
                 nodes(&sd, &format!("{name}/"), flat, at, subs, true);
@@ -222,7 +226,13 @@ fn flatten(m: &Model, issues: &mut Vec<Issue>) -> (Vec<Flat>, Subs) {
                 None => at.get(&w.to.0).map(|i| (*i, w.to.1)),
             };
             match (src, dst) {
-                (Some(s), Some((di, dp))) if s.1 < flat[s.0].nout && dp < flat[di].inputs.len() => flat[di].inputs[dp] = Some(s),
+                (Some(s), Some((di, dp))) if s.1 < flat[s.0].nout && dp < flat[di].inputs.len() => {
+                    flat[di].inputs[dp] = Some(s);
+                    // A named wire names its signal (in legends and results).
+                    if !w.name.is_empty() {
+                        flat[s.0].out_names[s.1] = w.name.clone();
+                    }
+                }
                 _ => issues.push(Issue { id: w.to.0, msg: "A wire points to a port that no longer exists; it is ignored.".into(), warn: true }),
             }
         }

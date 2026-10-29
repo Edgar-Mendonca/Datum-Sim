@@ -97,7 +97,7 @@ export const Ribbon = () => (
       <G l="Blocks" h="blocks"><B big i="block" l="Add Block" run={C.quickAdd} title="Find a block by name and add it (or double-click the diagram)" /><S><B i="del" l="Delete" run={C.del} /><B i="flip" l="Flip" run={C.flip} /><B i="rename" l="Rename" run={C.rename} /></S></G>
       <G l="Subsystems" h="subsystems"><B big i="sub" l="Create Subsystem" run={C.group} /><S><B i="ungroup" l="Ungroup" run={() => C.ungroup()} /><Planned i="sub" l="Mask" v="0.2" /></S></G>
       <G l="Variables" h="vars"><B big i="var" l="Variables" run={C.vars} on={view() === "vars"} /></G>
-      <G l="Arrange" h="arrange"><S><B i="align" l="Align Left" run={() => C.align("left")} /><B i="align" l="Align Top" run={() => C.align("top")} /><B i="align" l="Align Centres" run={() => C.align("middle")} /></S><S><B i="fit" l="Fit Diagram" run={C.fit} /><B i="grid" l={`Snap ${opts().snap ? "on" : "off"}`} on={opts().snap} run={() => setOpts({ ...opts(), snap: !opts().snap })} /></S></G>
+      <G l="Arrange" h="arrange"><S><B i="align" l="Align Left" run={() => C.align("left")} /><B i="align" l="Align Top" run={() => C.align("top")} /><B i="align" l="Align Centres" run={() => C.align("middle")} /></S><S><B i="fit" l="Fit Diagram" run={C.fit} /><B i="grid" l={`Snap ${opts().snap ? "on" : "off"}`} on={opts().snap} run={() => setOpts({ ...opts(), snap: !opts().snap })} /><B i="search" l="Find" run={C.find} title="Find a block or a signal (Ctrl+F)" /></S></G>
       <G l="Examples" h="blocks"><B big i="open" l="Examples" dd={exampleMenu} /></G>
     </Show>
     <Show when={tab() === "simulate"}>
@@ -131,7 +131,8 @@ export const Ribbon = () => (
     </Show>
     <Show when={tab() === "format"}>
       <G l="Block" h="blocks"><B big i="flip" l="Flip" run={C.flip} /><B big i="rename" l="Rename" run={C.rename} /><S><B i="align" l="Align Left" run={() => C.align("left")} /><B i="align" l="Align Top" run={() => C.align("top")} /><B i="align" l="Align Centres" run={() => C.align("middle")} /></S></G>
-      <G l="Look" h="blocks"><S><Planned i="grid" l="Block Colour" v="0.2" /><Planned i="rename" l="Annotation" v="0.2" /></S></G>
+      <G l="Arrange" h="arrange"><S><B i="align" l="Distribute ↔" run={() => C.distribute("x")} title="Space three or more blocks evenly from left to right" /><B i="align" l="Distribute ↕" run={() => C.distribute("y")} title="Space three or more blocks evenly from top to bottom" /></S></G>
+      <G l="Look" h="blocks"><S><B i="grid" l="Block Colour" dd={e => C.colourMenu(e)} title="Colour the selected blocks, to mark plant, controller and sensors" /><B i="rename" l="Note" run={C.note} title="A text note on the diagram" /><B i="rename" l="Name Signal" run={C.nameSignal} title="Name the signal on the selected wire" /></S></G>
     </Show>
     <Show when={tab() === "help"}>
       <G l="Learn"><B big i="report" l="Getting Started" run={() => D.gettingStarted()} /><B big i="info" l="Glossary" run={() => D.glossary()} /><B big i="help" l="What Is This Tool?" dd={e => openMenu(e, Object.entries(HELP).map(([k, h]) => ({ label: h.t, run: () => helpCard(k) })))} /><B big i="keys" l="Shortcuts" run={() => D.shortcuts()} /><B big i="search" l="Tell Me" run={palette} /></G>

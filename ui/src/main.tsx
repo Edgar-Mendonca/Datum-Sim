@@ -92,6 +92,7 @@ const App = () => {
     else if (ctrl && k === "o") { e.preventDefault(); C.open(); }
     else if (ctrl && k === "n") { e.preventDefault(); setBackstage("home"); }
     else if (ctrl && k === "p") { e.preventDefault(); C.print(); }
+    else if (ctrl && k === "f" && out()) { e.preventDefault(); C.find(); }
     else if (e.key === "F5") { e.preventDefault(); if (e.shiftKey) C.stop(); else C.run(); }
     else if (ctrl && k === "z" && !typing) { e.preventDefault(); C.undo(); }
     else if (ctrl && k === "y" && !typing) { e.preventDefault(); C.redo(); }
