@@ -12,7 +12,7 @@
   "steps": [
     {
       "title": "Draw the model",
-      "text": "Drag blocks and motors from the library, wire them together and set their parameters, or pick a motor's typical rating."
+      "text": "Drag blocks and motors from the library, wire them together and set their parameters, or pick a motor's typical rating. Name signals, add notes and colour the blocks."
     },
     {
       "title": "Run",
@@ -27,6 +27,7 @@
     "Draw a model as blocks and wires, press Run and watch live scopes",
     "Scopes with two measuring cursors, step-response marks, comparison of the last five runs, stacked plots, and PNG or SVG pictures",
     "A signal probe: hover any wire after a run to read its value",
+    "Wires that route themselves: move segments, branch from a wire, name signals; notes, block colours and Find on the diagram",
     "84 blocks: sources, math, transfer functions, state space, PID, delays, discontinuities, lookup tables, discrete control, motors and drives",
     "Discrete control: discrete transfer function, state space, integrator and PID, rate transition, and sample-time colours on the diagram",
     "Motor library: DC (separately excited, shunt, series, compound), induction (squirrel-cage, double-cage, wound-rotor), synchronous (permanent-magnet, reluctance, wound-field with dampers), switched reluctance, BLDC and stepper",
@@ -42,21 +43,9 @@
   ],
   "roadmap": [
     {
-      "v": "0.1.6",
-      "title": "Wires and diagram",
-      "when": "Next",
-      "items": [
-        "Branch from the middle of a wire",
-        "Move wire segments and remove bends",
-        "Signal names on wires and in scope legends",
-        "Text notes on the diagram",
-        "Find a block; block colours"
-      ]
-    },
-    {
       "v": "0.2",
       "title": "Reusable models",
-      "when": "Soon",
+      "when": "Next",
       "items": [
         "Masks: a subsystem with its own parameters, help and typical ratings",
         "My blocks: your own library of masked subsystems"

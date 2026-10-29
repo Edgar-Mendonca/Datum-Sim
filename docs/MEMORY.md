@@ -44,7 +44,7 @@
 | `crates/core/src/measure.rs` | Value at a time (probe, cursors) and step-response marks (10–90 % rise, peak, overshoot, 2 % settling) |
 | `crates/core/src/linalg.rs` | Dense LU with pivoting (for the stiff solver) |
 | `crates/core/src/route.rs` | Orthogonal wire routing on a sparse grid (bend and shared-segment penalties, user bend points) |
-| `crates/core/src/view.rs` | One diagram as the window draws it: blocks with port positions, labels, parameters; routed wires |
+| `crates/core/src/view.rs` | One diagram as the window draws it: blocks with port positions, labels, parameters, colours; routed wires with signal names (notes do not block routing); `find` across subsystems |
 | `crates/core/src/sweep.rs` | Parameter sweeps on threads; values from any expression (`linspace(…)`) |
 | `crates/core/src/examples.rs` | The worked examples, built in code |
 | `crates/core/src/verify.rs` | Verification tests: blocks and models against closed-form answers |
@@ -70,7 +70,7 @@
 | `ui/src/styles.css`, `ui/src/ui.tsx`, `ui/index.html` | Plan's styles (orange accent) and components; the icon sprite |
 | `py/worker.py`, `py/datum_sim/linear.py` | The Python worker and the linear analyses (python-control) |
 | `py/tests/test_worker.py` | Python tests against closed-form answers and the protocol |
-| `tests_ui/run.cjs` | 46 UI checks of the built window with a mocked bridge (the fixture also holds the induction motor start's diagram) |
+| `tests_ui/run.cjs` | 53 UI checks of the built window with a mocked bridge (the fixture also holds the induction motor start's diagram) |
 | `tests_ui/realapp.sh` | Screenshots of the real app under Xvfb (xdotool steps) |
 | `docs/verification/2026-10-27.md`, `2026-10-28.md`, `2026-10-29.md` | Verification records: 0.1.0 (solvers, blocks), 0.1.2 (motors and drives), 0.1.4 (discrete control, motor extras, power balance): what was checked, numbers, what was not |
 | `docs/PLAN-0.1.md`, `docs/PLAN-0.1.x.md`, `docs/PLAN-0.2.md`, `docs/site.json`, `CHANGELOG.md` | The plans, the public summary and roadmap, the change log |
@@ -128,6 +128,10 @@
 | 0.1.2 | Machines in their natural frames: induction in the stationary αβ frame with flux linkages as states (no speed-dependent frame, wound-rotor voltages turned by p·θ); synchronous machines in the rotor dq frame with Park inside; three-phase signals are width-3 vectors; transforms amplitude-invariant | Exact steady states against the equivalent circuit; one signal type; inductance matrices inverted once at build |
 | 0.1.2 | **Typical ratings** live in the engine (`motors::presets`, served with the library) and the Inspector applies one as a single `Batch` of `SetParam` | One owner for the numbers, testable, one undo step; values come from per-unit typical data (Zb = V²/S, J = 2H·S/ω²), stated as typical, never as a real machine |
 | 0.1.2 | A new library group **Drives** (source, inverter, PWM, transforms, encoder); motors stay in **Motors** | The user's "all motor types" brings drive pieces that are not motors |
+| 0.1.6 | **Signal names** live on wires (`Wire.name`); NameWire names every wire from the same output; flattening uses the name for the source's output name, so legends, results and the probe show it | One signal, one name, wherever it is read |
+| 0.1.6 | Moving a wire segment writes the whole moved path's corners as the wire's bend points; the router keeps a wire through its bend points | No new routing mode; undo, files and printing work unchanged |
+| 0.1.6 | Notes are a block kind (`Note`) that flattening skips; colours are `Block.color` from `blocks::COLOURS` | Notes move, copy, undo and print like blocks; one owner for the colours |
+| 0.1.6 | A double-click on a wire is two presses on the same wire within 450 ms (the browser did not report dblclick on a wire after the first press selected it) | Works the same in every WebView; tested |
 | 0.1.5 | Scope layout and y range are **Scope block parameters** (layout, ymin, ymax), set from the scope's More menu as undoable edits | Saved with the model, one owner, no window-only state |
 | 0.1.5 | Cursor values, step marks and the probe's values come from the engine (`value_at`, `step_marks` in `measure.rs`); the window only draws | "The window never calculates" |
 | 0.1.5 | **Log all signals** is a run setting (`SimSettings.log_all`); probe channels carry `probe: true` and the block (or subsystem) and port the wire leaves from | One logging path; sinks and the probe never mix |
@@ -159,8 +163,8 @@
 | 0.1.3 | Windows publisher name "Datum" (family-wide change) | ✅ |
 | 0.1.4 | Discrete control: discrete TF/SS, integrator, PID, rate transition, sample-time colours; integrator reset; Goto/From; sources; SRM, DC link, inverter DC current, sensor; power-balance checks (PLAN-0.2 A) | ✅ |
 | 0.1.5 | Scopes: cursors, y-zoom, stacked plots, compare runs, signal probe, step marks, SVG (PLAN-0.2 C) | ✅ |
-| 0.1.6 | Wires and diagram: branch from a wire, segments, signal names, notes, find, colours (PLAN-0.2 B) | 🔜 |
-| 0.2 | Masks and My blocks (copied), file version 2 (PLAN-0.2 D) | ⬜ |
+| 0.1.6 | Wires and diagram: branch from a wire, segments, signal names, notes, find, colours (PLAN-0.2 B) | ✅ |
+| 0.2 | Masks and My blocks (copied), file version 2 (PLAN-0.2 D) | 🔜 |
 | 0.3 | Control design: trim, linearise whole models, Nyquist, root locus, PID tuning, live tuning; buses; algebraic-loop solving | ⬜ |
 | 0.4 | Physical components (mechanical, rotational, electrical, hydraulic, thermal), DAEs | ⬜ |
 | 0.5 | FMU import and export; Modelica through an external compiler | ⬜ |
@@ -221,11 +225,16 @@
 - Bugs found in the real app and fixed: uPlot crashed when a plot was redrawn in the tick it was made (redraws now wait a frame); the high-resolution PNG copied a canvas before uPlot drew it; probe channels opened an empty scope; the marks' text was right-aligned by uPlot's canvas state; the scope header wrapped at dock width (Axes, Picture and CSV moved into More).
 - Released 0.1.5.
 
+### 2026-10-29: Session 6 (0.1.6)
+- Built part B: wire names (engine and window), segment moving, branching from a wire, removing bends, notes, Find, Distribute, block colours, wire context menu.
+- Checked: 67 Rust tests, 53 UI checks (7 new), clippy; the real app (notes; naming a signal; the name in the Inspector). Fixed on the way: notes no longer push wires aside; wire double-clicks are detected by two presses.
+- Released 0.1.6. Next: 0.2.0 masks and My blocks.
+
 ## 5. Known limits and next steps
 
 - The user ran 0.1.0 on Windows (installer, Python, printing, updater work). The 0.1.2 motor library has not yet been run on a Windows PC; CI builds and tests on Windows and macOS.
 - The Python engine's large-array path (binary frames instead of JSON) is not needed yet: analyses send small data; step specifications send at most 20 000 points.
-- Wires have no branch points of their own (a second wire from the same output is drawn separately) and no labels.
+- A branch is a second wire from the same output (drawn along the first where they run together); a wire's first and last segments stay on their ports.
 - Algebraic loops are reported, not solved (0.3). Discrete blocks have no sample offset yet, and are not linearised for analysis.
 - Motors: no saturation, iron losses or BLDC commutation ripple; presets are typical values, not real machines; power-balance checks and switched reluctance are still to do. The switched inverter is slow for long runs (every switching instant is located); the average model is the default.
 - Linear analysis works on single blocks; linearising whole models arrives in 0.3.

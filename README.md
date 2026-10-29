@@ -26,7 +26,7 @@ Draw a model as blocks and wires, press Run, and see how the system behaves over
 
 ## What it does
 
-- **Block diagrams**: 84 blocks (sources, math, transfer functions, state space, PID, delays, discontinuities, lookup tables, scopes, discrete control, motors and drives). Wires find their own way around the blocks.
+- **Block diagrams**: 84 blocks (sources, math, transfer functions, state space, PID, delays, discontinuities, lookup tables, scopes, discrete control, motors and drives). Wires find their own way around the blocks; move their segments, branch from them and name the signals they carry. Notes, block colours and Find (Ctrl+F) on the diagram.
 - **Discrete control**: discrete transfer function, state space, integrator and PID, rate transition; the diagram can colour every block by its sample time.
 - **Motors**: DC (permanent-magnet, separately excited, shunt, series, compound), induction (squirrel-cage, double-cage, wound-rotor), synchronous (permanent-magnet, reluctance, wound-field with dampers), switched reluctance, BLDC and stepper motors, with typical values for low, medium and high voltage ratings.
 - **Drives**: three-phase source, inverter (average or switched), DC link, PWM, Clarke and Park transforms, encoder, current sensor; worked examples from a direct-on-line start to field-oriented control.

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.6 — 2026-10-29
+
+Wires and the diagram: easier to draw, read and find your way in.
+
+**Wires**
+- Drag a wire's middle segment sideways to move it; the bends stay square.
+- Alt-drag (or Ctrl-drag) from a wire to branch its signal to another input.
+- Double-click a bend to remove it.
+- **Signal names**: double-click a wire (or use the Inspector) to name the signal it carries. The name shows on the wire, on the printed diagram and in scope legends and results, and every wire from the same output carries it.
+
+**Diagram**
+- **Notes**: text notes on the diagram for explanations, reviews and teaching (Format › Note). Wires run over them and they are printed with the diagram.
+- **Find** (Ctrl+F): find a block, or a named signal, anywhere in the model, inside subsystems too; choosing one opens its diagram and selects it.
+- **Block colours**: colour blocks to mark the plant, the controller and the sensors (Format › Block Colour, or right-click).
+- **Distribute**: space three or more blocks evenly, across or down.
+
 ## 0.1.5 — 2026-10-29
 
 Scopes you can measure with, and a probe that reads any wire.

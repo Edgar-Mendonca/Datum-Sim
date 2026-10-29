@@ -112,7 +112,8 @@ pub fn view(m: &Model, parent: u32) -> Option<View> {
             color: b.color.clone(),
         });
     }
-    let rects: Vec<Rect> = d.blocks.iter().map(|b| Rect { x: b.x, y: b.y, w: b.w, h: b.h }).collect();
+    // Wires may run over notes: they are only text.
+    let rects: Vec<Rect> = d.blocks.iter().filter(|b| b.kind != "Note").map(|b| Rect { x: b.x, y: b.y, w: b.w, h: b.h }).collect();
     let by_id: BTreeMap<u32, &BlockView> = blocks_v.iter().map(|b| (b.id, b)).collect();
     let mut reqs = Vec::new();
     let mut ok = Vec::new();

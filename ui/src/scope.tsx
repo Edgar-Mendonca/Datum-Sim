@@ -5,9 +5,9 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, 
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { invoke, num, Series } from "./api";
-import { chans, results, live, liveTick, running, themeTick, dview, scopes, setScopes, call, toast, defOf, act, openMenu, openDialog, closeDialog, Item, setProbeT } from "./store";
+import { chans, results, live, liveTick, running, themeTick, dview, scopes, setScopes, call, toast, defOf, act, openMenu, openDialog, Item, setProbeT } from "./store";
 import { C } from "./cmds";
-import { Icon } from "./ui";
+import { Icon, Dialog } from "./ui";
 
 export const OKABE = ["#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7", "#56B4E9", "#F0E442", "#000000"];
 const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -374,11 +374,15 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
 /** Fixed y range for a scope: saved in the Scope block, so it is undoable and kept in the file. */
 const yRangeDialog = (id: number, cur: [number, number]) => openDialog(() => {
   const [lo, setLo] = createSignal(num(cur[0])), [hi, setHi] = createSignal(num(cur[1]));
-  const ok = () => { const a = +lo(), b = +hi(); if (!(isFinite(a) && isFinite(b) && b > a)) return toast("The upper limit must be above the lower one."); closeDialog(); act({ Batch: [{ SetParam: { id, key: "ymin", value: String(a) } }, { SetParam: { id, key: "ymax", value: String(b) } }] }); };
-  return <div class="ov" onMouseDown={e => e.target === e.currentTarget && closeDialog()}><div class="dlg sm"><h2>Y range</h2>
+  const ok = () => {
+    const a = +lo(), b = +hi();
+    if (!(isFinite(a) && isFinite(b) && b > a)) { toast("The upper limit must be above the lower one."); return false; }
+    act({ Batch: [{ SetParam: { id, key: "ymin", value: String(a) } }, { SetParam: { id, key: "ymax", value: String(b) } }] });
+  };
+  return <Dialog title="Y range" ok={ok} okText="Set">
     <div class="iprow"><label>Lower</label><input class="mono" value={lo()} onInput={e => setLo(e.currentTarget.value)} /></div>
-    <div class="iprow"><label>Upper</label><input class="mono" value={hi()} onInput={e => setHi(e.currentTarget.value)} onKeyDown={e => e.key === "Enter" && ok()} /></div>
-    <p class="btns"><button class="btn" onClick={closeDialog}>Cancel</button><button class="btn pri" onClick={ok}>Set</button></p></div></div>;
+    <div class="iprow"><label>Upper</label><input class="mono" value={hi()} onInput={e => setHi(e.currentTarget.value)} /></div>
+  </Dialog>;
 });
 
 /** XY graph: input 2 against input 1. */

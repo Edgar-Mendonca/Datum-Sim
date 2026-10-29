@@ -6,7 +6,8 @@ import { For, Show, JSX, createSignal, createMemo, onMount } from "solid-js";
 import { Portal } from "solid-js/web";
 import { createStore } from "solid-js/store";
 import { invoke, DView, num } from "./api";
-import { out, opts, results, chans, call, toast } from "./store";
+import { out, opts, results, chans, call, toast, lib } from "./store";
+import { labelAt } from "./canvas";
 import { Pick, Check } from "./ui";
 import { sinks } from "./scope";
 
@@ -38,6 +39,17 @@ const Sheet = (p: { pg: Page; n: number; pages: number; w: number; h: number }) 
   );
 };
 
+/** A note's text in lines that fit its width (about 5.5 px per character at 10 px). */
+const noteLines = (text: string, w: number) => {
+  const per = Math.max(8, Math.floor((w - 12) / 5.5)), out: string[] = [];
+  for (const para of text.split("\n")) {
+    let line = "";
+    for (const word of para.split(" ")) { if ((line + " " + word).trim().length > per && line) { out.push(line); line = word; } else line = (line + " " + word).trim(); }
+    out.push(line);
+  }
+  return out;
+};
+
 const body = (pg: Page, w: number, h: number): JSX.Element => {
   if (pg.kind === "scope") return <div class="pscope"><h3>{pg.name}</h3><img src={pg.img} style={{ "max-width": `${w}px`, "max-height": `${h - 30}px` }} /></div>;
   if (pg.kind === "report") return <Report />;
@@ -48,9 +60,13 @@ const body = (pg: Page, w: number, h: number): JSX.Element => {
   return <div class="pdiag"><h3>{v.path.map(x => x[1]).join(" › ")}</h3>
     <svg viewBox={`${x0} ${y0} ${x1 - x0} ${y1 - y0}`} width={w} height={h - 30} preserveAspectRatio="xMidYMid meet" class="printdiag">
       <defs><marker id="parr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#33404F" /></marker></defs>
-      <For each={v.wires}>{wi => <path d={wi.path.map((p, i) => `${i ? "L" : "M"}${p[0]} ${p[1]}`).join("")} fill="none" stroke="#33404F" stroke-width="1.2" marker-end="url(#parr)" />}</For>
-      <For each={v.blocks}>{b => <g transform={`translate(${b.x} ${b.y})`}>
-        {b.kind === "Sum" ? <circle cx={b.w / 2} cy={b.h / 2} r={b.h / 2} fill="#fff" stroke="#1B2733" stroke-width="1.2" /> : <rect width={b.w} height={b.h} rx={3} fill={b.sub ? "#FCEEE6" : "#fff"} stroke="#1B2733" stroke-width="1.2" />}
+      <For each={v.blocks.filter(b => b.kind === "Note")}>{b => <g transform={`translate(${b.x} ${b.y})`}>
+        <rect width={b.w} height={b.h} rx={2} fill="#FFFBEB" stroke="#C9A93E" stroke-dasharray="4 3" />
+        <text font-size="10" fill="#1B2733">{noteLines(b.params.text ?? "", b.w).slice(0, Math.max(1, Math.floor((b.h - 6) / 13))).map((l, i) => <tspan x={6} y={15 + 13 * i}>{l}</tspan>)}</text></g>}</For>
+      <For each={v.wires}>{wi => <><path d={wi.path.map((p, i) => `${i ? "L" : "M"}${p[0]} ${p[1]}`).join("")} fill="none" stroke="#33404F" stroke-width="1.2" marker-end="url(#parr)" />
+        <Show when={wi.name ? labelAt(wi) : null}>{lp => <text x={lp()[0]} y={lp()[1] - 4} font-size="9.5" text-anchor="middle" fill="#3B4859">{wi.name}</text>}</Show></>}</For>
+      <For each={v.blocks.filter(b => b.kind !== "Note")}>{b => <g transform={`translate(${b.x} ${b.y})`}>
+        {b.kind === "Sum" ? <circle cx={b.w / 2} cy={b.h / 2} r={b.h / 2} fill="#fff" stroke="#1B2733" stroke-width="1.2" /> : <rect width={b.w} height={b.h} rx={3} fill={(b.color && (lib().colours ?? []).find(c => c[0] === b.color)?.[1]) || (b.sub ? "#FCEEE6" : "#fff")} stroke="#1B2733" stroke-width="1.2" />}
         <text x={b.w / 2} y={b.h / 2} font-size="10" text-anchor="middle" dominant-baseline="central" fill="#1B2733">{b.kind === "Sum" ? "Σ" : (b.label.split("\n")[0] || b.kind).slice(0, 16)}</text>
         <text x={b.w / 2} y={b.h + 11} font-size="9.5" text-anchor="middle" fill="#55606E">{b.name}</text></g>}</For>
     </svg></div>;

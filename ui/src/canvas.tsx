@@ -6,6 +6,7 @@ import { dview, sel, setSel, act, parent, enter, out, opts, issues, results, cha
 import { invoke } from "./api";
 import { C } from "./cmds";
 import { helpCard } from "./help";
+import { Dialog } from "./ui";
 
 const GRID = 10;
 export const [zoom, setZoom] = createSignal(1);
@@ -179,7 +180,7 @@ const movedPath = (path: Pt[], i: number, dx: number, dy: number): Pt[] | null =
   return out;
 };
 /** Where a signal's name sits: above the middle of the wire's longest horizontal segment. */
-const labelAt = (w: WireView): Pt | null => {
+export const labelAt = (w: WireView): Pt | null => {
   let best: Pt | null = null, bl = 0;
   for (let i = 0; i + 1 < w.path.length; i++) {
     const a = w.path[i], b = w.path[i + 1];
@@ -190,13 +191,10 @@ const labelAt = (w: WireView): Pt | null => {
 /** Name the signal a wire carries (every wire from the same output takes the name). */
 export const nameWire = (w: WireView) => openDialog(() => {
   const [t, setT] = createSignal(w.name ?? "");
-  const ok = () => { closeDialog(); act({ NameWire: { id: w.id, name: t() } }); };
-  let input!: HTMLInputElement;
-  onMount(() => { input.focus(); input.select(); });
-  return <div class="ov" onMouseDown={e => e.target === e.currentTarget && closeDialog()}><div class="dlg sm"><h2>Signal name</h2>
+  return <Dialog title="Signal name" ok={async () => (await act({ NameWire: { id: w.id, name: t() } })) ? undefined : false} okText="Set">
     <p class="muted">Shown on the wire and in scope legends. Every wire from the same output carries it. Leave it empty to remove the name.</p>
-    <div class="iprow"><label>Name</label><input ref={input} class="wnamein" value={t()} onInput={e => setT(e.currentTarget.value)} onKeyDown={e => { if (e.key === "Enter") ok(); if (e.key === "Escape") closeDialog(); }} /></div>
-    <p class="btns"><button class="btn" onClick={closeDialog}>Cancel</button><button class="btn pri" onClick={ok}>Set</button></p></div></div>;
+    <div class="iprow"><label>Name</label><input class="wnamein" value={t()} onInput={e => setT(e.currentTarget.value)} /></div>
+  </Dialog>;
 });
 
 /** Find (Ctrl+F): blocks and named signals anywhere in the model; Enter opens the diagram and selects it. */
@@ -297,7 +295,8 @@ export const Canvas = () => {
       if (e.altKey || (e.ctrlKey && !e.shiftKey)) { setDrag({ k: "wire", from: w.from, to: null, a: nearestOn(w.path, p), b: p }); return; }
       // Two presses on the same wire are a double-click (the browser does not always report one on a wire).
       const now = performance.now();
-      if (lastWire && lastWire.id === id && now - lastWire.t < 450) { lastWire = null; wireDouble(w, p); return; }
+      // (The press's own focus change would take the keyboard from the dialog it opens.)
+      if (lastWire && lastWire.id === id && now - lastWire.t < 450) { e.preventDefault(); lastWire = null; wireDouble(w, p); return; }
       lastWire = { id, t: now };
       setSel(add ? (selSet().has(id) ? sel().filter(x => x !== id) : [...sel(), id]) : [id]);
       setDrag({ k: "bend", id, a: p, b: p, seg: segAt(w.path, p) });
