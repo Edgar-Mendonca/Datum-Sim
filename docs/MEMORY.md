@@ -73,7 +73,7 @@
 | `tests_ui/run.cjs` | 60 UI checks of the built window with a mocked bridge (the fixture also holds the induction motor start's diagram) |
 | `tests_ui/realapp.sh` | Screenshots of the real app under Xvfb (xdotool steps) |
 | `docs/verification/2026-10-27.md`, `2026-10-28.md`, `2026-10-29.md` | Verification records: 0.1.0 (solvers, blocks), 0.1.2 (motors and drives), 0.1.4 (discrete control, motor extras, power balance): what was checked, numbers, what was not |
-| `docs/PLAN-0.1.md`, `docs/PLAN-0.1.x.md`, `docs/PLAN-0.2.md`, `docs/site.json`, `CHANGELOG.md` | The plans, the public summary and roadmap, the change log |
+| `docs/PLAN-0.1.md`, `docs/PLAN-0.1.x.md`, `docs/PLAN-0.2.md`, `docs/PLAN-0.3.md`, `docs/site.json`, `CHANGELOG.md` | The plans, the public summary and roadmap, the change log |
 
 ### Release flow
 
@@ -237,6 +237,9 @@
 - Built part D: masks (engine scopes, SetMask with checks, Inspector, mask editor with ratings, look under the mask, ? card, Model › Mask) and My blocks (save, list in the Library, drag or double-click to add a copy, remove, folder in Options); file format 2; the masked motor example.
 - Checked: 69 Rust tests (3 new: mask scopes and errors, nested masks, file format; My blocks copies; the example), 60 UI checks (7 new), clippy; the real app (the masked example: two copies with their own values, Inspector, mask editor).
 - The bigger build (PLAN-0.2) is complete: 0.1.4, 0.1.5, 0.1.6 and 0.2.0 released. Next on the roadmap: 0.3 control design.
+
+### 2026-10-30: Session 7 (plan for 0.3)
+- The user: "plan 0.3 control design". Wrote `docs/PLAN-0.3.md`: analysis points and linearising whole models (central differences on the compiled model; z for single-rate discrete loops); trim (Levenberg–Marquardt); loop Bode and margins, Nyquist, root locus, sensitivity; a PID tuner (bandwidth and phase margin sliders, Ziegler–Nichols, SIMC) with the maths in Rust; live tuning of variables marked tunable, with real-time pacing; buses and algebraic loops as an option. Proposed releases 0.2.1–0.2.5 then 0.3.0. Six questions wait for the user. Nothing built.
 
 ## 5. Known limits and next steps
 
