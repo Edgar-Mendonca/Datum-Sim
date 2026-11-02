@@ -73,7 +73,7 @@
 | `tests_ui/run.cjs` | 60 UI checks of the built window with a mocked bridge (the fixture also holds the induction motor start's diagram) |
 | `tests_ui/realapp.sh` | Screenshots of the real app under Xvfb (xdotool steps) |
 | `docs/verification/2026-10-27.md`, `2026-10-28.md`, `2026-10-29.md` | Verification records: 0.1.0 (solvers, blocks), 0.1.2 (motors and drives), 0.1.4 (discrete control, motor extras, power balance): what was checked, numbers, what was not |
-| `docs/PLAN-0.1.md`, `docs/PLAN-0.1.x.md`, `docs/PLAN-0.2.md`, `docs/PLAN-0.3.md`, `docs/site.json`, `CHANGELOG.md` | The plans, the public summary and roadmap, the change log |
+| `docs/PLAN-0.1.md`, `docs/PLAN-0.1.x.md`, `docs/PLAN-0.2.md`, `docs/PLAN-0.3.md`, `docs/COMPARISON.md` (internal: industry comparison at 0.2.0), `docs/site.json`, `CHANGELOG.md` | The plans, the public summary and roadmap, the change log |
 
 ### Release flow
 
@@ -240,6 +240,11 @@
 
 ### 2026-10-30: Session 7 (plan for 0.3)
 - The user: "plan 0.3 control design". Wrote `docs/PLAN-0.3.md`: analysis points and linearising whole models (central differences on the compiled model; z for single-rate discrete loops); trim (Levenberg–Marquardt); loop Bode and margins, Nyquist, root locus, sensitivity; a PID tuner (bandwidth and phase margin sliders, Ziegler–Nichols, SIMC) with the maths in Rust; live tuning of variables marked tunable, with real-time pacing; buses and algebraic loops as an option. Proposed releases 0.2.1–0.2.5 then 0.3.0. Six questions wait for the user. Nothing built.
+
+### 2026-11-02: Session 7 (comparisons)
+- Quick comparison in chat with open tools (MatCraft is a MATLAB-like Rust environment, not a block-diagram tool; PathSim/PathView, bdsim, Xcos, OpenModelica, Hopsan).
+- Cleanup: style comments no longer name commercial products; trademark line in README and NOTICE.
+- Wrote `docs/COMPARISON.md` in the family pattern (as Plot's PLAN-0.1 §1–2): how Simulink, PLECS, Xcos, OpenModelica and Datum Sim think; feature tables (✓ ◐ — with our release); coverage by area (control design ≈ 25 % today, ≈ 75 % after 0.3); suggestions: keep 0.3 next, add an automation release (command line + Python API), drive extras (FFT/THD, SVPWM, dead time and losses), keep code generation out of scope. Internal document: product names never go into public words.
 
 ## 5. Known limits and next steps
 
