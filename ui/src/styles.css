@@ -364,7 +364,7 @@ tr.link:hover td { background: var(--pale); }
   .panel, .kpi { break-inside: avoid; }
 }
 
-/* ---------- 0.3.1: Excel-style grid ---------- */
+/* ---------- 0.3.1: spreadsheet-style grid ---------- */
 .grid { display: flex; flex-direction: column; min-width: 120px; flex: none; min-height: 0; }
 .gscroll { flex: 1; overflow: auto; position: relative; outline: none; background: var(--bg2); }
 .gsheet { position: relative; }
@@ -398,7 +398,7 @@ tr.link:hover td { background: var(--pale); }
 .fbar input { flex: 1; border: 0 !important; height: 100%; padding: 0 8px !important; font: 12.5px var(--mono); background: transparent !important; outline: none !important; }
 .fbar .agg { padding: 0 12px; font: 11px var(--mono); color: var(--muted); white-space: nowrap; border-left: 1px solid var(--line); line-height: 27px; }
 
-/* ---------- 0.3.1: CentriForge polish on the MS Project layout ---------- */
+/* ---------- 0.3.1: panel colours and ribbon group captions ---------- */
 body, .app { background: var(--bg); color: var(--text); }
 .top, .ribbon, .status, .side { background: var(--panel); }
 .ribbon .grp .cap { font: 500 9.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
@@ -468,7 +468,7 @@ input, select, textarea { background: var(--bg2); color: var(--text); }
 .printonly { display: none; }
 @media print { .printonly { display: block !important; } }
 
-/* 0.3.2: split buttons, contextual tab, Gantt styles */
+/* 0.3.2: split buttons, contextual tab, timeline bar styles */
 .splitbig { display: flex; flex-direction: column; border: 1px solid transparent; border-radius: 3px; }
 .splitbig:hover { border-color: var(--sel2); }
 .splitbig .rb { border: 0; border-radius: 0; justify-content: center; min-width: 58px; }

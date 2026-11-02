@@ -51,3 +51,5 @@ npx tauri dev            # run the app
 Datum Sim is part of [Datum](https://edgar-mendonca.github.io/Datum/apps/sim), a family of free and open-source desktop tools for engineers, scientists, researchers and analysts. Its design guide is [FAMILY.md](https://github.com/Edgar-Mendonca/Datum/blob/HEAD/FAMILY.md); this repo's memory and roadmap are in [docs/MEMORY.md](docs/MEMORY.md).
 
 Licence: [MIT](LICENSE). Third-party notices: [NOTICE](NOTICE).
+
+Product and file-format names are trademarks of their owners and are used only to describe file compatibility.
