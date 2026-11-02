@@ -38,13 +38,32 @@ Draw a model as blocks and wires, press Run, and see how the system behaves over
 
 ![Scopes of a permanent-magnet motor's speed control](docs/images/scopes.png)
 
+## Automation
+
+Run models without the window, from scripts, batch files and build servers, or drive them from Python. Both use the app's own engine. The command line `datum-sim-cli` is installed next to the app; Help › Automation shows the commands for the open model.
+
+```bash
+datum-sim-cli run motor.dsim --set Kp=120 --stop 5 --out speed.csv
+datum-sim-cli sweep motor.dsim --var Kp --values 50,100,150 --out runs
+datum-sim-cli check motor.dsim          # exit code 1 when the model has errors
+```
+
+```python
+# pip install "git+https://github.com/Edgar-Mendonca/Datum-Sim#subdirectory=py"
+import datum_sim as ds
+m = ds.open("motor.dsim")
+m.set(Kp=120)                     # model variables
+m.set_param("PID", "D", 5)        # block parameters, by name or path
+r = m.run(stop=5)                 # NumPy arrays: r.t, r["Speed"]
+```
+
 ## Build from source
 
 ```bash
 npm ci
 npm run build:ui
 cargo test --workspace
-python -m pip install -r py/requirements.txt && python -m unittest discover -s py/tests
+python -m pip install -r py/requirements.txt && python -m unittest discover -s py/tests   # after cargo test: the Python API uses the command line it builds
 npx tauri dev            # run the app
 ```
 

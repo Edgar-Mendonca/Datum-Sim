@@ -3,7 +3,8 @@
     "resources": {
       "../py/worker.py": "py/worker.py",
       "../py/datum_sim/*.py": "py/datum_sim/",
-      "runtime.zip": "runtime.zip"
+      "runtime.zip": "runtime.zip",
+      "../target/release/datum-sim-cli.exe": "datum-sim-cli.exe"
     }
   }
 }

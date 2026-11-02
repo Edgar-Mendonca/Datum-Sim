@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.1 — 2026-11-02
+
+Automation: run models from the command line and from Python.
+
+**Command line**: `datum-sim-cli`, installed next to the app.
+- `run` a model and write the results as CSV or JSON, or print a summary. Set variables (`--set Kp=120`), block parameters (`--param PID:D=5`) and run settings (`--stop`, `--solver` …), pick signals, and reduce the points.
+- `sweep` a variable and write one file per value; `check` a model (exit code 1 on errors, for build servers); `info` lists blocks, parameters, variables and signals; `examples`.
+
+**Python**: `import datum_sim`. Open a model or an example, set variables and parameters, run, and get the results as NumPy arrays (or a pandas table). Sweep a variable, check, save. Install with `pip install "git+https://github.com/Edgar-Mendonca/Datum-Sim#subdirectory=py"`.
+
+**Help › Automation** shows the commands for the open model, ready to copy.
+
+The command line and Python use the app's own engine, so their results are the same as the window's.
+
 ## 0.2.0 — 2026-10-29
 
 Reusable models: masks and My blocks.

@@ -1,0 +1,14 @@
+[package]
+name = "datum-sim-cli"
+version = "0.2.1"
+license = "MIT"
+edition = "2021"
+description = "Datum Sim from the command line: run, check and sweep models, and a JSON session for Python."
+
+[[bin]]
+name = "datum-sim-cli"
+path = "src/main.rs"
+
+[dependencies]
+datum-core = { path = "../core" }
+serde_json.workspace = true

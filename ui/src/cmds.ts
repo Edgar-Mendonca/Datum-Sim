@@ -168,7 +168,7 @@ export const ALL_CMDS: [string, () => void, string?][] = [
   ["Run", C.run, "F5"], ["Stop", C.stop], ["Pause / Resume", C.pause], ["Step", C.step], ["Check model", C.check],
   ["Save", () => C.save(), "Ctrl+S"], ["Save As", () => C.save(true)], ["Open", C.open, "Ctrl+O"], ["New model", () => setBackstage("home"), "Ctrl+N"], ["Print / PDF", C.print, "Ctrl+P"],
   ["Undo", C.undo, "Ctrl+Z"], ["Redo", C.redo, "Ctrl+Y"], ["Add block", C.quickAdd, "Double-click"], ["Delete", C.del, "Del"], ["Copy", C.copy, "Ctrl+C"], ["Paste", C.paste, "Ctrl+V"], ["Cut", C.cut, "Ctrl+X"],
-  ["Find a block or signal", C.find, "Ctrl+F"], ["Mask the subsystem", C.mask], ["Save to My blocks", C.saveMyBlock], ["Name the signal on a wire", C.nameSignal], ["Add a note", C.note], ["Distribute horizontally", () => C.distribute("x")], ["Distribute vertically", () => C.distribute("y")],
+  ["Find a block or signal", C.find, "Ctrl+F"], ["Automation: command line and Python", () => D.automation()], ["Mask the subsystem", C.mask], ["Save to My blocks", C.saveMyBlock], ["Name the signal on a wire", C.nameSignal], ["Add a note", C.note], ["Distribute horizontally", () => C.distribute("x")], ["Distribute vertically", () => C.distribute("y")],
   ["Flip block", C.flip, "Ctrl+R"], ["Rename block", C.rename, "F2"], ["Create subsystem", C.group, "Ctrl+G"], ["Ungroup subsystem", () => C.ungroup()],
   ["Model variables", C.vars], ["Parameter sweep", C.sweep], ["Bode plot", () => C.analyze("bode")], ["Step response", () => C.analyze("step")], ["Poles and zeros", () => C.analyze("pz")],
   ["Step-response specifications", C.stepInfo], ["Export results as CSV", () => C.exportCsv()], ["Send results to Datum Plot", C.toPlot],

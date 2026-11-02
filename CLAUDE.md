@@ -24,7 +24,7 @@ How we build (see PLAN-0.1 §2):
 Checks before pushing:
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace` (includes the `hardening` and verification tests)
-- `python -m unittest discover -s py/tests` (needs `pip install -r py/requirements.txt`)
+- `python -m unittest discover -s py/tests` (needs `pip install -r py/requirements.txt`; run after `cargo test`, so the Python API tests find `target/debug/datum-sim-cli`)
 - `npm run check:ui`, then `npm run test:ui` (dumps the engine fixture, builds the window, runs the Playwright checks)
 - `cargo deny check` (licences, advisories, sources; CI runs it)
 - A change you can see: check it in the real app (`cargo build -p datum-sim && tests_ui/realapp.sh steps.sh shots/`, see the script) and add a UI check for every bug

@@ -36,6 +36,9 @@
 | `crates/core/src/model.rs` | Model, diagrams, blocks (colour, mask), wires (name), variables, run settings; `.dsim` format 2 read (migrations from 1, repair of damaged files) and write |
 | `crates/core/src/doc.rs` | Edit operations (add, move, resize, set parameter, rename, flip, delete, connect, bend points, paste, group into a subsystem, ungroup, variables, settings, batch) with snapshot undo; copy |
 | `crates/core/src/discrete.rs` | Discrete blocks (0.1.4): discrete TF and state space, discrete integrator (3 methods, limits, reset), discrete PID (filtered D, clamping/back-calculation); square, triangle, chirp, repeating-sequence sources. Discrete blocks keep their own state and change only at sample hits |
+| `crates/core/src/api.rs` | Automation (0.2.1): `Session` with JSON requests (open, new, info, set_var, set_param, set_sim, check, run, sweep, save); blocks by path (names may hold '/'); results as JSON with point reduction |
+| `crates/cli/` | `datum-sim-cli`: run, sweep, check, info, examples, example, serve (JSON lines for Python); exit codes 0/1/2; integration tests on the real binary |
+| `py/datum_sim/api.py`, `py/pyproject.toml` | The Python API (`import datum_sim`): Model, Results (NumPy), sweep; talks to `datum-sim-cli serve`; finds it via DATUM_SIM_CLI, PATH, the installed app or a repo build |
 | `crates/core/src/blocks.rs` | The block library: names, categories, parameters with units and hints, help text, sizes, ports, port names and positions, labels, typical ratings (from `motors.rs`); planned blocks |
 | `crates/core/src/rt.rs` | How each block runs (about 45 kinds, including the DC motor and the d–q PMSM), transfer function → state space, roots → polynomials; hands motor and drive kinds to `motors.rs` |
 | `crates/core/src/motors.rs` | The motor library (0.1.2): DC (sep. excited, shunt, series, compound), induction (cage, double cage, wound rotor; αβ frame, flux states), PMSM3, SynRM, wound-field synchronous with dampers, BLDC, stepper; Clarke/Park, three-phase source, inverter, PWM, encoder; typical-ratings presets from per-unit values |
@@ -70,7 +73,7 @@
 | `ui/src/styles.css`, `ui/src/ui.tsx`, `ui/index.html` | Plan's styles (orange accent) and components; the icon sprite |
 | `py/worker.py`, `py/datum_sim/linear.py` | The Python worker and the linear analyses (python-control) |
 | `py/tests/test_worker.py` | Python tests against closed-form answers and the protocol |
-| `tests_ui/run.cjs` | 60 UI checks of the built window with a mocked bridge (the fixture also holds the induction motor start's diagram) |
+| `tests_ui/run.cjs` | 61 UI checks of the built window with a mocked bridge (the fixture also holds the induction motor start's diagram) |
 | `tests_ui/realapp.sh` | Screenshots of the real app under Xvfb (xdotool steps) |
 | `docs/verification/2026-10-27.md`, `2026-10-28.md`, `2026-10-29.md` | Verification records: 0.1.0 (solvers, blocks), 0.1.2 (motors and drives), 0.1.4 (discrete control, motor extras, power balance): what was checked, numbers, what was not |
 | `docs/PLAN-0.1.md`, `docs/PLAN-0.1.x.md`, `docs/PLAN-0.2.md`, `docs/PLAN-0.3.md`, `docs/COMPARISON.md` (internal: industry comparison at 0.2.0), `docs/site.json`, `CHANGELOG.md` | The plans, the public summary and roadmap, the change log |
@@ -128,6 +131,7 @@
 | 0.1.2 | Machines in their natural frames: induction in the stationary αβ frame with flux linkages as states (no speed-dependent frame, wound-rotor voltages turned by p·θ); synchronous machines in the rotor dq frame with Park inside; three-phase signals are width-3 vectors; transforms amplitude-invariant | Exact steady states against the equivalent circuit; one signal type; inductance matrices inverted once at build |
 | 0.1.2 | **Typical ratings** live in the engine (`motors::presets`, served with the library) and the Inspector applies one as a single `Batch` of `SetParam` | One owner for the numbers, testable, one undo step; values come from per-unit typical data (Zb = V²/S, J = 2H·S/ω²), stated as typical, never as a real machine |
 | 0.1.2 | A new library group **Drives** (source, inverter, PWM, transforms, encoder); motors stay in **Motors** | The user's "all motor types" brings drive pieces that are not motors |
+| 0.2.1 | **Automation first** (the user, after the comparison): one JSON session API in the core; a separate `datum-sim-cli` binary (not the GUI exe, whose Windows subsystem cannot print), installed next to the app as a resource; Python talks to `serve` over JSON lines, so no compiled extension and any Python ≥ 3.9 works | Thin, testable, same engine as the window; the release tests the Python API on the bundled runtime against the release CLI |
 | 0.2.0 | **Masks** are on the subsystem block (`Block.mask`: params, icon text, help, presets); values live in the block's `params` like any block's. Flattening opens a scope per masked subsystem; `scope_vars` evaluates each mask's values in the scope around it, so inner names hide outer ones and the model's variables | One evaluation path for every block; errors point at the subsystem |
 | 0.2.0 | **My blocks** are `.dsimblock` files (name, help, a library clip of the subsystem moved to 0, 0) in a folder (Options; default the app's data folder); adding one pastes a copy | The user's choice: copied, not linked (PLAN-0.1.x §5); a shared folder works for teams |
 | 0.2.0 | File **format 2** (masks); format 1 files need no change | Older apps refuse a format 2 file with a clear message instead of losing the masks |
@@ -168,6 +172,7 @@
 | 0.1.5 | Scopes: cursors, y-zoom, stacked plots, compare runs, signal probe, step marks, SVG (PLAN-0.2 C) | ✅ |
 | 0.1.6 | Wires and diagram: branch from a wire, segments, signal names, notes, find, colours (PLAN-0.2 B) | ✅ |
 | 0.2 | Masks and My blocks (copied), file version 2 (PLAN-0.2 D) | ✅ |
+| 0.2.1 | Automation: command line and Python API, Help › Automation | ✅ |
 | 0.3 | Control design (next): trim, linearise whole models, Nyquist, root locus, PID tuning, live tuning; buses; algebraic-loop solving | ⬜ |
 | 0.4 | Physical components (mechanical, rotational, electrical, hydraulic, thermal), DAEs | ⬜ |
 | 0.5 | FMU import and export; Modelica through an external compiler | ⬜ |
@@ -245,6 +250,11 @@
 - Quick comparison in chat with open tools (MatCraft is a MATLAB-like Rust environment, not a block-diagram tool; PathSim/PathView, bdsim, Xcos, OpenModelica, Hopsan).
 - Cleanup: style comments no longer name commercial products; trademark line in README and NOTICE.
 - Wrote `docs/COMPARISON.md` in the family pattern (as Plot's PLAN-0.1 §1–2): how Simulink, PLECS, Xcos, OpenModelica and Datum Sim think; feature tables (✓ ◐ — with our release); coverage by area (control design ≈ 25 % today, ≈ 75 % after 0.3); suggestions: keep 0.3 next, add an automation release (command line + Python API), drive extras (FFT/THD, SVPWM, dead time and losses), keep code generation out of scope. Internal document: product names never go into public words.
+
+### 2026-11-02: Session 7 (0.2.1 automation)
+- The user: "automation first". Built `api.rs` (session), `crates/cli` (datum-sim-cli), `py/datum_sim/api.py` and `py/pyproject.toml`, Help › Automation; CI runs the Python tests after cargo test; the release builds the CLI, tests the Python API on the bundled Python and installs the CLI next to the app.
+- Checked: 2 session tests, 4 command-line tests on the real binary (CSV against the closed form, JSON, sweep files, exit codes, serve), 3 Python API tests (closed form, parameters, sweep, save, errors), 61 UI checks (1 new), the real app (Help › Automation).
+- Released 0.2.1.
 
 ## 5. Known limits and next steps
 

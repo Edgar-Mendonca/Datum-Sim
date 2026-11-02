@@ -36,6 +36,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
             if (window.__masked) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.id === f.sub ? { ...b, label: "DC motor", params: { R: "1", L: "0.5" }, mask: { params: [{ key: "R", label: "Resistance R", def: "1", unit: "Ω", hint: "", choices: [] }, { key: "L", label: "Inductance L", def: "0.5", unit: "H", hint: "", choices: [] }], icon: "DC motor", help: "A DC motor.", presets: [{ name: "Small", values: [["R", "2"], ["L", "0.1"]] }] } } : b) };
             return f.diagram;
           }
+          if (c === "automation") return { cli: "C:\\Users\\me\\AppData\\Local\\Datum Sim\\datum-sim-cli.exe", py: null, model: "C:\\models\\motor.dsim" };
           if (c === "myblocks") return [{ file: "/blocks/Motor.dsimblock", name: "Motor (saved)", what: "A saved motor." }];
           if (c === "save_myblock" || c === "add_myblock") return c === "save_myblock" ? "/blocks/x.dsimblock" : { ...f.state, created: [998] };
           if (c === "new_model") return f.state;
@@ -370,6 +371,16 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.click(".ratechk");
   await p.waitForTimeout(200);
   check("turning them off removes the colours", (await p.$$(".blk.rated")).length === 0 && (await p.$$(".ratelegend")).length === 0);
+
+  // 13b. Help › Automation (0.2.1): commands for the open model, ready to copy.
+  await p.click('.tabs > button:text-is("Help")');
+  await p.waitForTimeout(100);
+  await p.click('.ribbon button:has-text("Automation")');
+  await p.waitForTimeout(300);
+  const au = await p.textContent(".dlg");
+  check("Help › Automation gives the command line for the open model", au.includes('"C:\\Users\\me\\AppData\\Local\\Datum Sim\\datum-sim-cli.exe" run C:\\models\\motor.dsim --out results.csv') && au.includes("sweep") && au.includes("import datum_sim"), au.slice(0, 300));
+  await p.keyboard.press("Escape");
+  await p.click('.tabs > button:text-is("Model")');
 
   // 14. Every view and File page opens without errors.
   for (const v of ["Variables", "Scopes", "Results", "Issues", "Diagram"]) { await p.click(`.side button[title="${v}"]`); await p.waitForTimeout(150); }

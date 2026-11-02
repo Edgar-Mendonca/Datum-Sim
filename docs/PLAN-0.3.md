@@ -1,6 +1,6 @@
 # Plan 0.3: control design
 
-Written 2026-10-30 (session 7), after 0.2.0. Status: **waiting for the user's answers (§7)**. Nothing in this plan is built yet.
+Written 2026-10-30 (session 7), after 0.2.0. Status: **waiting for the user's answers (§7)**. Before it, at the user's choice, the automation release 0.2.1 (§8) was built and released.
 
 ## 1. Where we start
 
@@ -97,3 +97,12 @@ About the size of the 0.2 build. As before, each step is pushed as it is done an
 4. **PID tuning style**: is the two-slider design (speed and robustness) what you want, with Ziegler–Nichols and SIMC alongside? Are there other rules you use (for example IMC or lambda tuning, Cohen–Coon)?
 5. **Motors and drives**: should the tuner also offer the usual drive cascade (current loop from motor L and R, then speed loop from inertia), one click for a whole FOC or DC drive?
 6. **Examples**: any plant you want as a worked control-design example? My default would be the DC motor, the tank and a PMSM drive.
+
+## 8. Automation first (0.2.1, built 2026-11-02)
+
+After the comparison (docs/COMPARISON.md: scripting and batch runs are the one gap every compared tool covers), the user chose "automation first". Built with these defaults:
+
+- A command-line program **datum-sim-cli** (separate from the window, installed next to it): `run`, `sweep`, `check`, `info`, `examples`, `example`, `serve`. Exit codes 0 done, 1 model errors, 2 wrong command line.
+- A **Python API** (`import datum_sim`, installed with pip from this repository's `py/` folder) that drives `datum-sim-cli serve` over JSON lines: open, set variables and parameters, run (NumPy arrays), sweep, check, save.
+- **Help › Automation** in the app with the commands for the open model.
+- Not in 0.2.1: building models from code (adding blocks and wires), a PyPI release, putting the command line on the PATH. These could follow if wanted.

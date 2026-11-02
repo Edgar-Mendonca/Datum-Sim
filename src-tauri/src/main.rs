@@ -839,6 +839,17 @@ fn open_url(url: String) -> R<()> {
     r.map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// Where the command line and the Python package are, and the open model's file, for Help ›
+/// Automation.
+#[tauri::command]
+fn automation(app: AppHandle, st: State<St>) -> Value {
+    let res = app.path().resource_dir().ok();
+    let exe = if cfg!(windows) { "datum-sim-cli.exe" } else { "datum-sim-cli" };
+    let cli = res.as_ref().map(|r| r.join(exe)).filter(|p| p.exists()).map(|p| p.display().to_string());
+    let py = res.as_ref().map(|r| r.join("py")).filter(|p| p.join("datum_sim").exists()).map(|p| p.display().to_string());
+    json!({ "cli": cli, "py": py, "model": st.lock().doc.path })
+}
+
 #[tauri::command]
 fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -885,7 +896,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, find, myblocks, save_myblock, add_myblock, delete_myblock, open, save, save_file,
             run, control, results, series, value_at, step_marks, runs, run_series, sweep_series, run_sweep, export_csv, analyze, step_info, engine,
-            options, set_options, autosave, recovery, recover, recent, startup_file, open_url, version, quit, check_update, install_update
+            options, set_options, autosave, recovery, recover, recent, startup_file, open_url, automation, version, quit, check_update, install_update
         ])
         .run(tauri::generate_context!())
         .expect("Datum Sim failed to start");

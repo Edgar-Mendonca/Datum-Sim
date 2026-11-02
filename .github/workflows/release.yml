@@ -35,8 +35,12 @@ jobs:
             echo "Tag $GITHUB_REF_NAME does not match version $V in src-tauri/Cargo.toml"; exit 1
           fi
           echo "V=$V" >> "$GITHUB_ENV"
+      - name: Command line (datum-sim-cli, installed next to the app)
+        run: cargo build --release -p datum-sim-cli
       - name: Python runtime pack (the newest embeddable CPython 3.13 + py/requirements.txt)
         shell: bash
+        env:
+          DATUM_SIM_CLI: target/release/datum-sim-cli.exe
         run: |
           for n in $(seq 25 -1 5); do
             curl -fsSL -o py.zip "https://www.python.org/ftp/python/3.13.$n/python-3.13.$n-embed-amd64.zip" && PYV=3.13.$n && break

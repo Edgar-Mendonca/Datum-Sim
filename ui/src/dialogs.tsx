@@ -207,6 +207,39 @@ export const confirmClose = (quit: () => void) => openDialog(() => (
   </Dialog>
 ));
 
+/** Help › Automation: the command line and Python, with commands for the open model to copy. */
+export const automation = () => openDialog(() => {
+  const [info] = createResource(() => call<{ cli: string | null; py: string | null; model: string | null }>("automation"));
+  const q = (s: string) => (s.includes(" ") ? `"${s}"` : s);
+  const cli = () => q(info()?.cli ?? "datum-sim-cli");
+  const model = () => q(info()?.model ?? "model.dsim");
+  const copy = (t: string) => navigator.clipboard?.writeText(t).then(() => toast("Copied", true)).catch(() => toast("Could not copy"));
+  const Cmd = (p: { t: string }) => <div class="cmdline"><code>{p.t}</code><button class="btn sm" onClick={() => copy(p.t)}>Copy</button></div>;
+  return <Dialog title="Automation: the command line and Python" wide>
+    <div class="helpcard autom">
+      <p>Run models without the window, from scripts, batch files and build servers, or drive them from Python. The results are exactly the app's: it is the same engine.</p>
+      <h4>Command line</h4>
+      <p class="muted">{info()?.cli ? <>Installed with the app: <span class="mono">{info()!.cli}</span>.</> : "The program datum-sim-cli comes with the installed app (next to Datum Sim)."}{info()?.model ? "" : " Save the model to fill in its file below."}</p>
+      <Cmd t={`${cli()} run ${model()} --out results.csv`} />
+      <Cmd t={`${cli()} run ${model()} --set Kp=120 --stop 5 --signals "Speed" --out speed.csv`} />
+      <Cmd t={`${cli()} sweep ${model()} --var Kp --values 50,100,150 --out runs`} />
+      <Cmd t={`${cli()} check ${model()}`} />
+      <p class="muted">Also: <span class="mono">info</span> (blocks, parameters, variables, signals), <span class="mono">examples</span>, <span class="mono">help</span>. Exit code 1 means the model has errors, 2 a wrong command line.</p>
+      <h4>Python</h4>
+      <Cmd t={`pip install "git+https://github.com/Edgar-Mendonca/Datum-Sim#subdirectory=py"`} />
+      <pre class="pysnip">{`import datum_sim as ds
+m = ds.open(r${JSON.stringify(info()?.model ?? "model.dsim")})
+m.set(Kp=120)                     # model variables
+m.set_param("PID", "D", 5)        # block parameters, by name or path
+r = m.run(stop=5)                 # NumPy arrays: r.t, r["Speed"]
+for value, r in m.sweep("Kp", [50, 100, 150]):
+    print(value, r.final(r.names[0]))`}</pre>
+      <button class="btn sm" onClick={() => copy(document.querySelector(".pysnip")?.textContent ?? "")}>Copy the Python</button>
+      <p class="muted">The package finds the command line from DATUM_SIM_CLI, the PATH or the installed app.{info()?.py ? <> It is also in the app's folder: <span class="mono">{info()!.py}</span>.</> : ""}</p>
+    </div>
+  </Dialog>;
+});
+
 export const shortcuts = () => openDialog(() => (
   <Dialog title="Keyboard shortcuts">
     <table class="tbl keys"><tbody><For each={[

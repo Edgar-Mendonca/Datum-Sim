@@ -863,3 +863,8 @@ tr.behind td { background: var(--err-bg); }
 ul.plain { list-style: none; padding: 0; margin: 4px 0; }
 .libi.mine svg { color: var(--blue); }
 .inline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+/* Help › Automation (0.2.1) */
+.cmdline { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+.cmdline code { flex: 1; background: var(--panel); border: 1px solid var(--line2); padding: 5px 8px; font: 11.5px var(--mono); overflow-x: auto; white-space: pre; }
+.pysnip { background: var(--panel); border: 1px solid var(--line2); padding: 8px; font: 11.5px var(--mono); white-space: pre; overflow-x: auto; }
