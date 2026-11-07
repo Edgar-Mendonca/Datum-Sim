@@ -6,13 +6,13 @@
 | | |
 | --- | --- |
 | **Product** | Datum Sim: model and simulate dynamic systems (block diagrams, control design, motors; physical components later) |
-| **Current version** | 0.1.1 (2026-10-28) |
+| **Current version** | 0.2.1 (2026-11-02) |
 | **Repo** | `Edgar-Mendonca/Datum-Sim` · branch `claude/dreamy-babbage-dyf9nr` (the first branch pushed, so the default branch) |
 | **Stack** | Rust engine (`crates/core`), Tauri 2, SolidJS + strict TypeScript, uPlot for scopes; bundled CPython 3.13 with numpy, SciPy and python-control for analysis |
 | **Identifier** | `com.edgarmendonca.datumsim` · files `.dsim` · installer `DatumSim-x.y.z-setup.exe` |
 | **Accent** | Orange `#C2410C` (`--blue2` `#A3360A`, `--sky` `#F6C3A5`, `--pale` `#FCEEE6`, `--sel` `#F9E0D1`, `--sel2` `#F0C2A6`; dark `#F08A5D`; dark File sidebar `#5C220A`) |
 | **Code size** | about 9 500 lines: engine 5 300 (Rust), shell 1 150 (Rust), window 2 000 (TS), Python 250, tests in each |
-| **Installer** | `DatumSim-0.1.0-setup.exe`, 85.6 MB with the Python runtime inside (built by `release.yml`) |
+| **Installer** | `DatumSim-0.2.1-setup.exe`, 90 MB with the Python runtime inside (built by `release.yml`) |
 | **Reference repos** | `Edgar-Mendonca/Datum` (FAMILY, MEMORY, brain), `Edgar-Mendonca/Datum-Plan` (reference code), `Edgar-Mendonca/Datum-Plot` (bundled Python), `morluto/rea` (how a hard tool is built and tested) |
 
 ---
@@ -173,7 +173,7 @@
 | 0.1.6 | Wires and diagram: branch from a wire, segments, signal names, notes, find, colours (PLAN-0.2 B) | ✅ |
 | 0.2 | Masks and My blocks (copied), file version 2 (PLAN-0.2 D) | ✅ |
 | 0.2.1 | Automation: command line and Python API, Help › Automation | ✅ |
-| 0.3 | Control design (next): trim, linearise whole models, Nyquist, root locus, PID tuning, live tuning; buses; algebraic-loop solving | ⬜ |
+| 0.3 | *Proposed renumbering in `docs/ROADMAP.md` (waiting for the user): stage A control design 0.2.2–0.3.0, B drives 0.3.x, C physical 0.4.x, D exchange 0.5.x, E studies 0.6.x, F reach 0.7.x.* Control design (next): trim, linearise whole models, Nyquist, root locus, PID tuning, live tuning; buses; algebraic-loop solving | ⬜ |
 | 0.4 | Physical components (mechanical, rotational, electrical, hydraulic, thermal), DAEs | ⬜ |
 | 0.5 | FMU import and export; Modelica through an external compiler | ⬜ |
 | 0.6 | State machines, Python blocks, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
@@ -255,6 +255,12 @@
 - The user: "automation first". Built `api.rs` (session), `crates/cli` (datum-sim-cli), `py/datum_sim/api.py` and `py/pyproject.toml`, Help › Automation; CI runs the Python tests after cargo test; the release builds the CLI, tests the Python API on the bundled Python and installs the CLI next to the app.
 - Checked: 2 session tests, 4 command-line tests on the real binary (CSV against the closed form, JSON, sweep files, exit codes, serve), 3 Python API tests (closed form, parameters, sweep, save, errors), 61 UI checks (1 new), the real app (Help › Automation).
 - Released 0.2.1.
+
+### 2026-11-07: Session 9 (comparison and roadmap)
+- The user asked where the app stands, whether an open-source tool stands a chance against the industry standard, and for a plan in small steps without jumping versions (no rush to 1.0).
+- Brought `docs/COMPARISON.md` up to 0.2.1: automation rows, an open-source field table (§4), coverage by stage (§5) and an honest answer (§6): not a replacement for the industry standard (code generation, certification, hardware in the loop, ecosystem); yes as the first free tool to learn, sketch and check dynamic systems and drives, beside the paid tools.
+- Wrote `docs/ROADMAP.md`: stages A control design (0.2.2–0.3.0, PLAN-0.3 renumbered, drive tuning added as 0.2.6), B drives (0.3.x: FFT/THD, SVPWM, losses, thermal, saturation, nameplate), C physical (0.4.x), D exchange (0.5.x), E studies and logic (0.6.x), F reach and speed (0.7.x). Rules: small patches, fixes take the next number, a minor number closes a stage. Five questions for the user (§6). Nothing built; waiting.
+- Pulled the user's README commit (Datum family section).
 
 ## 5. Known limits and next steps
 

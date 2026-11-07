@@ -1,6 +1,6 @@
 # Plan 0.3: control design
 
-Written 2026-10-30 (session 7), after 0.2.0. Status: **waiting for the user's answers (§7)**. Before it, at the user's choice, the automation release 0.2.1 (§8) was built and released.
+Written 2026-10-30 (session 7), after 0.2.0. Status: **waiting for the user's answers (§7)**. Its release numbers (§5) are replaced by stage A of `docs/ROADMAP.md` (0.2.2–0.3.0). Before it, at the user's choice, the automation release 0.2.1 (§8) was built and released.
 
 ## 1. Where we start
 
