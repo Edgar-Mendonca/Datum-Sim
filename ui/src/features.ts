@@ -19,7 +19,6 @@ export const FEATS: Feat[] = [
   // ---- Stage A: control design (0.2.x → 0.3.0)
 
   // ---- Stage B: drives and modules (0.3.x → 0.4.0)
-  f("robot", "modules", "Modules", "0.3.6", "Robot Arm", "motor", "A two-link robot arm with joint motors, a trajectory planner, joint controllers and an animated view of the arm."),
 
   // ---- Stage C: physical components (0.4.x → 0.5.0)
   f("phys-rot", "modules", "Physical", "0.4.1", "Rotational", "block", "Inertia, spring, damper, gear and friction, connected by ports (the equations come from the connections)."),

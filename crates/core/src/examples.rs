@@ -30,6 +30,7 @@ pub fn list() -> Vec<Example> {
         Example { id: "masked", name: "A masked motor block, used twice", what: "The DC motor built from blocks, masked as a block of its own with parameters and typical ratings, and used for two different motors in one model." },
         Example { id: "tank", name: "Pump and tank level control", what: "A pump fills a tank that drains through a valve (flow ∝ √level); a PI controller holds the level." },
         Example { id: "cruise", name: "Vehicle cruise control", what: "A car with aerodynamic drag and rolling resistance; a PI controller sets the drive force to hold the speed." },
+        Example { id: "robotarm", name: "Robot arm: pick and place", what: "A two-link arm follows a smooth joint trajectory through four way points under computed-torque control; the Arm view animates the motion." },
         Example { id: "thermostat", name: "Room thermostat (relay)", what: "A heater switched by a relay with hysteresis keeps a room warm; switching times are located exactly." },
     ]
 }
@@ -110,6 +111,7 @@ pub fn get(id: &str) -> Option<Model> {
     Some(match id {
         "blank" => Model::new(),
         "msd" => msd(),
+        "robotarm" => robot_arm(),
         "dcmotor" => dc_motor_speed(),
         "dcpos" => dc_motor_position(),
         "pmsm" => pmsm(),
@@ -310,6 +312,31 @@ fn pmsm() -> Model {
     b.w(m, 3, s3, 0);
     // Ready for Control: the speed loop opens at the speed PI.
     b.point(pw, "open");
+    b.done()
+}
+
+fn robot_arm() -> Model {
+    let mut b = B::new(
+        "Robot arm: pick and place",
+        "A two-link planar arm (1 kg and 0.8 kg links, 0.5 m and 0.4 m long) moves through four way points. The joint trajectory gives smooth references; the computed-torque controller cancels the arm's dynamics, so each joint follows its reference closely. Double-click the Arm view to play the motion. Try the PD + gravity law, or a controller model that is 20 % off (m2 in the controller), and watch the tracking error grow.",
+        6.0,
+    );
+    let tr = b.blk("ArmTrajectory", "Trajectory", 30.0, 80.0, &[]);
+    let ctl = b.blk("ArmController", "Controller", 190.0, 60.0, &[]);
+    let arm = b.blk("RobotArm2", "Arm", 380.0, 60.0, &[]);
+    let view = b.blk("ArmView", "Arm view", 560.0, 30.0, &[]);
+    let sq = b.blk("Scope", "Joint angles", 560.0, 120.0, &[("n", "2")]);
+    let st = b.blk("Scope", "Joint torques", 560.0, 220.0, &[]);
+    b.w(tr, 0, ctl, 0);
+    b.w(tr, 1, ctl, 1);
+    b.w(tr, 2, ctl, 2);
+    b.w(arm, 0, ctl, 3);
+    b.w(arm, 1, ctl, 4);
+    b.w(ctl, 0, arm, 0);
+    b.w(arm, 0, view, 0);
+    b.w(arm, 0, sq, 0);
+    b.w(tr, 0, sq, 1);
+    b.w(ctl, 0, st, 0);
     b.done()
 }
 

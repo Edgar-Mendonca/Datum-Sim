@@ -909,3 +909,12 @@ ul.plain { list-style: none; padding: 0; margin: 4px 0; }
 .livepanel .lval { text-align: right; }
 .livepanel .grow { flex: 1; }
 .specplot { width: 100%; max-width: 640px; }
+/* 0.3.6: the Arm view. */
+.armview svg { width: 100%; max-height: 260px; }
+.armlink { stroke: var(--blue); stroke-width: 7; stroke-linecap: round; }
+.armlink.l2 { stroke: var(--accent2); stroke-width: 5; }
+.armjoint { fill: var(--bg2); stroke: var(--text2); stroke-width: 2; }
+.armtip { fill: var(--text2); }
+.armbase { fill: var(--line3); }
+.armbar { display: flex; align-items: center; gap: 8px; padding: 4px 8px; }
+.armbar .armtime { flex: 1; }

@@ -59,7 +59,7 @@ pub const COLOURS: &[(&str, &str)] = &[("red", "#FDE2E1"), ("orange", "#FDE8D7")
 
 pub const CATS: &[&str] = &[
     "Sources", "Math", "Continuous", "Discontinuities", "Discrete", "Routing", "Lookup tables", "Sinks", "Subsystems",
-    "Motors", "Drives", "Annotations", "Physical (0.4)",
+    "Motors", "Drives", "Robot arm", "Annotations", "Physical (0.4)",
 ];
 
 fn d(kind: &'static str, name: &'static str, cat: &'static str, what: &'static str, how: &'static str, params: Vec<P>) -> Def {
@@ -78,6 +78,8 @@ pub fn size(kind: &str) -> (f64, f64) {
         "Product" | "Divide" => (40.0, 40.0),
         "Inport" | "Outport" => (36.0, 24.0),
         "Scope" | "XY" => (50.0, 50.0),
+        "RobotArm2" | "ArmController" => (100.0, 90.0),
+        "ArmTrajectory" | "ArmIK" | "ArmView" => (80.0, 60.0),
         "Display" => (80.0, 30.0),
         "Mux" | "Demux" => (12.0, 60.0),
         "BusCreator" | "BusSelector" => (14.0, 60.0),
@@ -206,6 +208,21 @@ pub fn library() -> Vec<Def> {
         // Sinks
         d("Scope", "Scope", "Sinks", "Plots its inputs against time while the model runs.", "Double-click to open it. Each input can be a vector; every element is a line. On the scope: two measuring cursors, step-response marks, earlier runs to compare, and pictures as PNG or SVG. Drag across the plot to zoom (sideways for time, up or down for y); double-click to see the whole run.",
             vec![n("n", "Inputs", "1", "", ""), c("layout", "Layout", &["overlaid", "stacked"], "Stacked: one plot per input"), t("ymin", "Y lower limit", "auto", "A number, or auto"), t("ymax", "Y upper limit", "auto", "A number, or auto")]),
+        d("RobotArm2", "Robot arm, two links", "Robot arm", "A planar arm with two links and a motor torque at each joint. Input: joint torques τ (width 2). Outputs: joint angles q, joint speeds q̇ (width 2 each) and the tip position (x, y).",
+            "M(q)·q̈ + C(q, q̇)·q̇ + G(q) + b·q̇ = τ. q1 is link 1's angle from the horizontal, q2 link 2's angle from link 1; gravity acts downwards. Links are thin rods unless you set their inertias.",
+            arm_params(true)),
+        d("ArmTrajectory", "Joint trajectory", "Robot arm", "Smooth joint motion through way points: each segment a quintic that starts and ends at rest. Outputs: q_ref, q̇_ref, q̈_ref (width 2 each).",
+            "Way points are rows of time, q1, q2 (rad), e.g. [0 0 0; 2 1 -0.5; 4 0.3 0.8]. Before the first and after the last the arm is held still.",
+            vec![n("points", "Way points (t, q1, q2)", "[0 -1.2 1.6; 2 0.6 -0.4; 4 1.2 0.6; 6 -1.2 1.6]", "s, rad", "")]),
+        d("ArmController", "Arm controller", "Robot arm", "Joint control for the two-link arm. Inputs: q_ref, q̇_ref, q̈_ref (from the trajectory), q, q̇ (from the arm). Output: joint torques τ.",
+            "Computed torque: τ = M(q)(q̈_ref + Kp·e + Kd·ė) + C + G + b·q̇, so each joint follows e'' + Kd·e' + Kp·e = 0 when the model matches the arm. PD + gravity: τ = Kp·e + Kd·ė + G(q). Set the arm parameters as the controller believes them (they may differ from the real arm's).",
+            { let mut v = vec![c("law", "Control law", &["computed torque", "PD + gravity"], ""), n("Kp", "Kp", "[100 100]", "1/s² or N·m/rad", "One per joint, or one for both"), n("Kd", "Kd", "[20 20]", "1/s or N·m·s/rad", ""), n("tmax", "Torque limit", "0", "N·m", "0 = none")]; v.extend(arm_params(false)); v }),
+        d("ArmIK", "Inverse kinematics", "Robot arm", "The joint angles that put the arm's tip at (x, y). Input: tip (width 2). Output: q (width 2).",
+            "Elbow down or up picks one of the two solutions. Out of reach, the arm stretches toward the point.",
+            vec![n("l1", "Link 1 length l1", "0.5", "m", ""), n("l2", "Link 2 length l2", "0.4", "m", ""), c("elbow", "Elbow", &["down", "up"], "")]),
+        d("ArmView", "Arm view", "Robot arm", "An animated drawing of the two-link arm: feed it the joint angles q. After a run, play the motion or drag through time; the tip's path is traced.",
+            "Open it like a scope (double-click). Set the link lengths as in the arm.",
+            vec![n("l1", "Link 1 length l1", "0.5", "m", ""), n("l2", "Link 2 length l2", "0.4", "m", "")]),
         d("XY", "XY graph", "Sinks", "Plots input 2 against input 1 (a phase plane or a trajectory).", "", vec![]),
         d("Display", "Display", "Sinks", "Shows the latest value of its input on the block.", "", vec![]),
         d("ToFile", "To file (CSV)", "Sinks", "Writes its inputs and time to a CSV file at the end of the run.", "The path may be relative to the model file.",
@@ -347,6 +364,17 @@ fn im_params(double: bool) -> Vec<P> {
     v
 }
 
+/// The two-link arm's parameters (the arm block, and the controller's model of it).
+fn arm_params(with_q0: bool) -> Vec<P> {
+    let mut v = vec![n("m1", "Link 1 mass m1", "1", "kg", ""), n("m2", "Link 2 mass m2", "0.8", "kg", "With what it carries"), n("l1", "Link 1 length l1", "0.5", "m", ""), n("l2", "Link 2 length l2", "0.4", "m", ""),
+        n("lc1", "Link 1 centre of mass lc1", "0.25", "m", "From joint 1"), n("lc2", "Link 2 centre of mass lc2", "0.2", "m", "From joint 2"),
+        n("I1", "Link 1 inertia I1", "0.0208", "kg·m²", "About its centre of mass (a rod: m·l²/12)"), n("I2", "Link 2 inertia I2", "0.0107", "kg·m²", ""), n("g", "Gravity g", "9.81", "m/s²", "0 for an arm lying flat"), n("b", "Joint friction b", "0.05", "N·m·s/rad", "")];
+    if with_q0 {
+        v.push(n("q0", "Initial angles q0", "[-1.2 1.6]", "rad", ""));
+    }
+    v
+}
+
 fn has_rfe(b: &Block) -> bool {
     param(b, "Rfe").trim().parse::<f64>().is_ok_and(|v| v > 0.0)
 }
@@ -398,6 +426,11 @@ pub fn ports(b: &Block) -> (usize, usize) {
         "Switch" => (3, 1),
         "Scope" | "ToFile" | "ToPlot" => (count(b, "n"), 0),
         "XY" => (2, 0),
+        "ArmView" => (1, 0),
+        "RobotArm2" => (1, 3),
+        "ArmTrajectory" => (0, 3),
+        "ArmController" => (5, 1),
+        "ArmIK" => (1, 1),
         "Display" | "Outport" => (1, 0),
         "Subsystem" => b.sub.as_ref().map_or((0, 0), |s| {
             let (i, o) = sub_ports(s);
@@ -444,6 +477,11 @@ pub fn port_names(b: &Block) -> (Vec<String>, Vec<String>) {
         "SRM" => (s(&["v_abc", "T_L"]), s(&["ω", "T_e", "i_abc", "θ"])),
         "DCLink" => (s(&["V_s", "i_load"]), s(&["V_dc", "i_s"])),
         "InverterLoss" => (s(&["i_abc", "V_dc"]), s(&["P_cond", "P_sw", "P_loss"])),
+        "RobotArm2" => (s(&["τ"]), s(&["q", "q̇", "tip"])),
+        "ArmTrajectory" => (vec![], s(&["q_ref", "q̇_ref", "q̈_ref"])),
+        "ArmController" => (s(&["q_ref", "q̇_ref", "q̈_ref", "q", "q̇"]), s(&["τ"])),
+        "ArmIK" => (s(&["tip"]), s(&["q"])),
+        "ArmView" => (s(&["q"]), vec![]),
         "ThermalNetwork" => (s(&["P"]), s(&["T"])),
         "InverterDC" => (s(&["m_abc", "i_abc"]), vec![]),
         "Subsystem" => {

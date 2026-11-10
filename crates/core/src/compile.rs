@@ -542,7 +542,7 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
     let mut chans = vec![];
     let mut files = vec![];
     for (i, f) in flat.iter().enumerate() {
-        if !matches!(f.kind.as_str(), "Scope" | "XY" | "Display" | "ToFile" | "ToPlot") {
+        if !matches!(f.kind.as_str(), "Scope" | "XY" | "ArmView" | "Display" | "ToFile" | "ToPlot") {
             continue;
         }
         let first = chans.len();

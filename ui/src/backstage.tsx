@@ -53,6 +53,7 @@ const ExampleArt = (p: { id: string }) => {
     tank: "M8 34H30C40 34 44 16 56 16H92",
     cruise: "M8 32H24C34 32 40 18 52 18H92",
     thermostat: "M8 46C18 26 24 20 36 20L44 28 52 20 60 28 68 20 76 28 84 20 92 28",
+    robotarm: "M20 50H40M30 50L44 26 70 18M70 18L78 12M70 18L80 22",
   };
   return <svg viewBox="0 0 100 60" class="exart"><path d="M6 6v48h88" fill="none" stroke="var(--line3)" stroke-width="1.2" /><path d={curves[p.id] ?? curves.blank} {...s} /></svg>;
 };

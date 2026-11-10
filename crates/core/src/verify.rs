@@ -187,6 +187,20 @@ mod tests {
         }
     }
 
+    /// The robot arm example: computed torque with an exact model makes each joint follow its
+    /// trajectory (the error stays below 1e-4 rad), and the joint angles reach the last way point.
+    #[test]
+    fn robot_arm_tracks() {
+        let m = examples::get("robotarm").unwrap();
+        let r = simulate(&m, None, &none()).unwrap();
+        // Channels: q (2) and q_ref (2) into the Joint angles scope.
+        let ix = |name: &str| r.chans.iter().position(|c| c.name == name).unwrap_or_else(|| panic!("{name}: {:?}", r.chans.iter().map(|c| &c.name).collect::<Vec<_>>()));
+        let (q1, q2, r1, r2) = (ix("Arm.q[1]"), ix("Arm.q[2]"), ix("Trajectory.q_ref[1]"), ix("Trajectory.q_ref[2]"));
+        let err = (0..r.t.len()).map(|i| (r.y[q1][i] - r.y[r1][i]).abs().max((r.y[q2][i] - r.y[r2][i]).abs())).fold(0.0, f64::max);
+        assert!(err < 1e-4, "{err}");
+        assert!((r.y[q1].last().unwrap() + 1.2).abs() < 1e-4 && (r.y[q2].last().unwrap() - 1.6).abs() < 1e-4);
+    }
+
     /// Saturation at no load: at synchronous speed (a huge inertia holds it) the rotor carries no
     /// current, so V = Rs·I + jω(Lls·I + ψ_m) with I = ψ_m/Lm·(1 + (ψ_m/ψ_sat)^k). The stator
     /// current's peak matches that, and is larger than without saturation; the iron loss is

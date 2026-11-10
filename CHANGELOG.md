@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.6 — 2026-11-10
+
+Modules, starting with the robot arm.
+
+- A new **Robot arm** library group, and its own group on the **Modules** tab:
+  - **Robot arm, two links**: a planar arm with a motor torque at each joint, gravity, inertia and joint friction. Its outputs are the joint angles, the joint speeds and the tip position.
+  - **Joint trajectory**: smooth motion through way points. Each segment starts and ends at rest.
+  - **Arm controller**: computed torque (it cancels the arm's dynamics) or PD with gravity compensation, with torque limits. Give it its own idea of the arm's parameters to see what a wrong model does.
+  - **Inverse kinematics**: the joint angles that put the tip at (x, y), elbow up or down.
+  - **Arm view**: an animated drawing of the arm after a run, with Play, a time slider and the tip's path.
+- **Worked example: Robot arm pick and place.** Run it, double-click the Arm view, press Play.
+- More modules (flight, vehicle, a hardware bench) show on the Modules tab as planned.
+
+Checked:
+- Without torque or friction, the arm's energy stays constant to 1e-9.
+- Gravity compensation holds it still at any pose.
+- Inverse kinematics returns the tip exactly, elbow up and down.
+- In the example, each joint follows its trajectory within 1e-4 rad.
+
 ## 0.3.5 — 2026-11-10
 
 Motor parameters from the nameplate.

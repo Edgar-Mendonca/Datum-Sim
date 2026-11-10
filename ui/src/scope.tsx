@@ -8,6 +8,7 @@ import { invoke, num, Series } from "./api";
 import { chans, results, live, liveTick, running, themeTick, dview, scopes, setScopes, call, toast, defOf, act, openMenu, openDialog, Item, setProbeT } from "./store";
 import { C } from "./cmds";
 import { Icon, Dialog } from "./ui";
+import { ArmPlot } from "./robot";
 
 export const OKABE = ["#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7", "#56B4E9", "#F0E442", "#000000"];
 const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -47,7 +48,9 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
   let host!: HTMLDivElement;
   let plots: uPlot[] = [];
   const idx = createMemo(() => chans().map((c, i) => [c, i] as const).filter(([c]) => c.sink === p.id && !c.probe).map(([, i]) => i));
-  const isXY = () => dview()?.blocks.find(b => b.id === p.id)?.kind === "XY";
+  const kindOf = () => dview()?.blocks.find(b => b.id === p.id)?.kind;
+  const isArm = () => kindOf() === "ArmView";
+  const isXY = () => kindOf() === "XY" || isArm();
   const set = () => scopeSet(p.id);
   const [range, setRange] = createSignal<[number, number] | null>(null);
   const [cursor, setCursor] = createSignal<string>("");
@@ -366,7 +369,7 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
         </tbody></table></div>
       </Show>
       <Show when={isXY()} fallback={<div class="plot" ref={host}><Show when={!idx().length}><p class="muted pempty">Run the model to see this scope.</p></Show></div>}>
-        <XYPlot id={p.id} />
+        <Show when={isArm()} fallback={<XYPlot id={p.id} />}><ArmPlot id={p.id} /></Show>
       </Show>
     </div>
   );
@@ -425,7 +428,7 @@ export const ScopesPage = () => (
   <div class="page scopespage">
     <h1>Scopes</h1>
     <Show when={sinks().length} fallback={<p class="muted">Run the model (Simulate › Run, or F5) to see its scopes. Add Scope blocks to plot signals.</p>}>
-      <div class="scopegrid"><For each={sinks().filter(s => s.kind === "Scope" || s.kind === "XY")}>{s => <Scope id={s.id} height={320} />}</For></div>
+      <div class="scopegrid"><For each={sinks().filter(s => s.kind === "Scope" || s.kind === "XY" || s.kind === "ArmView")}>{s => <Scope id={s.id} height={320} />}</For></div>
     </Show>
   </div>
 );
