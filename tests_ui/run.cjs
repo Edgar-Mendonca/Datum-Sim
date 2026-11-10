@@ -43,6 +43,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           if (c === "new_model") return f.state;
           if (c === "lin_analysis") return f.lin;
           if (c === "trim_info") return [["Level"], 4];
+          if (c === "nameplate") return { rs: 0.35, rr: 0.3, lls: 0.004, llr: 0.004, lm: 0.12843, pp: 2, i: 20.7, slip: 0.0267 };
           if (c === "spectrum") return { f0: 50, cycles: 4, t0: 0.12, t1: 0.2, dc: 0.3, harmonics: [2, 0, 0, 0, 0.2, 0, 0.1, 0, 0, 0], thd: 0.1118, f: [0, 12.5], mag: [0.3, 0] };
           if (c === "drive_tune") return { name: "Motor", data: { r: 1, ld: 0.5, lq: 0.5, kt: 0.01, j: 0.01, b: 0.1 }, tune: { iq: { p: a.wcI * 0.5, i: a.wcI, d: 0, n: 100 }, id: { p: a.wcI * 0.5, i: a.wcI, d: 0, n: 100 }, speed: { p: 200, i: 10000, d: 0, n: 100 }, current_margins: { wgc: a.wcI, pm: 90 }, speed_margins: { wgc: a.wcS, pm: 72 } } };
           if (c === "pid_plant") return { plant: { a: [[-2]], b: [[1]], c: [[2]], d: [[0]] }, cur: { p: 100, i: 200, d: 10, n: 100 }, name: "PID", wgc: 5 };
@@ -368,6 +369,14 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(200);
   const batch = (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).reverse().find(o => o.Batch);
   check("choosing a rating sets every value in one undoable edit", !!batch && batch.Batch.length === pr.values.length && batch.Batch.every(o => o.SetParam && o.SetParam.id === mot.id), JSON.stringify(batch));
+  // From nameplate (0.3.5): the circuit from the plate, applied as one edit of six parameters.
+  await p.click(".insp .fromplate");
+  await p.waitForTimeout(300);
+  check("From nameplate shows the estimated circuit", (await p.textContent(".dlg")).includes("Magnetising Lm") && (await p.textContent(".dlg")).includes("128.4 mH"), (await p.textContent(".dlg")).slice(0, 300));
+  await p.click(".dlg .btn.pri");
+  await p.waitForTimeout(200);
+  const npb = (await p.evaluate(() => window.__calls.filter(c => c[0] === "apply").map(c => c[1].op))).reverse().find(o => o.Batch);
+  check("Apply sets Rs, Rr, Lls, Llr, Lm and p in one edit", npb?.Batch.length === 6 && npb.Batch.some(o => o.SetParam.key === "Lm" && o.SetParam.value === "0.12843"), JSON.stringify(npb));
   await p.evaluate(() => { window.__motor = false; });
 
   // 13. Sample-time colours (0.1.4): the View tab colours blocks by rate and shows a legend.

@@ -1,9 +1,38 @@
 // Stage B (0.3.x): drives in depth. Spectrum and THD of a signal; more drive tools follow.
 import { For, Show, createSignal } from "solid-js";
 import { num, invoke } from "./api";
-import { openDialog, results, chans } from "./store";
+import { openDialog, results, chans, act } from "./store";
+import type { BlockView } from "./api";
 import { Dialog } from "./ui";
 import { OKABE } from "./scope";
+
+/** Inspector › From nameplate: an induction motor's equivalent circuit from its rating plate. */
+export const nameplateDialog = (b: BlockView) => openDialog(() => {
+  const F: [string, string, string, string][] = [["p", "Rated power", "11000", "W"], ["v", "Line voltage", "400", "V (rms)"], ["f", "Frequency", "50", "Hz"], ["n", "Rated speed", "1460", "rpm"], ["eff", "Efficiency", "0.9", ""], ["pf", "Power factor (cos φ)", "0.85", ""], ["ist", "Starting current I_A/I_N", "7", ""]];
+  const [v, setV] = createSignal<Record<string, string>>(Object.fromEntries(F.map(x => [x[0], x[2]])));
+  const [r, setR] = createSignal<any>(null);
+  const go = async () => { try { setR(await invoke<any>("nameplate", { plate: Object.fromEntries(Object.entries(v()).map(([k, x]) => [k, +x])) })); } catch (e) { setR({ error: String(e) }); } };
+  go();
+  const apply = () => {
+    const c = r(); if (!c || c.error) return false;
+    const fmt = (x: number) => String(+x.toPrecision(5));
+    act({ Batch: [["Rs", c.rs], ["Rr", c.rr], ["Lls", c.lls], ["Llr", c.llr], ["Lm", c.lm], ["p", c.pp]].map(([key, value]) => ({ SetParam: { id: b.id, key, value: fmt(value as number) } })) });
+  };
+  return <Dialog title={`From nameplate: ${b.name}`} help="nameplate" ok={apply} okText="Apply">
+    <div class="form"><For each={F}>{x => <><label>{x[1]}</label><div class="larow"><input class="mono npin" data-k={x[0]} value={v()[x[0]]} onChange={e => { setV({ ...v(), [x[0]]: e.currentTarget.value }); go(); }} /> <span class="muted small">{x[3]}</span></div></>}</For></div>
+    <Show when={r() && !r().error} fallback={<p class="issue">{r()?.error}</p>}>
+      <table class="tbl facts"><tbody>
+        <tr><td>Stator resistance Rs</td><td class="r mono">{num(r().rs, 4)} Ω</td></tr>
+        <tr><td>Rotor resistance Rr</td><td class="r mono">{num(r().rr, 4)} Ω</td></tr>
+        <tr><td>Leakage Lls = Llr</td><td class="r mono">{num(r().lls * 1000, 4)} mH</td></tr>
+        <tr><td>Magnetising Lm</td><td class="r mono">{num(r().lm * 1000, 4)} mH</td></tr>
+        <tr><td>Pole pairs</td><td class="r mono">{r().pp}</td></tr>
+        <tr><td>Rated current, slip</td><td class="r mono">{num(r().i, 4)} A, {num(r().slip * 100, 3)} %</td></tr>
+      </tbody></table>
+    </Show>
+    <p class="muted small">Star connection; iron and friction losses neglected; stator and rotor leakage equal. Inertia and friction are not on a nameplate: set them yourself. Apply sets the six parameters in one undoable edit.</p>
+  </Dialog>;
+});
 
 /** Analyze › Spectrum: harmonics and THD of a logged signal over whole cycles of its fundamental. */
 export const spectrumDialog = (chan0 = 0) => openDialog(() => {

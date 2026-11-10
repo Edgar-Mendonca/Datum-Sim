@@ -18,6 +18,7 @@ pub mod lti;
 pub mod measure;
 pub mod model;
 pub mod motors;
+pub mod nameplate;
 pub mod route;
 pub mod rt;
 pub mod solve;

@@ -634,6 +634,12 @@ fn step_marks(st: State<St>, chan: usize) -> R<datum_core::measure::StepMarks> {
     datum_core::measure::step_marks(&r.t, y)
 }
 
+/// An induction motor's equivalent circuit from its nameplate (0.3.5).
+#[tauri::command]
+fn nameplate(plate: datum_core::nameplate::Plate) -> R<datum_core::nameplate::Circuit> {
+    datum_core::nameplate::induction(&plate)
+}
+
 /// Spectrum and THD of one signal of the last run (0.3.1).
 #[tauri::command]
 fn spectrum(st: State<St>, chan: usize, f0: f64, cycles: usize, hmax: usize) -> R<datum_core::measure::Spectrum> {
@@ -941,6 +947,7 @@ fn main() {
             control::drive_tune,
             live_set,
             spectrum,
+            nameplate,
             run_pace,
             control::trim,
             state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, find, myblocks, save_myblock, add_myblock, delete_myblock, open, save, save_file,

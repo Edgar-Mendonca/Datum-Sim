@@ -114,6 +114,7 @@ const Presets = (p: { b: BlockView; def: Def }) => {
         <For each={p.def.presets}>{x => <option value={x.name}>{x.name}</option>}</For>
       </select>
       <small class="hint">Typical values; replace them with nameplate data</small>
+      <Show when={["InductionSC", "InductionWR"].includes(p.b.kind)}><button class="btn sm fromplate" onClick={() => import("./drives").then(d => d.nameplateDialog(p.b))}>From nameplate…</button></Show>
     </div>
   );
 };

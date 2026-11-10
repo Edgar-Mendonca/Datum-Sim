@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.5 — 2026-11-10
+
+Motor parameters from the nameplate.
+
+- **Inspector › From nameplate…** (squirrel-cage and wound-rotor induction motors) estimates the equivalent circuit from the rating plate and data sheet. You give the rated power, line voltage, frequency, speed, efficiency, power factor and the starting current ratio I_A/I_N.
+- You get Rs, Rr, Lls = Llr, Lm and the pole pairs, with the rated current and slip. **Apply** sets the six parameters in one undoable edit.
+- Inertia and friction are not on a nameplate: set those yourself.
+
+Checked: a known machine's rated point, turned into a nameplate, gives back its own Rs, Rr, leakage and Lm within 1e-6. An efficiency too high for the slip is refused with a reason.
+
 ## 0.3.4 — 2026-11-10
 
 Magnetic saturation and iron losses in the induction machine.

@@ -19,8 +19,6 @@ export const FEATS: Feat[] = [
   // ---- Stage A: control design (0.2.x → 0.3.0)
 
   // ---- Stage B: drives and modules (0.3.x → 0.4.0)
-  f("nameplate", "model", "Drives", "0.3.5", "From Nameplate", "motor", "The machine's equivalent circuit estimated from its nameplate: power, voltage, current, speed, efficiency, power factor.",
-    [{ k: "num", l: "Power", v: "11", u: "kW" }, { k: "num", l: "Voltage", v: "400", u: "V" }, { k: "num", l: "Frequency", v: "50", u: "Hz" }, { k: "num", l: "Speed", v: "1460", u: "rpm" }, { k: "num", l: "Efficiency", v: "0.9" }, { k: "num", l: "Power factor", v: "0.85" }]),
   f("robot", "modules", "Modules", "0.3.6", "Robot Arm", "motor", "A two-link robot arm with joint motors, a trajectory planner, joint controllers and an animated view of the arm."),
 
   // ---- Stage C: physical components (0.4.x → 0.5.0)
