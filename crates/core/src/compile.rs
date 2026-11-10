@@ -761,6 +761,46 @@ impl Ode for Runner<'_> {
     }
 }
 
+/// For linearisation and trim: the system as a function of its states and held inputs.
+impl Sim {
+    pub fn node_of(&self, id: u32) -> Option<usize> {
+        self.nodes.iter().position(|n| n.id == id)
+    }
+    /// The first output of a block: (signal offset, width).
+    pub fn out_of(&self, id: u32) -> Option<(usize, usize)> {
+        self.node_of(id).map(|i| (self.nodes[i].out_off, self.nodes[i].out_w.first().cloned().unwrap_or(1)))
+    }
+    /// Replace a block by a held value (the input of an analysis point).
+    pub fn hold(&mut self, i: usize, v: f64) {
+        self.nodes[i].rt = Box::new(rt::Hold(v));
+    }
+    /// Derivatives at (t, x); the signals are left as computed there.
+    pub fn eval(&mut self, t: f64, x: &[f64], dx: &mut [f64]) {
+        self.f(t, t, x, dx)
+    }
+    pub fn signal(&self, slot: usize) -> f64 {
+        self.sig[slot]
+    }
+    pub fn has_discrete(&self) -> bool {
+        self.rates.iter().any(|(_, r)| matches!(r, Rate::Discrete(_)))
+    }
+}
+
+/// Run a compiled system to time `t` and return it with its states there (discrete states and
+/// modes as they are at `t`): an operating point taken from a run.
+pub fn run_to(mut sim: Sim, t: f64) -> Result<(Sim, Vec<f64>), String> {
+    let mut x = sim.x0.clone();
+    if t <= sim.settings.start {
+        return Ok((sim, x));
+    }
+    sim.settings.stop = t;
+    sim.chans.clear();
+    let opts = sim.opts();
+    let mut r = Runner { sim, res: Results::default(), ctl: None, on_major: None };
+    solve::drive(&mut r, &mut x, &opts)?;
+    Ok((r.sim, x))
+}
+
 /// Run a compiled system to the stop time.
 pub fn run<'a>(sim: Sim, ctl: Option<&'a Control>, on_major: Option<&'a mut dyn FnMut(&Results)>) -> Result<Results, String> {
     let started = std::time::Instant::now();

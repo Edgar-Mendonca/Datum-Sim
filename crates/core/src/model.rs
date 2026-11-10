@@ -133,6 +133,10 @@ pub struct Wire {
     /// The signal's name, shown on the wire and in scope legends ("" = none).
     #[serde(skip_serializing_if = "String::is_empty")]
     pub name: String,
+    /// An analysis point on the signal (0.2.3): "in" (a test signal is added), "out" (measured)
+    /// or "open" (the loop is cut here for open-loop analysis); "" = none. Runs ignore it.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub point: String,
 }
 
 impl Diagram {

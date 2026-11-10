@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.3 — 2026-11-10
+
+Control design starts: analyse the whole model, not one block.
+
+- **Analysis points**: mark a wire's signal as a **loop opening**, an **input** or an **output** (Control tab, right-click a wire › Analysis point, or the Inspector). A small mark shows on the wire. Points are saved with the model and runs ignore them.
+- **Loop Analysis** (Control tab) linearises the whole model between its points. It works around the initial state or the state at a time in the last run, and with motors and nonlinear blocks too.
+- From a loop opening to itself you get the loop transfer: a **Bode plot with gain and phase margins**, whether the closed loop is stable, and the closed loop's **step and impulse** responses with rise time, overshoot and settling time.
+- From an input to an output you get that transfer's Bode plot, step response and poles.
+- **Copy A, B, C, D** puts the linear model on the clipboard.
+- The DC motor speed example has a loop opening at its PID already: open it and press Loop Analysis.
+
+Checked against closed forms: the mass–spring–damper's transfer function, and the DC motor position loop against the PID times the motor's voltage-to-angle transfer.
+
 ## 0.2.2 — 2026-11-10
 
 The whole road ahead, in the window.

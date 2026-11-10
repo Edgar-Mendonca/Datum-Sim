@@ -1,6 +1,7 @@
 //! Datum Sim desktop shell: owns the open model, files, options and recovery, runs simulations on
 //! a worker thread (streaming to the scopes), and talks to the window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod control;
 mod py;
 mod runtime;
 mod update;
@@ -894,6 +895,7 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            control::lin_analysis,
             state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, find, myblocks, save_myblock, add_myblock, delete_myblock, open, save, save_file,
             run, control, results, series, value_at, step_marks, runs, run_series, sweep_series, run_sweep, export_csv, analyze, step_info, engine,
             options, set_options, autosave, recovery, recover, recent, startup_file, open_url, automation, version, quit, check_update, install_update

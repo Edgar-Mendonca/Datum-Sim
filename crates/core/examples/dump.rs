@@ -1,11 +1,16 @@
 //! Prints engine output for the DC motor example (and the induction motor start's diagram) as JSON fixtures for the UI tests
 //! (cargo run -p datum-core --example dump > tests_ui/fixture.json).
-use datum_core::{blocks, compile, examples, view};
+use datum_core::{blocks, compile, examples, linearise, view};
 use std::collections::BTreeMap;
 
 fn main() {
     let m = examples::get("dcmotor").unwrap();
     let sub = m.root.blocks.iter().find(|b| b.kind == "Subsystem").unwrap().id;
+    // The loop opened at the PID's output (Control › Loop Analysis).
+    let mut ml = m.clone();
+    let pid = ml.root.blocks.iter().find(|b| b.kind == "PID").unwrap().id;
+    ml.root.wires.iter_mut().filter(|w| w.from.0 == pid).for_each(|w| w.point = "open".into());
+    let lin = linearise::report(&linearise::linearise(&ml, None, &BTreeMap::new(), &linearise::At::Initial).unwrap(), 0, 0).unwrap();
     let sim = compile::compile(&m, None, &BTreeMap::new()).unwrap();
     let chans = sim.chans.clone();
     let r = compile::run(sim, None, None).unwrap();
@@ -23,5 +28,6 @@ fn main() {
         "results": { "chans": r.chans, "stats": r.stats, "n": r.t.len(), "t0": r.t[0], "t1": r.t.last(), "last": r.y.iter().map(|y| y.last().cloned().unwrap_or(0.0)).collect::<Vec<_>>(), "sweep": null },
         "series": { "t": t, "y": y },
         "sub": sub,
+        "lin": lin,
     }));
 }

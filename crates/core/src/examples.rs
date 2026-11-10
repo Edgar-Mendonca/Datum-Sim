@@ -85,6 +85,12 @@ impl B {
         let id = self.m.id();
         self.d().wires.push(Wire { id, from: (from, fp), to: (to, tp), ..Default::default() });
     }
+    /// An analysis point on every wire from a block's output (Control › Loop Analysis).
+    fn point(&mut self, from: u32, kind: &str) {
+        for w in self.d().wires.iter_mut().filter(|w| w.from.0 == from) {
+            w.point = kind.into();
+        }
+    }
     fn begin(&mut self) {
         self.stack.push(Diagram::default());
     }
@@ -228,6 +234,7 @@ fn dc_motor_speed() -> Model {
     b.w(r, 0, s1, 1);
     b.w(m, 1, s2, 0);
     b.w(c, 0, s2, 1);
+    b.point(c, "open");
     b.done()
 }
 

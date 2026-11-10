@@ -17,15 +17,9 @@ const f = (id: string, tab: string, group: string, v: string, label: string, ico
 
 export const FEATS: Feat[] = [
   // ---- Stage A: control design (0.2.x → 0.3.0)
-  f("points", "control", "Analysis Points", "0.2.3", "Analysis Points", "wire", "Mark a wire as an input (a test signal goes in), an output (what is measured) or a loop opening. Saved with the model; a run ignores them.",
-    [{ k: "pick", l: "Wire", what: "a wire" }, { k: "choice", l: "Point", o: ["Input", "Output", "Loop opening"] }]),
-  f("linearise", "control", "Linearise", "0.2.3", "Linearise Model", "solver", "The model's linear behaviour between the analysis points (A, B, C, D), at the initial state, a time in the last run or a saved operating point.",
-    [{ k: "choice", l: "Operating point", o: ["Initial state", "Time in the last run", "Saved operating point"] }, { k: "num", l: "Time", v: "0", u: "s" }]),
-  f("loopbode", "control", "Loop Analysis", "0.2.3", "Loop Bode", "bode", "Bode plot of the real loop at the loop opening, with gain and phase margins marked.", [{ k: "num", l: "From", v: "0.01", u: "rad/s" }, { k: "num", l: "To", v: "1000", u: "rad/s" }]),
   f("nyquist", "control", "Loop Analysis", "0.2.4", "Nyquist", "bode", "The loop's Nyquist plot with the −1 point, the encirclements and the stability verdict."),
   f("rlocus", "control", "Loop Analysis", "0.2.4", "Root Locus", "solver", "Closed-loop poles as the loop gain varies, with the gain under the pointer and a damping grid."),
   f("sens", "control", "Loop Analysis", "0.2.4", "Sensitivity", "specs", "S and T over frequency, and the peak sensitivity Ms as a robustness figure."),
-  f("clstep", "control", "Loop Analysis", "0.2.4", "Closed-Loop Step", "specs", "Step and impulse responses of the open or closed loop."),
   f("trim", "control", "Operating Points", "0.2.5", "Trim", "solver", "Find where the model is at rest, with chosen outputs held at chosen values (the tank at 2 m, the motor at 1500 rpm).",
     [{ k: "table", l: "Hold", cols: ["Output", "Value"] }, { k: "table", l: "Free", cols: ["Variable", "Start"] }]),
   f("ops", "control", "Operating Points", "0.2.5", "Operating Points", "list", "Saved, named operating points of the model: states and variables, to linearise or start a run from."),

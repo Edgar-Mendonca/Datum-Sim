@@ -23,6 +23,9 @@ pub enum Op {
     /// Name the signal a wire carries ("" removes the name). Every wire from the same output
     /// carries the same signal, so they all take the name.
     NameWire { id: u32, name: String },
+    /// An analysis point on a wire's signal ("in", "out", "open" or "" to remove). Like a name,
+    /// it belongs to the signal, so every wire from the same output takes it.
+    SetPoint { id: u32, point: String },
     /// Fill colour of blocks ("" = none).
     SetColor { ids: Vec<u32>, color: String },
     /// Give a subsystem a mask, change it, or remove it (None). Values set for parameters that
@@ -362,6 +365,17 @@ fn exec(m: &mut Model, op: Op, created: &mut Vec<u32>) -> Result<(), String> {
                 w.name = name.clone();
             }
         }
+        Op::SetPoint { id, point } => {
+            if !["", "in", "out", "open"].contains(&point.as_str()) {
+                return Err(format!("Unknown analysis point '{point}'."));
+            }
+            let p = m.parent_of(id).ok_or("The wire no longer exists.")?;
+            let d = diagram(m, p)?;
+            let from = d.wires.iter().find(|w| w.id == id).ok_or("The wire no longer exists.")?.from;
+            for w in d.wires.iter_mut().filter(|w| w.from == from) {
+                w.point = point.clone();
+            }
+        }
         Op::SetMask { id, mask } => {
             let b = m.block_mut(id).ok_or("The block no longer exists.")?;
             if b.kind != "Subsystem" {
@@ -491,11 +505,11 @@ fn group(m: &mut Model, ids: &[u32], created: &mut Vec<u32>) -> Result<(), Strin
                     let mut b = Block { id, kind: "Inport".into(), name: format!("In{port}"), x: 30.0, y, w: 36.0, h: 24.0, ..Default::default() };
                     b.params.insert("port".into(), port.to_string());
                     sub.blocks.push(b);
-                    outer.push(Wire { id: m.id(), from: w.from, to: (sid, port - 1), pts: vec![], name: w.name.clone() });
+                    outer.push(Wire { id: m.id(), from: w.from, to: (sid, port - 1), pts: vec![], name: w.name.clone(), point: w.point.clone() });
                     id
                 }
             };
-            sub.wires.push(Wire { id: m.id(), from: (pid, 0), to: w.to, pts: vec![], name: w.name.clone() });
+            sub.wires.push(Wire { id: m.id(), from: (pid, 0), to: w.to, pts: vec![], name: w.name.clone(), point: w.point.clone() });
         } else if a {
             let port = *outs.entry(w.from).or_insert_with(|| {
                 nout += 1;
@@ -507,9 +521,9 @@ fn group(m: &mut Model, ids: &[u32], created: &mut Vec<u32>) -> Result<(), Strin
                 let mut b = Block { id, kind: "Outport".into(), name: format!("Out{port}"), x: 160.0 + x1 - x0, y, w: 36.0, h: 24.0, ..Default::default() };
                 b.params.insert("port".into(), port.to_string());
                 sub.blocks.push(b);
-                sub.wires.push(Wire { id: m.id(), from: w.from, to: (id, 0), pts: vec![], name: w.name.clone() });
+                sub.wires.push(Wire { id: m.id(), from: w.from, to: (id, 0), pts: vec![], name: w.name.clone(), point: w.point.clone() });
             }
-            outer.push(Wire { id: m.id(), from: (sid, port - 1), to: w.to, pts: vec![], name: w.name.clone() });
+            outer.push(Wire { id: m.id(), from: (sid, port - 1), to: w.to, pts: vec![], name: w.name.clone(), point: w.point.clone() });
         }
     }
     let name = m.unique_name(parent, "Subsystem");
@@ -554,18 +568,18 @@ fn ungroup(m: &mut Model, id: u32) -> Result<(), String> {
             (None, None) => nd.wires.push(w.clone()),
             (Some(k), None) => {
                 if let Some(o) = d.wires.iter().find(|x| x.to == (id, k)) {
-                    nd.wires.push(Wire { id: m.id(), from: o.from, to: w.to, pts: vec![], name: o.name.clone() });
+                    nd.wires.push(Wire { id: m.id(), from: o.from, to: w.to, pts: vec![], name: o.name.clone(), point: o.point.clone() });
                 }
             }
             (None, Some(k)) => {
                 for o in d.wires.iter().filter(|x| x.from == (id, k)) {
-                    nd.wires.push(Wire { id: m.id(), from: w.from, to: o.to, pts: vec![], name: w.name.clone() });
+                    nd.wires.push(Wire { id: m.id(), from: w.from, to: o.to, pts: vec![], name: w.name.clone(), point: w.point.clone() });
                 }
             }
             (Some(a), Some(k)) => {
                 if let Some(src) = d.wires.iter().find(|x| x.to == (id, a)) {
                     for o in d.wires.iter().filter(|x| x.from == (id, k)) {
-                        nd.wires.push(Wire { id: m.id(), from: src.from, to: o.to, pts: vec![], name: src.name.clone() });
+                        nd.wires.push(Wire { id: m.id(), from: src.from, to: o.to, pts: vec![], name: src.name.clone(), point: src.point.clone() });
                     }
                 }
             }

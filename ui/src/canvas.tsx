@@ -8,6 +8,7 @@ import { C } from "./cmds";
 import { helpCard } from "./help";
 import { Dialog } from "./ui";
 import * as D from "./dialogs";
+import { PointGlyph, setPoint } from "./control";
 
 const GRID = 10;
 export const [zoom, setZoom] = createSignal(1);
@@ -446,7 +447,8 @@ export const Canvas = () => {
     const wr = wid ? v()!.wires.find(x => x.id === +wid) : undefined;
     if (!b && wr) {
       setSel([wr.id]);
-      return openMenu(e, [{ label: "Name the signal…", icon: "rename", run: () => nameWire(wr) }, { label: "Straighten (remove bends)", run: () => act({ SetPts: { id: wr.id, pts: [] } }), off: !wr.pts.length }, "-", { label: "Delete", icon: "del", run: C.del, keys: "Del" }]);
+      const pt = (k: string, l: string): Item => ({ label: l, on: (wr.point ?? "") === k, run: () => setPoint(k) });
+      return openMenu(e, [{ label: "Name the signal…", icon: "rename", run: () => nameWire(wr) }, { label: "Analysis point", sub: [pt("open", "Loop opening"), pt("in", "Input"), pt("out", "Output"), "-", pt("", "None")] }, { label: "Straighten (remove bends)", run: () => act({ SetPts: { id: wr.id, pts: [] } }), off: !wr.pts.length }, "-", { label: "Delete", icon: "del", run: C.del, keys: "Del" }]);
     }
     const items: Item[] = b ? [
       ...(b.sub ? [{ label: b.mask ? "Look under the mask" : "Open subsystem", run: () => enter(b.id) } as Item, { label: b.mask ? "Edit the mask…" : "Add a mask…", run: () => D.maskEditor(b) } as Item, { label: "Save to My blocks…", run: () => D.saveMyBlock(b) } as Item] : []),
@@ -508,6 +510,7 @@ export const Canvas = () => {
               <path d={pv() ?? pathD(w.path)} class="whit" />
               <path d={pv() ?? pathD(w.path)} class="wline" marker-end={s() ? "url(#arrs)" : "url(#arr)"} />
               <Show when={w.name ? labelAt(w) : null}>{lp => <text x={lp()[0]} y={lp()[1] - 4} class="wname" text-anchor="middle">{w.name}</text>}</Show>
+              <Show when={w.point && w.path.length > 1}><PointGlyph kind={w.point!} at={(() => { const [a, b] = w.path; const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, d = Math.min(14, L / 2); return [a[0] + (b[0] - a[0]) / L * d, a[1] + (b[1] - a[1]) / L * d] as [number, number]; })()} /></Show>
             </g>;
           }}</For>
           <Show when={drag()?.k !== "move"}><For each={branchDots()}>{p => <circle cx={p[0]} cy={p[1]} r={3.2} class="wdot" />}</For></Show>

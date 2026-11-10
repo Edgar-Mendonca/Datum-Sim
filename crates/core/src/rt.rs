@@ -66,6 +66,21 @@ pub trait Rt: Send + Sync {
     fn clone_box(&self) -> Box<dyn Rt>;
 }
 
+/// A held value: the test input of an analysis point while the engine linearises.
+#[derive(Clone)]
+pub struct Hold(pub f64);
+impl Rt for Hold {
+    fn feed(&self) -> bool {
+        false
+    }
+    fn out(&self, _: &Ctx, _: &[f64], _: &[f64], y: &mut [f64]) {
+        y.fill(self.0);
+    }
+    fn clone_box(&self) -> Box<dyn Rt> {
+        Box::new(self.clone())
+    }
+}
+
 /// Evaluated parameters of one block.
 pub struct Pv<'a> {
     pub m: BTreeMap<String, Mat>,

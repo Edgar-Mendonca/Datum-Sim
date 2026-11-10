@@ -182,6 +182,7 @@ const ModelPanel = () => {
       <div class="ibody">
         <Show when={selWires().length}><p class="muted">A wire carries a signal from an output to an input. Drag a segment to move it; double-click a bend to remove it; Alt-drag from the wire to branch the signal to another input; press Delete to remove it.</p>
           <div class="iprow"><label>Signal name</label><input class="wnameinsp" value={selWires()[0].name ?? ""} placeholder="(none)" onChange={e => act({ NameWire: { id: selWires()[0].id, name: e.currentTarget.value } })} onKeyDown={e => { if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur(); }} /><small class="hint">Shown on the wire and in scope legends</small></div>
+          <div class="iprow"><label>Analysis point</label><select class="wpointinsp" value={selWires()[0].point ?? ""} onChange={e => act({ SetPoint: { id: selWires()[0].id, point: e.currentTarget.value } })}><option value="">None</option><option value="open">Loop opening</option><option value="in">Input</option><option value="out">Output</option></select><small class="hint">Where Control › Loop Analysis looks; a run ignores it</small></div>
           <p><button class="btn sm" onClick={() => act({ SetPts: { id: selWires()[0].id, pts: [] } })}>Straighten (remove bend points)</button></p></Show>
         <Show when={s()}>
           <h4>Run <Help k="run" /></h4>

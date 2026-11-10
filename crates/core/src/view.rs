@@ -39,6 +39,7 @@ pub struct WireView {
     pub pts: Vec<(f64, f64)>,
     pub path: Vec<(f64, f64)>,
     pub name: String,
+    pub point: String,
 }
 
 #[derive(Serialize)]
@@ -136,6 +137,6 @@ pub fn view(m: &Model, parent: u32) -> Option<View> {
         ok.push(w);
     }
     let paths = route::route(&rects, &reqs);
-    let wires = ok.into_iter().zip(paths).map(|(w, path)| WireView { id: w.id, from: w.from, to: w.to, pts: w.pts.clone(), path, name: w.name.clone() }).collect();
+    let wires = ok.into_iter().zip(paths).map(|(w, path)| WireView { id: w.id, from: w.from, to: w.to, pts: w.pts.clone(), path, name: w.name.clone(), point: w.point.clone() }).collect();
     Some(View { parent, path: m.path_of(parent), blocks: blocks_v, wires })
 }

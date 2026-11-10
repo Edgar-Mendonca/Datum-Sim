@@ -890,3 +890,13 @@ ul.plain { list-style: none; padding: 0; margin: 4px 0; }
 .lnk { color: var(--blue2); text-decoration: underline; padding: 0; }
 .ribbon .grp[data-hide] { display: none; }
 .ribbon:not([data-phid]) .pmore, .ribbon[data-phid="0"] .pmore { display: none; }
+
+/* 0.2.3: analysis points on wires and the Loop analysis dialog. */
+.apt circle { fill: var(--bg2); stroke: var(--blue); stroke-width: 1.5; }
+.apt path { stroke: var(--blue); stroke-width: 1.6; fill: var(--blue); }
+.apt-open path { fill: none; }
+.apt .dot { fill: var(--blue); stroke: none; }
+.lahead { margin-bottom: 8px; }
+.larow { display: flex; align-items: center; gap: 6px; }
+.latime { width: 80px; }
+.xyplot { max-width: 600px; }

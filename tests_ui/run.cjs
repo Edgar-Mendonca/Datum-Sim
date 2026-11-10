@@ -40,6 +40,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           if (c === "myblocks") return [{ file: "/blocks/Motor.dsimblock", name: "Motor (saved)", what: "A saved motor." }];
           if (c === "save_myblock" || c === "add_myblock") return c === "save_myblock" ? "/blocks/x.dsimblock" : { ...f.state, created: [998] };
           if (c === "new_model") return f.state;
+          if (c === "lin_analysis") return f.lin;
           // The run ends before its start call returns (a model with no states takes 0.1 ms).
           if (c === "run") {
             window.__emit("sim-done", { gen: 1, ok: true, error: null, issues: [], stats: f.results.stats, truncated: false, files: [] });
@@ -382,15 +383,29 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.keyboard.press("Escape");
   await p.click('.tabs > button:text-is("Model")');
 
+  // 13b2. Analysis points and Loop analysis (0.2.3).
+  await p.click('.tabs > button:text-is("Control")');
+  await p.waitForTimeout(100);
+  await p.click('.ribbon button:has-text("Loop Analysis")');
+  await p.waitForTimeout(500);
+  const la = await p.textContent(".dlg");
+  check("Loop analysis shows the loop's margins and closed-loop step", la.includes("Gain margin") && la.includes("Phase margin") && la.includes("Closed loop") && (await p.$$(".dlg .uplot")).length === 2, la.slice(0, 300));
+  check("Loop analysis names the loop opening", (await p.$$eval(".dlg .lain option", o => o.map(x => x.textContent))).some(t => t.startsWith("Loop at")));
+  await p.click('.dlg .dtabs button:has-text("Poles")');
+  await p.waitForTimeout(200);
+  check("the Poles tab draws the poles", (await p.$$(".dlg .xyplot path")).length >= 1);
+  await p.keyboard.press("Escape");
+  await p.click('.tabs > button:text-is("Model")');
+
   // 13c. Planned features (0.2.2): dimmed on their tab with the release; a greyed dialog; a switch hides them.
   await p.click('.tabs > button:text-is("Control")');
   await p.waitForTimeout(150);
   const pl = await p.$$('.ribbon .rb.planned');
   check("the Control tab shows planned features with their release", pl.length >= 3 && /\d+\.\d+/.test(await p.textContent('.ribbon .rb.planned .pv')), String(pl.length));
-  await pl[0].click();
+  await p.evaluate(() => document.querySelector(".ribbon .rb.planned[data-planned=pidtune]").click());
   await p.waitForTimeout(200);
   check("a planned feature opens the dialog it will have, disabled", (await p.textContent(".dlg .pband")).includes("Available in") && (await p.$$(".dlg fieldset[disabled]")).length === 1);
-  await p.keyboard.press("Escape");
+  await p.click(".dlg .x");
   await p.click('.tabs > button:text-is("View")');
   await p.click(".plannedchk");
   await p.click('.tabs > button:text-is("Control")');
