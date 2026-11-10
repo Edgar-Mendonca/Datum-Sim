@@ -48,7 +48,7 @@ impl B {
         B { m, stack: vec![Diagram::default()] }
     }
     fn var(&mut self, name: &str, expr: &str, unit: &str, note: &str) {
-        self.m.vars.push(Var { name: name.into(), expr: expr.into(), unit: unit.into(), note: note.into() });
+        self.m.vars.push(Var { name: name.into(), expr: expr.into(), unit: unit.into(), note: note.into(), ..Default::default() });
     }
     fn d(&mut self) -> &mut Diagram {
         self.stack.last_mut().unwrap()

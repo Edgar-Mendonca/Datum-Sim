@@ -187,6 +187,56 @@ mod tests {
         }
     }
 
+    /// Live tuning: a gain changed at t = 1 s while running gives the same result as a Step block
+    /// that changes the gain's input at 1 s. Pacing at ×50 real time takes about t/50 seconds.
+    #[test]
+    fn live_change_matches_a_step() {
+        use crate::compile::{changed_blocks, compile, run, Control};
+        use std::sync::Arc;
+        let mut m = Mk::new(2.0, "rk4");
+        m.d.m.vars.push(crate::model::Var { name: "K".into(), expr: "1".into(), ..Default::default() });
+        let c = m.add("Constant", &[("value", "1")]);
+        let g = m.add("Gain", &[("k", "K")]);
+        let i = m.add("Integrator", &[]);
+        let s = m.add("Scope", &[]);
+        m.wire(c, 0, g, 0);
+        m.wire(g, 0, i, 0);
+        m.wire(i, 0, s, 0);
+        let model = m.d.m.clone();
+        let (a, b): (BTreeMap<String, f64>, BTreeMap<String, f64>) = (BTreeMap::new(), [("K".to_string(), 3.0)].into());
+        assert_eq!(changed_blocks(&model, None, &a, &b).unwrap(), vec![g]);
+        let ctl = Arc::new(Control::default());
+        let ctl2 = ctl.clone();
+        let mut new_sim = compile(&model, None, &b).unwrap();
+        let mut once = Some(new_sim.take_rts(&[g]));
+        let mut cb = move |r: &Results| {
+            if r.t.last().is_some_and(|t| *t >= 1.0 - 1e-9) {
+                if let Some(sw) = once.take() {
+                    ctl2.swap.lock().unwrap().extend(sw);
+                }
+            }
+        };
+        let live = run(compile(&model, None, &none()).unwrap(), Some(&ctl), Some(&mut cb)).unwrap();
+        // The same with a Step from 1 to 3 at 1 s into the integrator.
+        let mut m2 = Mk::new(2.0, "rk4");
+        let st = m2.add("Step", &[("time", "1"), ("initial", "1"), ("final", "3")]);
+        let i2 = m2.add("Integrator", &[]);
+        let s2 = m2.add("Scope", &[]);
+        m2.wire(st, 0, i2, 0);
+        m2.wire(i2, 0, s2, 0);
+        let step = m2.run();
+        for t in [0.5, 1.0, 1.5, 2.0] {
+            assert!((at(&live, 0, t) - at(&step, 0, t)).abs() < 1e-9, "t {t}: live {} step {}", at(&live, 0, t), at(&step, 0, t));
+        }
+        // Pacing: 2 s of model time at ×50 takes about 40 ms.
+        let ctl = Control::default();
+        ctl.set_pace(50.0);
+        let t0 = std::time::Instant::now();
+        run(compile(&model, None, &none()).unwrap(), Some(&ctl), None).unwrap();
+        let el = t0.elapsed().as_secs_f64();
+        assert!(el > 0.035 && el < 0.5, "{el}");
+    }
+
     /// The DC motor built from blocks in a subsystem and the DC motor block agree.
     #[test]
     fn dc_motor_subsystem_matches_block() {

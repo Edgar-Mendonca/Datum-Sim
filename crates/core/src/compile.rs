@@ -10,7 +10,8 @@ use crate::solve::{self, Hooks, Method, Ode, Opts, Stats};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
+use std::sync::Mutex;
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct Issue {
@@ -108,12 +109,41 @@ pub struct RunStats {
     pub ms: f64,
 }
 
-/// Run control shared with the window: stop, pause, single step.
+/// Run control shared with the window: stop, pause, single step, live parameter changes and
+/// pacing against the clock.
 #[derive(Default)]
 pub struct Control {
     pub stop: AtomicBool,
     /// 0 run, 1 paused, 2 take one step then pause
     pub pause: AtomicU8,
+    /// Blocks rebuilt with new parameters (live tuning): swapped in at the next accepted step.
+    pub swap: Mutex<Vec<(u32, Box<dyn Rt>)>>,
+    /// Pace as f64 bits (0 = as fast as possible; 1 = real time); NaN bits = take the model's.
+    pub pace: AtomicU64,
+}
+
+impl Control {
+    /// Pace a running model: 1 = real time; 0 or less = as fast as possible.
+    pub fn set_pace(&self, p: f64) {
+        self.pace.store(if p > 0.0 { p } else { -1.0f64 }.to_bits(), Ordering::Relaxed);
+    }
+}
+
+/// The blocks whose evaluated parameters differ between two sets of variable values: the ones a
+/// live change must rebuild.
+pub fn changed_blocks(m: &Model, base: Option<&Path>, a: &BTreeMap<String, f64>, b: &BTreeMap<String, f64>) -> Result<Vec<u32>, String> {
+    let e = |e: Vec<Issue>| e.into_iter().map(|i| i.msg).collect::<Vec<_>>().join("; ");
+    let (va, vb) = (eval_vars(m, a).map_err(e)?, eval_vars(m, b).map_err(e)?);
+    let (flat, _, scopes) = flatten(m, &mut vec![]);
+    let (sa, sb) = (scope_vars(&va, &scopes, &mut vec![]), scope_vars(&vb, &scopes, &mut vec![]));
+    Ok(flat
+        .iter()
+        .filter(|f| match (params(f, &sa[f.scope], base), params(f, &sb[f.scope], base)) {
+            (Ok(x), Ok(y)) => x.m != y.m || x.t != y.t,
+            _ => true,
+        })
+        .map(|f| f.id)
+        .collect())
 }
 
 pub const MAX_POINTS: usize = 2_000_000;
@@ -700,6 +730,8 @@ pub struct Runner<'a> {
     pub res: Results,
     pub ctl: Option<&'a Control>,
     pub on_major: Option<&'a mut dyn FnMut(&Results)>,
+    /// Pacing: (wall clock, model time, pace) when the pace last changed.
+    pub anchor: Option<(std::time::Instant, f64, f64)>,
 }
 
 impl Hooks for Runner<'_> {
@@ -727,6 +759,31 @@ impl Hooks for Runner<'_> {
             cb(&self.res);
         }
         if let Some(ctl) = self.ctl {
+            // Live tuning: rebuilt blocks take over from the next step; states are kept.
+            if let Ok(mut sw) = ctl.swap.try_lock() {
+                for (id, rt) in sw.drain(..) {
+                    if let Some(nd) = self.sim.nodes.iter_mut().find(|n| n.id == id && n.nx == rt.nx() && n.nz == rt.nzc()) {
+                        nd.rt = rt;
+                    }
+                }
+            }
+            // Pacing against the clock.
+            let pb = ctl.pace.load(Ordering::Relaxed);
+            let pace = if pb == 0 { self.sim.settings.pace } else { f64::from_bits(pb) };
+            if pace > 0.0 && pace.is_finite() {
+                let now = std::time::Instant::now();
+                let a = match self.anchor {
+                    Some(a) if a.2 == pace => a,
+                    _ => {
+                        self.anchor = Some((now, t, pace));
+                        (now, t, pace)
+                    }
+                };
+                let due = (t - a.1) / pace;
+                while a.0.elapsed().as_secs_f64() < due && !ctl.stop.load(Ordering::Relaxed) {
+                    std::thread::sleep(std::time::Duration::from_secs_f64((due - a.0.elapsed().as_secs_f64()).clamp(0.0, 0.02)));
+                }
+            }
             loop {
                 if ctl.stop.load(Ordering::Relaxed) {
                     return false;
@@ -778,6 +835,10 @@ pub fn var_values(m: &Model) -> Result<BTreeMap<String, f64>, Vec<Issue>> {
 
 /// For linearisation and trim: the system as a function of its states and held inputs.
 impl Sim {
+    /// Take out these blocks' runtimes (for a live swap into a running copy of the model).
+    pub fn take_rts(&mut self, ids: &[u32]) -> Vec<(u32, Box<dyn Rt>)> {
+        self.nodes.iter().filter(|n| ids.contains(&n.id)).map(|n| (n.id, n.rt.clone_box())).collect()
+    }
     pub fn node_of(&self, id: u32) -> Option<usize> {
         self.nodes.iter().position(|n| n.id == id)
     }
@@ -811,7 +872,7 @@ pub fn run_to(mut sim: Sim, t: f64) -> Result<(Sim, Vec<f64>), String> {
     sim.settings.stop = t;
     sim.chans.clear();
     let opts = sim.opts();
-    let mut r = Runner { sim, res: Results::default(), ctl: None, on_major: None };
+    let mut r = Runner { sim, res: Results::default(), ctl: None, on_major: None, anchor: None };
     solve::drive(&mut r, &mut x, &opts)?;
     Ok((r.sim, x))
 }
@@ -826,7 +887,7 @@ pub fn run<'a>(sim: Sim, ctl: Option<&'a Control>, on_major: Option<&'a mut dyn 
     let mut x = sim.x0.clone();
     let chans = sim.chans.clone();
     let k = chans.len();
-    let mut r = Runner { sim, res: Results { chans, y: vec![vec![]; k], ..Default::default() }, ctl, on_major };
+    let mut r = Runner { sim, res: Results { chans, y: vec![vec![]; k], ..Default::default() }, ctl, on_major, anchor: None };
     let st: Stats = solve::drive(&mut r, &mut x, &opts)?;
     let mut res = r.res;
     res.stats = RunStats { steps: st.steps, rejected: st.rejected, fevals: st.fevals, events: st.events, stopped: st.stopped, ms: started.elapsed().as_secs_f64() * 1e3 };

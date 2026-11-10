@@ -900,3 +900,11 @@ ul.plain { list-style: none; padding: 0; margin: 4px 0; }
 .larow { display: flex; align-items: center; gap: 6px; }
 .latime { width: 80px; }
 .xyplot { max-width: 600px; }
+/* 0.2.8: the Live tuning panel. */
+.livepanel { position: fixed; right: 16px; bottom: 40px; width: 460px; max-width: calc(100vw - 32px); background: var(--bg2); border: 1px solid var(--line3); box-shadow: 0 6px 24px #0003; padding: 8px 10px; z-index: 40; }
+.livepanel header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.livepanel header .x { margin-left: auto; }
+.livepanel .lrow { display: grid; grid-template-columns: 70px 54px 1fr 54px 70px 26px; gap: 6px; align-items: center; margin: 4px 0; }
+.livepanel .lnum { width: 100%; font-size: 11px; }
+.livepanel .lval { text-align: right; }
+.livepanel .grow { flex: 1; }

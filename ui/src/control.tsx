@@ -304,6 +304,59 @@ export const pidTuner = () => {
   });
 };
 
+// ---------------------------------------------------------------- live tuning (0.2.8)
+
+const [liveOpen, setLiveOpen] = createSignal(false);
+export { liveOpen, setLiveOpen };
+const [liveVals, setLiveVals] = createSignal<Record<string, number>>({});
+
+/** Mark or unmark a variable as tunable (a slider in the Live panel), with a range around it. */
+const setTune = (name: string, on: boolean) => {
+  const vars = (out()?.vars ?? []).map(v => {
+    if (v.name !== name) return v;
+    const x = +v.expr, a = isFinite(x) && x !== 0 ? Math.abs(x) : 1;
+    return on ? { ...v, tune: true, lo: (v as any).lo || (x >= 0 ? 0 : -2 * a), hi: (v as any).hi || (x >= 0 ? 2 * a : 0) } : { ...v, tune: false };
+  });
+  act({ SetVars: { vars } });
+};
+
+/** The Live panel: a slider per tunable variable. While the model runs a slider changes the running
+ *  model at once; "Keep these values" writes them to the variables (one undoable edit). */
+export const LivePanel = () => {
+  const tun = () => (out()?.vars ?? []).filter((v: any) => v.tune);
+  const plain = () => (out()?.vars ?? []).filter((v: any) => !v.tune && isFinite(+v.expr));
+  const val = (v: any) => liveVals()[v.name] ?? +v.expr;
+  const move = (v: any, x: number) => {
+    setLiveVals({ ...liveVals(), [v.name]: x });
+    if (out()?.running) invoke("live_set", { name: v.name, value: x }).catch(e => toast(String(e)));
+  };
+  const keep = () => {
+    const lv = liveVals();
+    act({ SetVars: { vars: (out()?.vars ?? []).map(v => v.name in lv ? { ...v, expr: String(+lv[v.name].toPrecision(6)) } : v) } }).then(() => { setLiveVals({}); toast("Values kept in the model's variables.", true); });
+  };
+  const range = (v: any, k: "lo" | "hi", x: string) => { const n = +x; if (isFinite(n)) act({ SetVars: { vars: (out()?.vars ?? []).map(w => w.name === v.name ? { ...w, [k]: n } : w) } }); };
+  return <Show when={liveOpen()}>
+    <div class="livepanel">
+      <header><b>Live tuning</b><span class="muted small">{out()?.running ? "running: changes apply at once" : "run the model, then move a slider"}</span><button class="x" onClick={() => setLiveOpen(false)}>×</button></header>
+      <Show when={tun().length} fallback={<p class="muted small">No tunable variables yet: add one below.</p>}>
+        <For each={tun()}>{(v: any) => <div class="lrow">
+          <label class="mono">{v.name}</label>
+          <input class="mono lnum" value={v.lo} onChange={e => range(v, "lo", e.currentTarget.value)} title="Lowest value" />
+          <input type="range" class="lslider" min={v.lo} max={v.hi} step={(v.hi - v.lo) / 200 || 0.01} value={val(v)} onInput={e => move(v, +e.currentTarget.value)} />
+          <input class="mono lnum" value={v.hi} onChange={e => range(v, "hi", e.currentTarget.value)} title="Highest value" />
+          <span class="mono lval">{num(val(v), 4)}</span>
+          <button class="btn sm" title="Stop tuning this variable" onClick={() => setTune(v.name, false)}>×</button>
+        </div>}</For>
+      </Show>
+      <div class="larow">
+        <select class="laddvar" onChange={e => { if (e.currentTarget.value) setTune(e.currentTarget.value, true); e.currentTarget.value = ""; }}><option value="">Add a variable…</option><For each={plain()}>{(v: any) => <option value={v.name}>{v.name} = {v.expr}</option>}</For></select>
+        <span class="grow" />
+        <button class="btn sm pri" disabled={!Object.keys(liveVals()).length} onClick={keep}>Keep these values</button>
+      </div>
+    </div>
+  </Show>;
+};
+
 /** The analysis point glyph on a wire: arrow in, a measuring circle, or a cut. */
 export const PointGlyph = (p: { kind: string; at: [number, number] }): JSX.Element => {
   const [x, y] = p.at;

@@ -17,9 +17,6 @@ const f = (id: string, tab: string, group: string, v: string, label: string, ico
 
 export const FEATS: Feat[] = [
   // ---- Stage A: control design (0.2.x → 0.3.0)
-  f("live", "control", "Live", "0.2.8", "Live Tuning", "var", "Sliders for variables marked as tunable: move one while the model runs and the scopes show the effect at once.",
-    [{ k: "table", l: "Tunable", cols: ["Variable", "Min", "Max"] }]),
-  f("pace", "simulate", "Pacing", "0.2.8", "Real Time", "run", "Slow a run to real time, or to a chosen speed (×0.1 to ×10), to tune by hand.", [{ k: "num", l: "Speed", v: "1", u: "× real time" }]),
   f("bus", "model", "Signals", "0.2.9", "Buses", "wire", "Group named signals into one wire (Bus Creator) and pick them out by name (Bus Selector)."),
   f("algloop", "simulate", "Solver", "0.2.10", "Algebraic Loops", "solver", "A loop without a state is solved at each step (Newton iteration) instead of being reported as an error."),
 

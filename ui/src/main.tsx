@@ -21,6 +21,7 @@ import { Canvas, fit, zoom } from "./canvas";
 import { LibraryPanel, Inspector, LibGhost } from "./panels";
 import { Dock, ScopesPage, ResultsPage } from "./scope";
 import { Menu, Toast, Icon } from "./ui";
+import { LivePanel } from "./control";
 import * as D from "./dialogs";
 
 const SIDE: ([View, string, string] | "-")[] = [
@@ -119,7 +120,7 @@ const App = () => {
       <Status />
       <Show when={backstage()}><Backstage /></Show>
       <For each={dialogs()}>{d => d()}</For>
-      <LibGhost /><Menu /><Toast />
+      <LibGhost /><LivePanel /><Menu /><Toast />
     </div>
   );
 };

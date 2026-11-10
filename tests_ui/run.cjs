@@ -469,18 +469,34 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.evaluate(() => { window.__dcblock = false; });
   await p.click('.tabs > button:text-is("Model")');
 
-  // 13c. Planned features (0.2.2): dimmed on their tab with the release; a greyed dialog; a switch hides them.
+  // 13b6. Live tuning (0.2.8): add a variable, move its slider while running → live_set; Keep → SetVars.
   await p.click('.tabs > button:text-is("Control")');
+  await p.click('.ribbon button:has-text("Live Tuning")');
+  await p.waitForTimeout(150);
+  check("the Live panel opens", (await p.$$(".livepanel")).length === 1);
+  await p.selectOption(".laddvar", "Kp");
+  await p.waitForTimeout(200);
+  const lt = (await p.evaluate(() => window.__calls)).filter(c => c[0] === "apply").pop();
+  check("adding a variable marks it tunable with a range", JSON.stringify(lt?.[1] ?? {}).includes('"tune":true') && JSON.stringify(lt[1]).includes('"hi":200'), JSON.stringify(lt));
+  await p.click('.ribbon button:has-text("Live Tuning")');
+  await p.click('.tabs > button:text-is("Simulate")');
+  await p.selectOption(".pacesel", "1");
+  await p.waitForTimeout(150);
+  const pce = (await p.evaluate(() => window.__calls)).filter(c => c[0] === "apply").pop();
+  check("Pacing sets the run's pace", JSON.stringify(pce?.[1] ?? {}).includes('"pace":1'), JSON.stringify(pce));
+
+  // 13c. Planned features (0.2.2): dimmed on their tab with the release; a greyed dialog; a switch hides them.
+  await p.click('.tabs > button:text-is("Model")');
   await p.waitForTimeout(150);
   const pl = await p.$$('.ribbon .rb.planned');
-  check("the Control tab shows planned features with their release", pl.length >= 1 && /\d+\.\d+/.test(await p.textContent('.ribbon .rb.planned .pv')), String(pl.length));
-  await p.evaluate(() => document.querySelector(".ribbon .rb.planned[data-planned=live]").click());
+  check("the planned features show their release", pl.length >= 1 && /\d+\.\d+/.test(await p.textContent('.ribbon .rb.planned .pv')), String(pl.length));
+  await p.evaluate(() => document.querySelector(".ribbon .rb.planned[data-planned=losses]").click());
   await p.waitForTimeout(200);
   check("a planned feature opens the dialog it will have, disabled", (await p.textContent(".dlg .pband")).includes("Available in") && (await p.$$(".dlg fieldset[disabled]")).length === 1);
   await p.click(".dlg .x");
   await p.click('.tabs > button:text-is("View")');
   await p.click(".plannedchk");
-  await p.click('.tabs > button:text-is("Control")');
+  await p.click('.tabs > button:text-is("Model")');
   await p.waitForTimeout(150);
   check("View › Planned features hides them", (await p.$$('.ribbon .rb.planned')).length === 0);
   await p.click('.tabs > button:text-is("View")');

@@ -9,7 +9,7 @@ import { Help, helpCard, HELP } from "./help";
 import { SolverPick } from "./panels";
 import { invoke } from "./api";
 import { PlannedGroups, showPlanned, setShowPlanned } from "./planned";
-import { loopAnalysis, setPoint, trimDialog, opsDialog, pidTuner, driveTuner } from "./control";
+import { loopAnalysis, setPoint, trimDialog, opsDialog, pidTuner, driveTuner, liveOpen, setLiveOpen } from "./control";
 
 const GH = "https://github.com/Edgar-Mendonca/Datum-Sim";
 
@@ -120,6 +120,8 @@ export const Ribbon = () => (
       <G l="Studies" h="sweep"><B big i="sweep" l="Parameter Sweep" run={C.sweep} /></G>
       <G l="Scopes" h="scopes"><B big i="scope" l="Scopes" run={() => C.view("scopes")} dd={e => openMenu(e, scopeMenu())} />
         <S><label class="chk" title="Log every signal, so after a run you can read any wire by hovering it (the signal probe)"><input type="checkbox" class="logall" checked={!!out()?.sim.log_all} onChange={e => C.setSim("log_all", e.currentTarget.checked)} />Log all signals</label></S></G>
+      <G l="Pacing" h="live"><div class="rfields"><label>Speed <select class="pacesel" value={String(out()?.sim.pace ?? 0)} onChange={e => { const v = +e.currentTarget.value; C.setSim("pace", v); if (running()) invoke("run_pace", { pace: v }).catch(() => {}); }}>
+        <option value="0">As fast as possible</option><option value="0.1">×0.1 real time</option><option value="0.5">×0.5 real time</option><option value="1">Real time</option><option value="2">×2 real time</option><option value="10">×10 real time</option></select></label></div></G>
       <PlannedGroups tab="simulate" />
     </Show>
     <Show when={tab() === "analyze"}>
@@ -134,6 +136,7 @@ export const Ribbon = () => (
       <G l="Linearise" h="loop"><B big i="bode" l="Loop Analysis" run={() => loopAnalysis()} title="Linearise the whole model between its analysis points: Bode, margins, step and poles" /><S><B i="bode" l="Nyquist" run={() => loopAnalysis("nyquist")} /><B i="solver" l="Root Locus" run={() => loopAnalysis("rlocus")} /><B i="specs" l="Sensitivity" run={() => loopAnalysis("sens")} /></S><S><B i="specs" l="Step Response" run={() => loopAnalysis("step")} /><B i="solver" l="Poles" run={() => loopAnalysis("poles")} /></S></G>
       <G l="Operating Points" h="trim"><B big i="solver" l="Trim" run={trimDialog} title="Find where the model is at rest with chosen outputs held" /><B big i="list" l="Operating Points" run={opsDialog} /></G>
       <G l="Tuning" h="pidtune"><B big i="specs" l="PID Tuner" run={pidTuner} title="Tune the selected PID with two sliders: speed and robustness" /><B big i="motor" l="Drive Tuning" run={driveTuner} title="Tune a drive's current and speed loops from the motor's data" /></G>
+      <G l="Live" h="live"><B big i="var" l="Live Tuning" on={liveOpen()} run={() => setLiveOpen(!liveOpen())} title="Sliders for tunable variables: move one while the model runs" /></G>
       <PlannedGroups tab="control" />
     </Show>
     <Show when={tab() === "modules"}>

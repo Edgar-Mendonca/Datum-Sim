@@ -60,6 +60,8 @@ struct RunState {
     /// The last runs kept for comparing (newest last): (number, label, results).
     history: Vec<(u64, String, Arc<Results>)>,
     count: u64,
+    /// Variable values changed live during the present run (live tuning).
+    live: BTreeMap<String, f64>,
 }
 
 /// How many earlier runs are kept for comparing.
@@ -467,6 +469,7 @@ fn run(app: AppHandle, st: State<St>) -> Result<Started, Vec<Issue>> {
     a.run.ctl = ctl.clone();
     a.run.running = true;
     a.run.results = None;
+    a.run.live.clear();
     let started = Started { gen, chans: sim.chans.clone(), warnings: sim.warnings.clone(), start: sim.settings.start, stop: sim.settings.stop };
     let (t0, t1) = (sim.settings.start, sim.settings.stop);
     let files = sim.files.clone();
@@ -532,6 +535,32 @@ fn run(app: AppHandle, st: State<St>) -> Result<Started, Vec<Issue>> {
 }
 
 /// Stop, pause (true), resume (false) or take one step while paused.
+/// Live tuning: change a model variable while the model runs. The blocks that use it are rebuilt
+/// and swapped in at the next step; states are kept.
+#[tauri::command]
+fn live_set(st: State<St>, name: String, value: f64) -> R<()> {
+    let mut a = st.lock();
+    if !a.run.running {
+        return Err("The model is not running.".into());
+    }
+    let base = base_dir(&a);
+    let old = a.run.live.clone();
+    let mut new = old.clone();
+    new.insert(name, value);
+    let ids = compile::changed_blocks(&a.doc.m, base.as_deref(), &old, &new)?;
+    let mut sim = compile::compile(&a.doc.m, base.as_deref(), &new).map_err(|e| e.into_iter().map(|i| i.msg).collect::<Vec<_>>().join("; "))?;
+    let rts = sim.take_rts(&ids);
+    a.run.ctl.swap.lock().unwrap_or_else(|e| e.into_inner()).extend(rts);
+    a.run.live = new;
+    Ok(())
+}
+
+/// Pace the running model against the clock (1 = real time, 0 = as fast as possible).
+#[tauri::command]
+fn run_pace(st: State<St>, pace: f64) {
+    st.lock().run.ctl.set_pace(pace);
+}
+
 #[tauri::command]
 fn control(st: State<St>, what: String) {
     let a = st.lock();
@@ -902,6 +931,8 @@ fn main() {
             control::pid_plant,
             control::pid_design,
             control::drive_tune,
+            live_set,
+            run_pace,
             control::trim,
             state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, find, myblocks, save_myblock, add_myblock, delete_myblock, open, save, save_file,
             run, control, results, series, value_at, step_marks, runs, run_series, sweep_series, run_sweep, export_csv, analyze, step_info, engine,

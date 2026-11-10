@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.8 — 2026-11-10
+
+Live tuning and real-time pacing.
+
+- **Control › Live Tuning** opens a panel of sliders. Add any model variable: it gets a slider with a range around its value, and you can edit the ends.
+- **Move a slider while the model runs** and the scopes respond at once. The blocks that use the variable are rebuilt with the new value at the next step, and the states are kept, so nothing jumps except what you changed.
+- **Keep these values** writes the slider values to the variables, as one undoable edit.
+- **Simulate › Pacing** runs the model in real time, or at ×0.1 to ×10, so you can follow it and tune by hand. It can change while the model runs.
+- Tunable variables and the pace are saved with the model.
+
+Checked: a gain changed live at 1 s gives exactly the same result as a Step block that changes at 1 s. A 2 s run paced at ×50 takes about 40 ms.
+
 ## 0.2.7 — 2026-11-10
 
 One-click drive tuning.

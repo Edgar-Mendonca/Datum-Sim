@@ -44,6 +44,17 @@ pub struct Var {
     pub expr: String,
     pub unit: String,
     pub note: String,
+    /// Live tuning (0.2.8): a slider from `lo` to `hi` while the model runs.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub tune: bool,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub lo: f64,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub hi: f64,
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -61,11 +72,15 @@ pub struct SimSettings {
     pub atol: f64,
     /// Log every signal, so any wire can be read after a run (the signal probe).
     pub log_all: bool,
+    /// Pace the run against the clock (0.2.8): 1 = real time, 0.5 = half speed; 0 = as fast as
+    /// possible.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub pace: f64,
 }
 
 impl Default for SimSettings {
     fn default() -> Self {
-        SimSettings { start: 0.0, stop: 10.0, solver: "rk45".into(), step: 0.01, max_step: 0.0, rtol: 1e-6, atol: 1e-8, log_all: false }
+        SimSettings { start: 0.0, stop: 10.0, solver: "rk45".into(), step: 0.01, max_step: 0.0, rtol: 1e-6, atol: 1e-8, log_all: false, pace: 0.0 }
     }
 }
 
