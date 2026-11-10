@@ -87,7 +87,7 @@ export const loopAnalysis = (first = "bode", op?: number) => openDialog(() => {
     if (x.loop && x.margins) {
       f.push(["Gain margin", x.margins.gm == null ? "∞ (the phase never reaches −180°)" : `${num(x.margins.gm_db, 4)} dB (×${num(x.margins.gm, 4)})${rads(x.margins.wpc)}`]);
       f.push(["Phase margin", x.margins.pm == null ? "∞ (the gain never crosses 0 dB)" : `${deg(x.margins.pm)}${rads(x.margins.wgc)}`]);
-      f.push(["Closed loop", x.nyquist.stable ? "stable" : `unstable: ${x.nyquist.z} pole(s) in the right half-plane`]);
+      f.push(["Closed loop", x.nyquist.stable ? (x.nyquist.marginal ? "stable (with a pole at the origin or on the imaginary axis: an integrator or angle outside the loop)" : "stable") : `unstable: ${x.nyquist.z} pole(s) in the right half-plane`]);
       f.push(["Nyquist", `${x.nyquist.p} open-loop pole(s) in the right half-plane, ${x.nyquist.n} clockwise encirclement(s) of −1`]);
       f.push(["Peak sensitivity Ms", `${num(x.sens.ms, 4)}${rads(x.sens.w_ms)}`]);
     } else f.push(["Steady-state gain", num(x.dc, 5)]);

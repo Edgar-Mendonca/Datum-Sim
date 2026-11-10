@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 — 2026-11-10
+
+Control design, complete: the first stage of the roadmap is done. 0.3.0 brings together 0.2.2 to 0.2.10:
+
+- Every planned feature shows in the window, dimmed, with the release that brings it.
+- Analysis points on wires and **Loop Analysis** of the whole model: Bode with gain and phase margins, Nyquist, root locus, sensitivity, closed-loop step and impulse, poles.
+- **Trim** and saved operating points.
+- The **PID Tuner** (speed and robustness sliders, Ziegler–Nichols, SIMC) and one-click **Drive Tuning**.
+- **Live tuning** while the model runs, and real-time pacing.
+- **Buses** and solved **algebraic loops**.
+
+New in 0.3.0:
+- The PMSM speed-control example is ready for Control: its speed loop opens at the speed PI.
+- Loop Analysis tells a truly unstable loop from one with a pole at the origin that the loop does not use, such as a rotor angle.
+- A verification record for the whole stage (docs/verification/2026-11-10.md).
+
 ## 0.2.10 — 2026-11-10
 
 Algebraic loops are solved.

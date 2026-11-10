@@ -308,6 +308,8 @@ fn pmsm() -> Model {
     b.w(m, 1, s2, 0);
     b.w(m, 2, s2, 1);
     b.w(m, 3, s3, 0);
+    // Ready for Control: the speed loop opens at the speed PI.
+    b.point(pw, "open");
     b.done()
 }
 

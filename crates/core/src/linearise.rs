@@ -534,7 +534,7 @@ pub fn report(l: &Linear, inp: usize, outp: usize) -> Result<serde_json::Value, 
         let cl = g.feedback()?;
         v["margins"] = json!({ "gm": if m.gm.is_finite() { json!(m.gm) } else { serde_json::Value::Null }, "gm_db": if m.gm_db.is_finite() { json!(m.gm_db) } else { serde_json::Value::Null },
             "wpc": if m.wpc.is_finite() { json!(m.wpc) } else { serde_json::Value::Null }, "pm": if m.pm.is_finite() { json!(m.pm) } else { serde_json::Value::Null }, "wgc": if m.wgc.is_finite() { json!(m.wgc) } else { serde_json::Value::Null } });
-        v["nyquist"] = json!({ "re": fin(&la.nyq_re), "im": fin(&la.nyq_im), "p": la.p_rhp, "z": la.z_rhp, "n": la.encirclements, "stable": la.stable });
+        v["nyquist"] = json!({ "re": fin(&la.nyq_re), "im": fin(&la.nyq_im), "p": la.p_rhp, "z": la.z_rhp, "n": la.encirclements, "stable": la.stable, "marginal": la.marginal });
         v["sens"] = json!({ "s_db": fin(&la.s_db), "t_db": fin(&la.t_db), "ms": la.ms, "w_ms": la.w_ms });
         v["rlocus"] = json!({ "k": la.rl_k, "poles": la.rl_poles, "open": poles });
         v["closed"] = resp(&cl);
@@ -576,6 +576,19 @@ mod tests {
         assert!((mg.wgc - 20.0).abs() < 1e-3 && (mg.pm - 60.0).abs() < 1e-2, "{mg:?} {d:?}");
         let r = pid_report(&plant, &cur, &d.pid);
         assert!(r["after"]["pm"].as_f64().unwrap() > 59.9);
+    }
+
+    /// The PMSM example's speed loop, opened at the speed PI: stable, crossing near the speed
+    /// bandwidth ws its gains were chosen for (the current loops are ten times faster).
+    #[test]
+    fn pmsm_speed_loop() {
+        let m = examples::get("pmsm").unwrap();
+        let ws = compile::var_values(&m).unwrap()["ws"];
+        let l = linearise(&m, None, &BTreeMap::new(), &At::Initial).unwrap();
+        assert_eq!(l.inputs[0], "Loop at Speed PI");
+        let lp = l.ss.siso(0, 0);
+        let mg = lti::margins(&lp);
+        assert!(lti::loop_analysis(&lp, &lti::grid(&lp, 200)).stable && (mg.wgc / ws - 1.0).abs() < 0.25 && mg.pm > 45.0, "ws {ws}: {mg:?}");
     }
 
     /// Trim the tank at 2 m with the set point free: the set point must be 2, the pump delivers

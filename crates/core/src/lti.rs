@@ -531,6 +531,8 @@ pub struct Loop {
     pub z_rhp: usize,
     pub encirclements: i64,
     pub stable: bool,
+    /// Closed-loop poles on the imaginary axis (an integrator or an angle the loop does not use).
+    pub marginal: bool,
     pub nyq_re: Vec<f64>,
     pub nyq_im: Vec<f64>,
     pub s_db: Vec<f64>,
@@ -553,7 +555,10 @@ pub fn loop_analysis(l: &Ss, w: &[f64]) -> Loop {
     r.p_rhp = rhp(&l.poles());
     r.z_rhp = rhp(&l.poles_at_gain(1.0));
     r.encirclements = r.z_rhp as i64 - r.p_rhp as i64;
-    r.stable = r.z_rhp == 0 && l.poles_at_gain(1.0).iter().all(|p| p.re < 0.0);
+    let cl = l.poles_at_gain(1.0);
+    let tol = 1e-9 * cl.iter().map(|x| x.abs()).fold(1.0, f64::max);
+    r.stable = r.z_rhp == 0;
+    r.marginal = cl.iter().any(|p| p.re.abs() <= tol);
     for &wi in w {
         let g = l.at(Cx::new(0.0, wi));
         r.nyq_re.push(g.re);

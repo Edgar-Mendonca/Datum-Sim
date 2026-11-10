@@ -7,7 +7,7 @@
   "for": "Control, mechanical, electrical, process and mechatronics engineers, researchers and students.",
   "about": [
     "Datum Sim models and simulates dynamic systems. You draw the system as blocks and wires: sources, transfer functions, state space, continuous and discrete PID controllers, lookup tables, and a motor library with DC, induction, synchronous, switched reluctance, BLDC and stepper motors, inverters and transforms. Group blocks into subsystems, give them parameters of their own with a mask, and keep them in your own library. Then press Run and watch the signals on live scopes.",
-    "Five solvers cover everything from simple fixed-step runs to stiff systems; the variable-step solvers find switching times exactly. Discrete controllers run at their own sample times, and the diagram can colour every block by its rate. Motors come with typical values for low, medium and high voltage ratings. Scopes have measuring cursors, step-response marks and comparison of earlier runs, and a probe reads any wire after a run. Models also run from the command line and from Python, for scripts, batch studies and build servers. Parameter sweeps run in the app's own engine, step-response specifications and Bode plots come from a built-in Python engine, and the solvers, main blocks and motors are checked against known answers."
+    "Five solvers cover everything from simple fixed-step runs to stiff systems; the variable-step solvers find switching times exactly. Discrete controllers run at their own sample times, and the diagram can colour every block by its rate. Motors come with typical values for low, medium and high voltage ratings. Scopes have measuring cursors, step-response marks and comparison of earlier runs, and a probe reads any wire after a run. Models also run from the command line and from Python, for scripts, batch studies and build servers. For control design the engine linearises the whole model between points you mark on wires: loop Bode plots with gain and phase margins, Nyquist, root locus, sensitivity and closed-loop responses. It finds operating points, tunes a PID with two sliders (speed and robustness) or a whole motor drive from the motor's data, and lets you move variables on sliders while the model runs, in real time if you like. Buses carry named signals, and loops without a state are solved. Parameter sweeps run in the app's own engine, and the solvers, main blocks, motors and analyses are checked against known answers."
   ],
   "steps": [
     {
@@ -20,11 +20,14 @@
     },
     {
       "title": "Analyse and tune",
-      "text": "Measure with cursors and step-response marks, compare runs, read any wire with the probe, and sweep parameters to tune the controller."
+      "text": "Mark a loop opening on a wire and look at the loop's Bode plot, margins, Nyquist and root locus. Tune a PID with two sliders, tune a whole drive in one click, or move variables live while the model runs. Measure with cursors and compare runs."
     }
   ],
   "highlights": [
     "Draw a model as blocks and wires, press Run and watch live scopes",
+    "Control design on the whole model: analysis points on wires, loop Bode with gain and phase margins, Nyquist, root locus, sensitivity, closed-loop step and impulse",
+    "Trim finds operating points; a PID tuner with two sliders (speed and robustness), Ziegler–Nichols and SIMC; one-click tuning of motor drives",
+    "Live tuning: move variables on sliders while the model runs, in real time or faster",
     "Scopes with two measuring cursors, step-response marks, comparison of the last five runs, stacked plots, and PNG or SVG pictures",
     "A signal probe: hover any wire after a run to read its value",
     "Wires that route themselves: move segments, branch from a wire, name signals; notes, block colours and Find on the diagram",
@@ -37,7 +40,9 @@
     "Five solvers, from fixed-step Euler to variable-step and stiff; the variable-step solvers find switching times exactly",
     "Parameter sweeps, plus step-response specifications and Bode plots from the built-in Python engine",
     "Automation: a command line and a Python API that open, change, run and sweep models with the app's own engine",
-    "The solvers, main blocks and motors checked against known answers, including power balance for the induction, synchronous, DC and BLDC motors"
+    "The solvers, main blocks and motors checked against known answers, including power balance for the induction, synchronous, DC and BLDC motors",
+    "Buses of named signals, and loops without a state solved at each step",
+    "Every planned feature shows in the window, dimmed, with the release that brings it"
   ],
   "screenshots": [
     "docs/images/diagram.png"
@@ -46,7 +51,7 @@
     {
       "v": "0.2.x → 0.3",
       "title": "Control design",
-      "when": "Next",
+      "when": "Done (0.3.0)",
       "items": [
         "Analysis points and linearising whole models (0.2.3)",
         "Nyquist, root locus and sensitivity (0.2.4)",

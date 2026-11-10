@@ -173,10 +173,20 @@
 | 0.1.6 | Wires and diagram: branch from a wire, segments, signal names, notes, find, colours (PLAN-0.2 B) | ✅ |
 | 0.2 | Masks and My blocks (copied), file version 2 (PLAN-0.2 D) | ✅ |
 | 0.2.1 | Automation: command line and Python API, Help › Automation | ✅ |
-| 0.3 | *Proposed renumbering in `docs/ROADMAP.md` (waiting for the user): stage A control design 0.2.2–0.3.0, B drives 0.3.x, C physical 0.4.x, D exchange 0.5.x, E studies 0.6.x, F reach 0.7.x.* Control design (next): trim, linearise whole models, Nyquist, root locus, PID tuning, live tuning; buses; algebraic-loop solving | ⬜ |
-| 0.4 | Physical components (mechanical, rotational, electrical, hydraulic, thermal), DAEs | ⬜ |
-| 0.5 | FMU import and export; Modelica through an external compiler | ⬜ |
-| 0.6 | State machines, Python blocks, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
+| 0.2.2 | Planned features in the window (the Datum Mesh pattern): `ui/src/features.ts` register, dimmed ribbon groups with versions, greyed dialogs, Roadmap by release; Control and Modules tabs | ✅ |
+| 0.2.3 | Analysis points (wire `point`), whole-model linearisation (`linearise.rs`), LTI engine (`lti.rs`), Loop analysis: Bode, margins, step, poles | ✅ |
+| 0.2.4 | Nyquist, root locus, sensitivity | ✅ |
+| 0.2.5 | Trim (Levenberg–Marquardt) and saved operating points (`Model.ops`) | ✅ |
+| 0.2.6 | PID Tuner: loop shaping (speed, robustness), Ziegler–Nichols, SIMC | ✅ |
+| 0.2.7 | Drive tuning (current PIs by pole–zero cancellation, speed PI) | ✅ |
+| 0.2.8 | Live tuning (blocks rebuilt and swapped at the next step) and pacing | ✅ |
+| 0.2.9 | Buses (Bus Creator, Bus Selector by name) | ✅ |
+| 0.2.10 | Algebraic loops solved (tearing + Newton) | ✅ |
+| 0.3.0 | Stage A milestone: examples ready for Control, verification record 2026-11-10, real-app check | ✅ |
+| 0.3.x | Stage B: FFT/THD, SVPWM and dead time, inverter losses, thermal, saturation, nameplate, robot arm module, drive examples → 0.4.0 | 🔜 |
+| 0.4.x | Stage C: physical components → 0.5.0 (after the user tests A and B) | ⬜ |
+| 0.5.x | Exchange: FMU, MAT/HDF5, building models from Python, Modelica | ⬜ |
+| 0.6.x | State machines, Python blocks, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
 | 1.0 | Validation suite and report, user guide, signed installer | ⬜ |
 
 ## 4. Session log
@@ -261,6 +271,12 @@
 - Brought `docs/COMPARISON.md` up to 0.2.1: automation rows, an open-source field table (§4), coverage by stage (§5) and an honest answer (§6): not a replacement for the industry standard (code generation, certification, hardware in the loop, ecosystem); yes as the first free tool to learn, sketch and check dynamic systems and drives, beside the paid tools.
 - Wrote `docs/ROADMAP.md`: stages A control design (0.2.2–0.3.0, PLAN-0.3 renumbered, drive tuning added as 0.2.6), B drives (0.3.x: FFT/THD, SVPWM, losses, thermal, saturation, nameplate), C physical (0.4.x), D exchange (0.5.x), E studies and logic (0.6.x), F reach and speed (0.7.x). Rules: small patches, fixes take the next number, a minor number closes a stage. Five questions for the user (§6). Nothing built; waiting.
 - Pulled the user's README commit (Datum family section).
+
+### 2026-11-10: Session 9 (overnight build, stage A: 0.2.2 → 0.3.0)
+- The user agreed to the roadmap ("go ahead, A and B only"), asked for the Datum Mesh "UI first" pattern (every planned feature visible with its version), a robot arm module, examples and small releases without jumps (0.2.2 … 0.2.10, 0.3.0).
+- Built and released 0.2.2 to 0.2.10 one by one through `release.yml` (workflow_dispatch). New engine files: `lti.rs` (eig, Bode, margins, Nyquist count, root locus, responses by exact discretisation, PID design, drive tuning) and `linearise.rs` (analysis points made real as hidden blocks, central differences, trim, PID plant). `src-tauri/src/control.rs`, `ui/src/control.tsx`, `features.ts`, `planned.tsx`.
+- Bugs found and fixed on the way: trim cut the loop at a loop opening (points only measure while trimming); the DC motor example's PID started at its limit, so its loop gain was zero (the reference now steps at 0.2 s, and Loop analysis says when the gain is zero); a pole of the rotor angle made a stable loop read "unstable" (stable = no right-half-plane poles, marginal shown apart); one 0.2.5 commit was pushed with a failing test (fixed before its release was built; the check script now stops at the first failure); the session disk filled with incremental builds (CARGO_INCREMENTAL=0).
+- Record: `docs/verification/2026-11-10.md`.
 
 ## 5. Known limits and next steps
 
