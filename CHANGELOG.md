@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.7 — 2026-11-10
+
+One-click drive tuning.
+
+- **Control › Drive Tuning** tunes a motor drive's cascade from the motor's own data: resistance, d and q inductances, torque constant and inertia. It works with DC, BLDC, PMSM and three-phase PMSM blocks.
+- **Current PIs**, for the q and d axes or the armature, cancel the winding's pole, so the current loop crosses at the bandwidth you choose with 90° of margin.
+- **Speed PI**: designed on the motor's mechanics as seen through the closed current loop. The speed PI can give a current or a torque reference.
+- Say which PID is the speed loop and which are the current loops. **Apply** sets them in one undoable edit, changing the model variables they use where they use them.
+
+Checked: for a 4-pole-pair PMSM, the current loop crosses at exactly 2000 rad/s with 90°. The speed loop crosses within 10 % of 200 rad/s with more than 60° of margin.
+
 ## 0.2.6 — 2026-11-10
 
 The PID Tuner.

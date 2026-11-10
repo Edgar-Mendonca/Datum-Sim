@@ -459,6 +459,20 @@ pub fn pid_plant(m: &Model, base: Option<&Path>, id: u32, at: &At) -> Result<(Ss
     Ok((plant, cur, name))
 }
 
+/// A motor block's data for drive tuning (DC motor, BLDC, PMSM, three-phase PMSM).
+pub fn drive_data(m: &Model, id: u32) -> Result<(lti::DriveData, String), String> {
+    let b = m.block(id).ok_or("Select a motor block first.")?;
+    let p = compile::block_numbers(m, id)?;
+    let g = |k: &str| p.get(k).cloned().unwrap_or(0.0);
+    let d = match b.kind.as_str() {
+        "DCMotor" => lti::DriveData { r: g("R"), ld: g("L"), lq: g("L"), kt: g("Kt"), j: g("J"), b: g("b") },
+        "BLDC" => lti::DriveData { r: g("R"), ld: g("L"), lq: g("L"), kt: g("Ke"), j: g("J"), b: g("b") },
+        "PMSM" | "PMSM3" => lti::DriveData { r: g("Rs"), ld: g("Ld"), lq: g("Lq"), kt: 1.5 * g("p") * g("psi"), j: g("J"), b: g("b") },
+        k => return Err(format!("Drive tuning works on DC, BLDC and PMSM motors, not on '{k}'.")),
+    };
+    Ok((d, b.name.clone()))
+}
+
 /// Before and after: the loop's margins, Bode of L and closed-loop steps for the present gains
 /// and a design.
 pub fn pid_report(plant: &Ss, cur: &lti::Pid, new: &lti::Pid) -> serde_json::Value {

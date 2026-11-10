@@ -176,6 +176,75 @@ export const opsDialog = () => openDialog(() => {
   </Dialog>;
 });
 
+/** The edits that give a PID block these gains: a gain that is a model variable changes the
+ *  variable (in `vars`, returns true), any other is set on the block. */
+const gainOps = (b: { id: number; params?: Record<string, string> }, pid: Record<string, number>, vars: any[], ops: any[]) => {
+  let vc = false;
+  for (const k of ["P", "I", "D", "N"]) {
+    const v = pid[k.toLowerCase()];
+    if (!isFinite(v)) continue;
+    const text = (b.params?.[k] ?? "").trim(), vi = vars.findIndex(x => x.name === text);
+    const val = String(+v.toPrecision(6));
+    if (vi >= 0) { vars[vi] = { ...vars[vi], expr: val }; vc = true; }
+    else ops.push({ SetParam: { id: b.id, key: k, value: val } });
+  }
+  return vc;
+};
+
+const MOTORS = ["DCMotor", "BLDC", "PMSM", "PMSM3"];
+
+/** Control › Drive Tuning: the current and speed PIs of a drive from the motor's data. */
+export const driveTuner = () => {
+  const all = dview()?.blocks ?? [];
+  const motors = all.filter(b => MOTORS.includes(b.kind));
+  const mo = selBlocks().find(b => MOTORS.includes(b.kind)) ?? (motors.length === 1 ? motors[0] : undefined);
+  if (!mo) return toast(motors.length ? "Select the motor block of the drive." : "This diagram has no DC, BLDC or PMSM motor block: open the diagram that holds it.");
+  const pids = all.filter(b => b.kind === "PID" || b.kind === "DiscretePID");
+  const guess = (re: RegExp) => pids.find(b => re.test(b.name))?.id ?? -1;
+  openDialog(() => {
+    const [wi, setWi] = createSignal(2000), [ws, setWs] = createSignal(200), [tq, setTq] = createSignal(false);
+    const [sp, setSp] = createSignal(guess(/speed|ω|omega|velocity/i)), [iq, setIq] = createSignal(guess(/^i_?q\b|q.?current|q.?axis|^current/i)), [idd, setId] = createSignal(guess(/^i_?d\b|d.?current|d.?axis/i));
+    const [r, setR] = createSignal<any>(null);
+    const go = () => invoke<any>("drive_tune", { id: mo.id, wcI: wi(), wcS: ws(), torqueOut: tq() }).then(setR).catch(e => setR({ error: String(e) }));
+    go();
+    const pick = (v: () => number, set: (n: number) => void, cls: string) => <select class={cls} value={v()} onChange={e => set(+e.currentTarget.value)}><option value={-1}>(not set)</option><For each={pids}>{b => <option value={b.id}>{b.name}</option>}</For></select>;
+    const apply = () => {
+      const x = r(); if (!x || x.error) return false;
+      const vars = [...(out()?.vars ?? [])], ops: any[] = [];
+      let vc = false;
+      for (const [id, g] of [[sp(), x.tune.speed], [iq(), x.tune.iq], [idd(), x.tune.id]] as [number, any][]) {
+        const b = pids.find(p => p.id === id);
+        if (b) vc = gainOps(b, { ...g, d: 0 }, vars, ops) || vc;
+      }
+      if (!ops.length && !vc) { toast("Choose which PID is the speed loop and which the current loop."); return false; }
+      if (vc) ops.push({ SetVars: { vars } });
+      act({ Batch: ops }).then(() => toast("Drive tuned: one undoable edit.", true));
+    };
+    const g = (p: any) => p ? `P ${num(p.p, 4)} · I ${num(p.i, 4)}` : "";
+    const mm = (m: any) => m ? `crossover ${num(m.wgc, 4)} rad/s, phase margin ${num(m.pm, 3)}°` : "";
+    return <Dialog title={`Drive Tuning: ${mo.name}`} wide help="drivetune" ok={apply} okText="Apply">
+      <div class="form">
+        <label>Current loop</label><div class="larow"><input class="mono dtwi" value={wi()} onChange={e => { setWi(+e.currentTarget.value); go(); }} /> rad/s</div>
+        <label>Speed loop</label><div class="larow"><input class="mono dtws" value={ws()} onChange={e => { setWs(+e.currentTarget.value); go(); }} /> rad/s <span class="muted small">(about a tenth of the current loop)</span></div>
+        <span /><div><label class="chk"><input type="checkbox" checked={tq()} onChange={e => { setTq(e.currentTarget.checked); go(); }} />The speed PI gives a torque (not a current) reference</label></div>
+        <label>Speed PID</label><div>{pick(sp, setSp, "dtsp")}</div>
+        <label>q (or armature) current PID</label><div>{pick(iq, setIq, "dtiq")}</div>
+        <label>d current PID</label><div>{pick(idd, setId, "dtid")}</div>
+      </div>
+      <Show when={r() && !r().error} fallback={<p class="issue">{r()?.error}</p>}>
+        <table class="tbl facts"><tbody>
+          <tr><td>Motor data</td><td class="r mono">R {num(r().data.r, 4)} Ω · Ld {num(r().data.ld, 4)} H · Lq {num(r().data.lq, 4)} H · Kt {num(r().data.kt, 4)} N·m/A · J {num(r().data.j, 4)} kg·m²</td></tr>
+          <tr><td>Current PIs</td><td class="r mono">q: {g(r().tune.iq)} · d: {g(r().tune.id)}</td></tr>
+          <tr><td>Speed PI</td><td class="r mono">{g(r().tune.speed)}</td></tr>
+          <tr><td>Current loop</td><td class="r mono">{mm(r().tune.current_margins)}</td></tr>
+          <tr><td>Speed loop</td><td class="r mono">{mm(r().tune.speed_margins)}</td></tr>
+        </tbody></table>
+        <p class="muted small">Current PIs cancel the winding's pole (P = L·ωc, I = R·ωc), so the current loop is ωc/s. The speed PI sees Kt/(J s + b) through the closed current loop, with its zero at a quarter of the speed bandwidth. Check the result with a run: limits, sampling and the inverter are not in this design.</p>
+      </Show>
+    </Dialog>;
+  });
+};
+
 /** Control › PID Tuner: tune a PID with two sliders (speed, robustness) or a classic rule. */
 export const pidTuner = () => {
   const pids = (dview()?.blocks ?? []).filter(b => b.kind === "PID" || b.kind === "DiscretePID");
@@ -205,16 +274,8 @@ export const pidTuner = () => {
     const apply = () => {
       const r = res(); if (!r || r.error) return;
       const vars = [...(out()?.vars ?? [])], ops: any[] = [];
-      let varsChanged = false;
-      for (const k of ["P", "I", "D", "N"] as const) {
-        const v = r.pid[k.toLowerCase()];
-        if (!isFinite(v)) continue;
-        const text = (sel.params?.[k] ?? "").trim(), vi = vars.findIndex(x => x.name === text);
-        const val = String(+v.toPrecision(6));
-        if (vi >= 0) { vars[vi] = { ...vars[vi], expr: val }; varsChanged = true; }
-        else ops.push({ SetParam: { id: sel.id, key: k, value: val } });
-      }
-      if (varsChanged) ops.push({ SetVars: { vars } });
+      const vc = gainOps(sel, r.pid, vars, ops);
+      if (vc) ops.push({ SetVars: { vars } });
       act({ Batch: ops }).then(() => { toast(`${sel.name} tuned: one undoable edit.`, true); closeDialog(); });
     };
     return <Dialog title={`PID Tuner: ${sel.name}`} wide help="pidtune" ok={apply} okText="Apply">

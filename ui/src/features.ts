@@ -17,8 +17,6 @@ const f = (id: string, tab: string, group: string, v: string, label: string, ico
 
 export const FEATS: Feat[] = [
   // ---- Stage A: control design (0.2.x → 0.3.0)
-  f("drivetune", "control", "Tuning", "0.2.7", "Drive Tuning", "motor", "One click tunes a drive's current loop and speed loop from the motor's resistance, inductance and inertia.",
-    [{ k: "pick", l: "Motor", what: "a motor block" }, { k: "num", l: "Current-loop bandwidth", v: "2000", u: "rad/s" }, { k: "num", l: "Speed-loop bandwidth", v: "200", u: "rad/s" }]),
   f("live", "control", "Live", "0.2.8", "Live Tuning", "var", "Sliders for variables marked as tunable: move one while the model runs and the scopes show the effect at once.",
     [{ k: "table", l: "Tunable", cols: ["Variable", "Min", "Max"] }]),
   f("pace", "simulate", "Pacing", "0.2.8", "Real Time", "run", "Slow a run to real time, or to a chosen speed (×0.1 to ×10), to tune by hand.", [{ k: "num", l: "Speed", v: "1", u: "× real time" }]),

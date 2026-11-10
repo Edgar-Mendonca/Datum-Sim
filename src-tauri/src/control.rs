@@ -38,6 +38,15 @@ pub async fn pid_design(plant: Ss, cur: Pid, rule: String, wc: f64, pm: f64, for
     Ok(serde_json::json!({ "pid": pid, "rule": d.rule, "note": d.note, "report": linearise::pid_report(&plant, &cur, &pid) }))
 }
 
+/// A motor's data for drive tuning, and the cascade's gains for two bandwidths.
+#[tauri::command]
+pub async fn drive_tune(st: State<'_, St>, id: u32, wc_i: f64, wc_s: f64, torque_out: bool) -> R<Value> {
+    let m = st.lock().doc.m.clone();
+    let (d, name) = linearise::drive_data(&m, id)?;
+    let t = lti::drive_tune(&d, wc_i, wc_s, torque_out)?;
+    Ok(serde_json::json!({ "data": d, "name": name, "tune": t }))
+}
+
 /// The analysis-point outputs trim can hold, and the number of states.
 #[tauri::command]
 pub async fn trim_info(st: State<'_, St>) -> R<(Vec<String>, usize)> {

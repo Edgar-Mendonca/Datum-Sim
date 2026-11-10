@@ -9,7 +9,7 @@ import { Help, helpCard, HELP } from "./help";
 import { SolverPick } from "./panels";
 import { invoke } from "./api";
 import { PlannedGroups, showPlanned, setShowPlanned } from "./planned";
-import { loopAnalysis, setPoint, trimDialog, opsDialog, pidTuner } from "./control";
+import { loopAnalysis, setPoint, trimDialog, opsDialog, pidTuner, driveTuner } from "./control";
 
 const GH = "https://github.com/Edgar-Mendonca/Datum-Sim";
 
@@ -133,7 +133,7 @@ export const Ribbon = () => (
       <G l="Analysis Points" h="points"><B big i="wire" l="Loop Opening" run={() => setPoint("open")} title="Cut the loop on the selected wire's signal, for open-loop analysis" /><S><B i="wire" l="Input" run={() => setPoint("in")} title="Add a test signal on the selected wire's signal" /><B i="wire" l="Output" run={() => setPoint("out")} title="Measure the selected wire's signal" /><B i="del" l="Remove Point" run={() => setPoint("")} /></S></G>
       <G l="Linearise" h="loop"><B big i="bode" l="Loop Analysis" run={() => loopAnalysis()} title="Linearise the whole model between its analysis points: Bode, margins, step and poles" /><S><B i="bode" l="Nyquist" run={() => loopAnalysis("nyquist")} /><B i="solver" l="Root Locus" run={() => loopAnalysis("rlocus")} /><B i="specs" l="Sensitivity" run={() => loopAnalysis("sens")} /></S><S><B i="specs" l="Step Response" run={() => loopAnalysis("step")} /><B i="solver" l="Poles" run={() => loopAnalysis("poles")} /></S></G>
       <G l="Operating Points" h="trim"><B big i="solver" l="Trim" run={trimDialog} title="Find where the model is at rest with chosen outputs held" /><B big i="list" l="Operating Points" run={opsDialog} /></G>
-      <G l="Tuning" h="pidtune"><B big i="specs" l="PID Tuner" run={pidTuner} title="Tune the selected PID with two sliders: speed and robustness" /></G>
+      <G l="Tuning" h="pidtune"><B big i="specs" l="PID Tuner" run={pidTuner} title="Tune the selected PID with two sliders: speed and robustness" /><B big i="motor" l="Drive Tuning" run={driveTuner} title="Tune a drive's current and speed loops from the motor's data" /></G>
       <PlannedGroups tab="control" />
     </Show>
     <Show when={tab() === "modules"}>

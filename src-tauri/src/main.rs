@@ -901,6 +901,7 @@ fn main() {
             control::trim_info,
             control::pid_plant,
             control::pid_design,
+            control::drive_tune,
             control::trim,
             state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, find, myblocks, save_myblock, add_myblock, delete_myblock, open, save, save_file,
             run, control, results, series, value_at, step_marks, runs, run_series, sweep_series, run_sweep, export_csv, analyze, step_info, engine,

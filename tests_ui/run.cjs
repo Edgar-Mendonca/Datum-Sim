@@ -31,6 +31,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           window.__calls.push([c, a]);
           if (c === "diagram") {
             if (window.__motor) return f.motor;
+            if (window.__dcblock) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.id === f.sub ? { ...b, kind: "DCMotor", sub: false } : b) };
             if (a.parent === f.sub) return f.subdiagram;
             // A masked DC motor subsystem (0.2.0 checks).
             if (window.__masked) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.id === f.sub ? { ...b, label: "DC motor", params: { R: "1", L: "0.5" }, mask: { params: [{ key: "R", label: "Resistance R", def: "1", unit: "Ω", hint: "", choices: [] }, { key: "L", label: "Inductance L", def: "0.5", unit: "H", hint: "", choices: [] }], icon: "DC motor", help: "A DC motor.", presets: [{ name: "Small", values: [["R", "2"], ["L", "0.1"]] }] } } : b) };
@@ -42,6 +43,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           if (c === "new_model") return f.state;
           if (c === "lin_analysis") return f.lin;
           if (c === "trim_info") return [["Level"], 4];
+          if (c === "drive_tune") return { name: "Motor", data: { r: 1, ld: 0.5, lq: 0.5, kt: 0.01, j: 0.01, b: 0.1 }, tune: { iq: { p: a.wcI * 0.5, i: a.wcI, d: 0, n: 100 }, id: { p: a.wcI * 0.5, i: a.wcI, d: 0, n: 100 }, speed: { p: 200, i: 10000, d: 0, n: 100 }, current_margins: { wgc: a.wcI, pm: 90 }, speed_margins: { wgc: a.wcS, pm: 72 } } };
           if (c === "pid_plant") return { plant: { a: [[-2]], b: [[1]], c: [[2]], d: [[0]] }, cur: { p: 100, i: 200, d: 10, n: 100 }, name: "PID", wgc: 5 };
           if (c === "pid_design") return { pid: { p: 2 + a.pm / 100, i: 4, d: 0, n: 100 }, rule: "PI by loop shaping", note: "", report: { w: [1, 10], mag0: [0, -20], mag1: [3, -17], ph0: [-90, -120], ph1: [-80, -110], before: { pm: 40, gm_db: null, wgc: 5 }, after: { pm: a.pm, gm_db: null, wgc: a.wc }, step0: { t: [0, 1], y: [0, 1], unstable: false }, step1: { t: [0, 1], y: [0, 1], unstable: false } } };
           if (c === "trim") return { op: { name: "", t: 0, x: [3.53, 0, 1.41, 2], vars: [["H", 2]], note: "Level = 2" }, met: true, dmax: 1e-14, ymax: 1e-14, iters: 5, unmet: [], outputs: [["Level", 2]] };
@@ -440,12 +442,39 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   check("Apply sends one Batch edit with the gains", JSON.stringify(pa?.[1] ?? {}).includes('"Batch"') && JSON.stringify(pa[1]).includes("2.7"), JSON.stringify(pa));
   await p.click('.tabs > button:text-is("Model")');
 
+  // 13b5. Drive tuning (0.2.7): no motor → a hint; with a DC motor block → gains, Apply sets the PID.
+  await p.click('.tabs > button:text-is("Control")');
+  await p.click('.ribbon button:has-text("Drive Tuning")');
+  await p.waitForTimeout(200);
+  check("drive tuning without a motor block says what it needs", ((await p.textContent("#toast").catch(() => "")) ?? "").includes("no DC, BLDC or PMSM motor"));
+  await p.evaluate(() => { window.__dcblock = true; });
+  // Any edit makes the window fetch the diagram again (now with a DC motor block).
+  await p.click('.tabs > button:text-is("Model")');
+  await p.click(".canvas", { position: { x: 5, y: 5 } }).catch(() => {});
+  await p.keyboard.press("Control+a");
+  await p.click('.ribbon button:has-text("Flip")');
+  await p.waitForTimeout(300);
+  await p.click('.tabs > button:text-is("Control")');
+  await p.click('.ribbon button:has-text("Drive Tuning")');
+  await p.waitForTimeout(300);
+  const dt = await p.textContent(".dlg").catch(() => "");
+  check("drive tuning shows the current and speed PIs", dt.includes("Current PIs") && dt.includes("Speed PI") && dt.includes("phase margin 90"), dt.slice(0, 200));
+  if (dt) {
+    await p.selectOption(".dtsp", { label: "PID" });
+    await p.click(".dlg .btn.pri");
+    await p.waitForTimeout(300);
+    const dta = (await p.evaluate(() => window.__calls)).filter(c => c[0] === "apply").pop();
+    check("Apply sets the chosen PID's gains in one edit", JSON.stringify(dta?.[1] ?? {}).includes('"Batch"') && JSON.stringify(dta[1]).includes("10000"), JSON.stringify(dta));
+  }
+  await p.evaluate(() => { window.__dcblock = false; });
+  await p.click('.tabs > button:text-is("Model")');
+
   // 13c. Planned features (0.2.2): dimmed on their tab with the release; a greyed dialog; a switch hides them.
   await p.click('.tabs > button:text-is("Control")');
   await p.waitForTimeout(150);
   const pl = await p.$$('.ribbon .rb.planned');
-  check("the Control tab shows planned features with their release", pl.length >= 3 && /\d+\.\d+/.test(await p.textContent('.ribbon .rb.planned .pv')), String(pl.length));
-  await p.evaluate(() => document.querySelector(".ribbon .rb.planned[data-planned=drivetune]").click());
+  check("the Control tab shows planned features with their release", pl.length >= 1 && /\d+\.\d+/.test(await p.textContent('.ribbon .rb.planned .pv')), String(pl.length));
+  await p.evaluate(() => document.querySelector(".ribbon .rb.planned[data-planned=live]").click());
   await p.waitForTimeout(200);
   check("a planned feature opens the dialog it will have, disabled", (await p.textContent(".dlg .pband")).includes("Available in") && (await p.$$(".dlg fieldset[disabled]")).length === 1);
   await p.click(".dlg .x");

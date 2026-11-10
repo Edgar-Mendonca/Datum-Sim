@@ -742,6 +742,57 @@ pub fn simc(g: &Ss) -> Result<Design, String> {
     Ok(Design { pid, rule: format!("SIMC PI: K {:.4}, τ {:.4} s, θ {:.4} s", k, tau, theta), margins: margins(&series(&pid.ss(), g)), note: String::new() })
 }
 
+// ---------------------------------------------------------------- drive tuning
+
+/// What a motor gives the cascade: resistance, d/q inductances, torque per amp, inertia, friction.
+#[derive(Clone, Copy, Debug, Serialize, serde::Deserialize, PartialEq)]
+pub struct DriveData {
+    pub r: f64,
+    pub ld: f64,
+    pub lq: f64,
+    pub kt: f64,
+    pub j: f64,
+    pub b: f64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct DriveTune {
+    /// The q-axis (or armature) current PI, and the d-axis one (equal for a DC motor).
+    pub iq: Pid,
+    pub id: Pid,
+    pub speed: Pid,
+    /// The current loop and the speed loop as designed (speed loop with the current loop closed).
+    pub current_margins: Margins,
+    pub speed_margins: Margins,
+}
+
+/// The usual cascade: current PIs by pole–zero cancellation (Kp = L·ωc, Ki = R·ωc, so the loop is
+/// ωc/s), then a speed PI on the plant Kt/(J s + b) seen through the closed current loop, with its
+/// zero a quarter of the speed bandwidth. `torque_out`: the speed PI gives torque, not current.
+pub fn drive_tune(m: &DriveData, wc_i: f64, wc_s: f64, torque_out: bool) -> Result<DriveTune, String> {
+    if !(m.r > 0.0 && m.lq > 0.0 && m.ld > 0.0 && m.kt > 0.0 && m.j > 0.0) {
+        return Err("The motor needs positive resistance, inductance, torque constant and inertia.".into());
+    }
+    if !(wc_i > 0.0 && wc_s > 0.0) {
+        return Err("The bandwidths must be positive.".into());
+    }
+    if wc_s * 4.0 > wc_i {
+        return Err("Make the speed loop at least four times slower than the current loop (ten is usual).".into());
+    }
+    let pi = |kp: f64, ki: f64| Pid { p: kp, i: ki, d: 0.0, n: 100.0 };
+    let iq = pi(m.lq * wc_i, m.r * wc_i);
+    let id = pi(m.ld * wc_i, m.r * wc_i);
+    let k = if torque_out { 1.0 } else { m.kt };
+    let kp = m.j * wc_s / k;
+    let speed = pi(kp, kp * wc_s / 4.0);
+    let current = series(&iq.ss(), &tf(&[1.0], &[m.lq, m.r]));
+    // The closed current loop is ωc/(s + ωc); in torque mode the drive's own current loop is assumed.
+    let cl = tf(&[wc_i], &[1.0, wc_i]);
+    let plant = series(&cl, &tf(&[k], &[m.j, m.b]));
+    let speed_l = series(&speed.ss(), &plant);
+    Ok(DriveTune { iq, id, speed, current_margins: margins(&current), speed_margins: margins(&speed_l) })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -820,6 +871,17 @@ mod tests {
         // SIMC on a first-order plant 2/(3s+1): K 2, τ 3, θ ≈ 0.
         let s = simc(&tf(&[2.0], &[3.0, 1.0])).unwrap();
         assert!(s.rule.contains("K 2.0000, τ 3.00") && s.margins.pm > 60.0, "{s:?}");
+    }
+
+    /// The current loop crosses at ωc with 90°; the speed loop near ωs with a healthy margin.
+    #[test]
+    fn drive_cascade() {
+        let m = DriveData { r: 0.15, ld: 0.0025, lq: 0.004, kt: 1.5 * 4.0 * 0.4, j: 0.03, b: 0.001 };
+        let t = drive_tune(&m, 2000.0, 200.0, false).unwrap();
+        assert!(close(t.iq.p, 8.0, 1e-12) && close(t.iq.i, 300.0, 1e-12) && close(t.id.p, 5.0, 1e-12));
+        assert!(close(t.current_margins.wgc, 2000.0, 1e-6) && close(t.current_margins.pm, 90.0, 1e-6), "{t:?}");
+        assert!((t.speed_margins.wgc / 200.0 - 1.0).abs() < 0.1 && t.speed_margins.pm > 60.0, "{t:?}");
+        assert!(drive_tune(&m, 2000.0, 1000.0, false).is_err());
     }
 
     #[test]
