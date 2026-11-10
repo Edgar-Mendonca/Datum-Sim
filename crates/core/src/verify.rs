@@ -187,6 +187,36 @@ mod tests {
         }
     }
 
+    /// Buses: three signals (one of them a vector) grouped by a Bus Creator, passed through
+    /// Goto/From tags, and picked out by name in another order: each arrives unchanged.
+    #[test]
+    fn bus_picks_by_name() {
+        let mut m = Mk::new(1.0, "rk4");
+        let a = m.add("Constant", &[("value", "2")]);
+        let b = m.add("Constant", &[("value", "[3 4]")]);
+        let c = m.add("Constant", &[("value", "5")]);
+        let bc = m.add("BusCreator", &[("n", "3"), ("names", "speed, pos, torque")]);
+        m.wire(a, 0, bc, 0);
+        m.wire(b, 0, bc, 1);
+        m.wire(c, 0, bc, 2);
+        let bs = m.add("BusSelector", &[("signals", "torque, pos")]);
+        // Through Goto/From tags.
+        let go = m.add("Goto", &[("tag", "bus")]);
+        let fr = m.add("From", &[("tag", "bus")]);
+        m.wire(bc, 0, go, 0);
+        m.wire(fr, 0, bs, 0);
+        let s = m.add("Scope", &[("n", "2")]);
+        m.wire(bs, 0, s, 0);
+        m.wire(bs, 1, s, 1);
+        let r = m.run();
+        let last: Vec<f64> = r.y.iter().map(|y| *y.last().unwrap()).collect();
+        assert_eq!(last, vec![5.0, 3.0, 4.0]);
+        // An unknown name is a model error that names the bus's signals.
+        m.d.apply(Op::SetParam { id: bs, key: "signals".into(), value: "torque, current".into() }).unwrap();
+        let e = simulate(&m.d.m, None, &none()).unwrap_err();
+        assert!(e.iter().any(|i| i.msg.contains("no signal 'current'") && i.msg.contains("speed, pos, torque")), "{e:?}");
+    }
+
     /// Live tuning: a gain changed at t = 1 s while running gives the same result as a Step block
     /// that changes the gain's input at 1 s. Pacing at ×50 real time takes about t/50 seconds.
     #[test]

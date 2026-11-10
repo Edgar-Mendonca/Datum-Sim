@@ -998,7 +998,7 @@ impl Rt for UnitDelay {
 
 /// Copies input elements to outputs by index (Mux, Demux, Selector, pass-throughs).
 #[derive(Clone)]
-struct Route(Vec<usize>);
+pub(crate) struct Route(pub(crate) Vec<usize>);
 impl Rt for Route {
     fn out(&self, _: &Ctx, _: &[f64], u: &[f64], y: &mut [f64]) {
         for (yj, i) in y.iter_mut().zip(&self.0) {
@@ -1386,7 +1386,7 @@ pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Result<(Box<dyn Rt>, Vec<usize
             }
             one(Box::new(UnitDelay { ts: p.pos("ts")?, ic, s: vec![0.0; w0], held: vec![0.0; w0] }), w0)
         }
-        "Mux" => {
+        "Mux" | "BusCreator" => {
             let w: usize = iw.iter().sum();
             one(Box::new(Route((0..w).collect())), w)
         }

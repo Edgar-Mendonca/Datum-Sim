@@ -399,7 +399,12 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
                 continue;
             }
             last_iw[i] = Some(iw.clone());
-            match rt::build(&flat[i].kind, pvs[i].as_ref().unwrap(), &iw) {
+            let built_rt = if flat[i].kind == "BusSelector" {
+                bus_pick(&flat, &ow, i).map(|(idx, ws)| (Box::new(rt::Route(idx)) as Box<dyn Rt>, ws))
+            } else {
+                rt::build(&flat[i].kind, pvs[i].as_ref().unwrap(), &iw)
+            };
+            match built_rt {
                 Ok((r, w)) => {
                     errs[i] = None;
                     built[i] = Some(r);
@@ -573,6 +578,45 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
         files,
         tseg: m.sim.start,
     })
+}
+
+/// The signals a Bus Creator groups, by name: its names, or else its inputs' signal names.
+fn bus_names(c: &Flat, flat: &[Flat]) -> Vec<String> {
+    let given: Vec<String> = blocks::param(&c.block, "names").split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    if given.len() == c.inputs.len() {
+        return given;
+    }
+    c.inputs.iter().enumerate().map(|(k, s)| s.map_or(format!("u{}", k + 1), |(b, p)| flat[b].out_names[p].rsplit('/').next().unwrap_or("").to_string())).collect()
+}
+
+/// A Bus Selector's elements: follow its input back (through subsystem ports and Goto/From) to
+/// the Bus Creator and find each named signal's place in the bus. (indices, output widths)
+fn bus_pick(flat: &[Flat], ow: &[Vec<usize>], i: usize) -> Result<(Vec<usize>, Vec<usize>), String> {
+    let mut s = flat[i].inputs.first().cloned().flatten().ok_or("its input is not connected")?;
+    for _ in 0..1000 {
+        let f = &flat[s.0];
+        match (f.kind.as_str(), f.inputs.first().cloned().flatten()) {
+            ("Pass" | "Inport", Some(n)) => s = n,
+            _ => break,
+        }
+    }
+    let c = &flat[s.0];
+    if c.kind != "BusCreator" {
+        return Err(format!("its input comes from '{}', not from a Bus Creator", c.name));
+    }
+    let names = bus_names(c, flat);
+    let widths: Vec<usize> = c.inputs.iter().map(|x| x.map_or(1, |(b, p)| ow[b].get(p).cloned().unwrap_or(1))).collect();
+    let (mut idx, mut ws) = (vec![], vec![]);
+    for want in blocks::param(&flat[i].block, "signals").split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        let k = names.iter().position(|n| n == want).ok_or_else(|| format!("the bus has no signal '{want}' (it has {})", names.join(", ")))?;
+        let off: usize = widths[..k].iter().sum();
+        idx.extend(off..off + widths[k]);
+        ws.push(widths[k]);
+    }
+    if ws.is_empty() {
+        return Err("name the signals to pick".into());
+    }
+    Ok((idx, ws))
 }
 
 /// Combine the rates of a block's inputs: constants drop out; one rate is kept; several make it

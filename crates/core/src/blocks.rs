@@ -80,6 +80,7 @@ pub fn size(kind: &str) -> (f64, f64) {
         "Scope" | "XY" => (50.0, 50.0),
         "Display" => (80.0, 30.0),
         "Mux" | "Demux" => (12.0, 60.0),
+        "BusCreator" | "BusSelector" => (14.0, 60.0),
         "Subsystem" => (100.0, 70.0),
         "DCMotor" | "PMSM" | "DCSepEx" | "DCShunt" | "DCSeries" | "DCCompound" | "InductionSC" | "InductionDC" | "PMSM3" | "SynRM" | "BLDC" | "Stepper" | "SRM" => (90.0, 80.0),
         "DCLink" | "InverterDC" => (80.0, 50.0),
@@ -193,7 +194,10 @@ pub fn library() -> Vec<Def> {
             vec![t("tag", "Tag", "A", "A short name"), c("scope", "Visible to", &["local", "global"], "")]),
         d("From", "From", "Routing", "Outputs the signal sent by the Goto with the same tag.", "", vec![t("tag", "Tag", "A", "The Goto's tag")]),
         d("Terminator", "Terminator", "Sinks", "Ends an output you do not need, so it is not reported as unconnected.", "", vec![]),
-        planned("Bus", "Bus", "Routing", "Group named signals into one wire.", "0.2"),
+        d("BusCreator", "Bus Creator", "Routing", "Groups named signals into one wire (a bus). Each signal keeps its name, so a Bus Selector downstream picks it out by name.", "Names: one per input, separated by commas; leave empty to use the names of the incoming signals (wire names or block names).",
+            vec![n("n", "Inputs", "2", "", ""), t("names", "Signal names", "", "e.g. speed, current; empty = the incoming signals' names")]),
+        d("BusSelector", "Bus Selector", "Routing", "Picks signals out of a bus by name: one output per name.", "Names separated by commas, as the Bus Creator calls them. The bus may pass through subsystems and Goto/From tags on the way.",
+            vec![t("signals", "Signals", "a, b", "Names from the bus, separated by commas")]),
         // Lookup
         d("Lookup1D", "1-D lookup table", "Lookup tables", "Interpolates y at the input from a table of x and y.", "x must increase. Outside the table: hold the end value (clip) or extend the end line (linear).",
             vec![n("x", "Breakpoints x", "[0 1 2]", "", ""), n("y", "Values y", "[0 1 4]", "", ""), c("extrap", "Outside the table", &["clip", "linear"], "")]),
@@ -374,7 +378,8 @@ pub fn ports(b: &Block) -> (usize, usize) {
         "Square" | "Triangle" | "Chirp" | "RepSeq" | "From" => (0, 1),
         "Goto" | "Terminator" => (1, 0),
         "Note" => (0, 0),
-        "MinMax" | "Fcn" | "Mux" => (count(b, "n"), 1),
+        "MinMax" | "Fcn" | "Mux" | "BusCreator" => (count(b, "n"), 1),
+        "BusSelector" => (1, param(b, "signals").split(',').filter(|s| !s.trim().is_empty()).count().clamp(1, 32)),
         "Demux" => (1, count(b, "n")),
         "Switch" => (3, 1),
         "Scope" | "ToFile" | "ToPlot" => (count(b, "n"), 0),
@@ -428,6 +433,8 @@ pub fn port_names(b: &Block) -> (Vec<String>, Vec<String>) {
             (nm(i), nm(o))
         }
         "Switch" => (s(&["", "u2", ""]), vec![]),
+        "BusSelector" => (vec![], param(b, "signals").split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect()),
+        "BusCreator" => (param(b, "names").split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect(), vec![]),
         "Integrator" | "DiscreteIntegrator" if ports(b).0 == 2 => (s(&["", "reset"]), vec![]),
         _ => (vec![], vec![]),
     }

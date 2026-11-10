@@ -17,7 +17,6 @@ const f = (id: string, tab: string, group: string, v: string, label: string, ico
 
 export const FEATS: Feat[] = [
   // ---- Stage A: control design (0.2.x → 0.3.0)
-  f("bus", "model", "Signals", "0.2.9", "Buses", "wire", "Group named signals into one wire (Bus Creator) and pick them out by name (Bus Selector)."),
   f("algloop", "simulate", "Solver", "0.2.10", "Algebraic Loops", "solver", "A loop without a state is solved at each step (Newton iteration) instead of being reported as an error."),
 
   // ---- Stage B: drives and modules (0.3.x → 0.4.0)

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.9 — 2026-11-10
+
+Buses: many signals on one wire.
+
+- **Bus Creator** (Library › Routing) groups named signals into one wire. Name them, or leave the names empty to use the incoming signals' names (wire names or block names). Signals may be vectors.
+- **Bus Selector** picks signals out of the bus by name, with one output per name, in any order. The bus may pass through subsystem ports and Goto/From tags on the way.
+- A name that is not on the bus is a model error that lists the names the bus has.
+
+Checked: three signals, one of them a vector, go through a bus and Goto/From tags and come out unchanged in a different order.
+
 ## 0.2.8 — 2026-11-10
 
 Live tuning and real-time pacing.
