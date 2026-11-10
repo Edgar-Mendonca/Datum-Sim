@@ -183,8 +183,15 @@
 | 0.2.9 | Buses (Bus Creator, Bus Selector by name) | ✅ |
 | 0.2.10 | Algebraic loops solved (tearing + Newton) | ✅ |
 | 0.3.0 | Stage A milestone: examples ready for Control, verification record 2026-11-10, real-app check | ✅ |
-| 0.3.x | Stage B: FFT/THD, SVPWM and dead time, inverter losses, thermal, saturation, nameplate, robot arm module, drive examples → 0.4.0 | 🔜 |
-| 0.4.x | Stage C: physical components → 0.5.0 (after the user tests A and B) | ⬜ |
+| 0.3.1 | Spectrum and THD (`measure::spectrum`, radix-2 FFT over whole cycles) | ✅ |
+| 0.3.2 | Space-vector modulation and dead time in the inverter and PWM | ✅ |
+| 0.3.3 | Inverter losses and a Foster thermal network (one release; later items moved up one number) | ✅ |
+| 0.3.4 | Induction machine saturation (ψ_sat, k) and an iron-loss output (R_fe) | ✅ |
+| 0.3.5 | Induction parameters from the nameplate (`nameplate.rs`; needs I_A/I_N) | ✅ |
+| 0.3.6 | Modules tab and the robot arm module (`robot.rs`, `ui/src/robot.tsx`) | ✅ |
+| 0.3.7 | Drive examples: losses and junction temperature, harmonics, saturated start | ✅ |
+| 0.4.0 | Stage B milestone: record 2026-11-10-drives, real-app check of the robot arm | ✅ |
+| 0.4.x | Stage C: physical components → 0.5.0 (after the user tests A and B) | 🔜 |
 | 0.5.x | Exchange: FMU, MAT/HDF5, building models from Python, Modelica | ⬜ |
 | 0.6.x | State machines, Python blocks, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
 | 1.0 | Validation suite and report, user guide, signed installer | ⬜ |
@@ -277,6 +284,17 @@
 - Built and released 0.2.2 to 0.2.10 one by one through `release.yml` (workflow_dispatch). New engine files: `lti.rs` (eig, Bode, margins, Nyquist count, root locus, responses by exact discretisation, PID design, drive tuning) and `linearise.rs` (analysis points made real as hidden blocks, central differences, trim, PID plant). `src-tauri/src/control.rs`, `ui/src/control.tsx`, `features.ts`, `planned.tsx`.
 - Bugs found and fixed on the way: trim cut the loop at a loop opening (points only measure while trimming); the DC motor example's PID started at its limit, so its loop gain was zero (the reference now steps at 0.2 s, and Loop analysis says when the gain is zero); a pole of the rotor angle made a stable loop read "unstable" (stable = no right-half-plane poles, marginal shown apart); one 0.2.5 commit was pushed with a failing test (fixed before its release was built; the check script now stops at the first failure); the session disk filled with incremental builds (CARGO_INCREMENTAL=0).
 - Record: `docs/verification/2026-11-10.md`.
+
+### 2026-11-10: Session 9 continued (stage B: 0.3.1 → 0.4.0)
+- Built and released 0.3.1 to 0.3.7 and 0.4.0. Losses and thermal shipped together as 0.3.3, so saturation, nameplate, the robot arm and the drive examples are 0.3.4 to 0.3.7 (ROADMAP, site.json and the planned-feature register say so).
+- New engine files: `nameplate.rs` and `robot.rs`. Spectrum is in `measure.rs`; losses, thermal, SVPWM, dead time and saturation are in `motors.rs`.
+- Findings:
+  - The nameplate's air-gap power equation follows from the real part of the impedance, so a third equation was needed: the locked-rotor current ratio I_A/I_N, default 7.
+  - The arm–controller loop could not settle its widths; the arm now also accepts a scalar torque.
+  - XY graphs and the Arm view in the dock raised a ResizeObserver error. Found in the real app; there is now a UI check that fails without the fix.
+  - One 0.3.3 commit was pushed with a stale UI check, because a pipe hid the exit code. It was fixed before release. `scratchpad/release.sh` now refuses to commit unless every check passed.
+- Record: `docs/verification/2026-11-10-drives.md`.
+- Next: the user tests stages A and B on Windows; then stage C (physical components, 0.4.1 → 0.5.0) gets its own plan with questions.
 
 ## 5. Known limits and next steps
 

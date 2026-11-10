@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0 — 2026-11-10
+
+Drives in depth and the robot arm: the second stage of the roadmap is done. 0.4.0 brings together 0.3.1 to 0.3.7:
+
+- **Spectrum and THD** of any signal.
+- **Space-vector modulation** and **dead time** in the inverter.
+- **Inverter losses** and a **thermal network** for the junction temperature.
+- **Saturation and iron losses** in the induction machine.
+- **Motor parameters from the nameplate**.
+- The **Modules** tab with the **robot arm module**: arm, trajectory, controller, inverse kinematics and an animated Arm view.
+- Three new **drive examples**.
+
+New in 0.4.0:
+- **Fixed:** an XY graph or the Arm view opened in the scopes dock no longer shows an error.
+- The Arm view's Play bar stays visible in a small dock.
+- Pictures for the new examples on the File page.
+- A verification record for the stage (docs/verification/2026-11-10-drives.md).
+
+Next on the roadmap, after your testing: physical components (0.4.1 → 0.5.0).
+
 ## 0.3.7 — 2026-11-10
 
 Three new drive examples (File › New):

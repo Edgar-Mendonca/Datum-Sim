@@ -31,6 +31,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           window.__calls.push([c, a]);
           if (c === "diagram") {
             if (window.__motor) return f.motor;
+            if (window.__xy) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.kind === "Scope" ? { ...b, kind: "XY" } : b) };
             if (window.__dcblock) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.id === f.sub ? { ...b, kind: "DCMotor", sub: false } : b) };
             if (a.parent === f.sub) return f.subdiagram;
             // A masked DC motor subsystem (0.2.0 checks).
@@ -511,6 +512,24 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   check("Spectrum shows the THD, the fundamental and the largest harmonics", sp.includes("11.18 %") && sp.includes("50 Hz") && sp.includes("h5 10 %") && (await p.$$(".dlg .specplot rect")).length === 10, sp.slice(0, 300));
   await p.keyboard.press("Escape");
   await p.click('.tabs > button:text-is("Model")');
+
+  // 13b7b. An XY graph (and the Arm view, drawn the same way) opens in the dock without errors
+  // (0.4.0 bug: the plot's resize observer had no plot area to watch).
+  await p.evaluate(() => { window.__xy = true; });
+  await p.click('.side button[title="Diagram"]');
+  await p.click('.tabs > button:text-is("Model")');
+  const xb = await box(pid.name + " (");
+  await p.mouse.click(xb.x, xb.y);
+  await p.click('.ribbon button:has-text("Flip")');
+  await p.waitForTimeout(300);
+  const e0 = errors.length;
+  await p.evaluate(() => document.querySelectorAll(".dock .scope .x").forEach(b => b.click()));
+  await p.waitForTimeout(200);
+  await p.keyboard.press("F5");
+  await p.waitForTimeout(700);
+  const xt = await p.textContent("#toast").catch(() => "") ?? "";
+  check("an XY graph opens in the scopes dock without errors", errors.length === e0 && !xt.includes("Error") && (await p.$$(".dock .plot.xy")).length >= 1, errors.slice(e0).join(" | "));
+  await p.evaluate(() => { window.__xy = false; });
 
   // 13b8. Modules (0.3.6): the robot arm group opens its worked example.
   await p.click('.tabs > button:text-is("Modules")');

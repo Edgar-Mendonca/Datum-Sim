@@ -232,7 +232,8 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
   createEffect(on(themeTick, () => { if (!isXY()) make(); }, { defer: true }));
   onMount(() => {
     const ro = new ResizeObserver(() => plots.forEach(u => u.setSize({ width: Math.max(200, host.clientWidth), height: plots.length > 1 ? Math.max(70, (host.clientHeight - 30) / plots.length) : plotH(1) })));
-    ro.observe(host);
+    // XY graphs and the Arm view draw their own SVG: no plot area to watch.
+    if (host) ro.observe(host);
     onCleanup(() => { ro.disconnect(); plots.forEach(u => u.destroy()); });
   });
 
