@@ -259,13 +259,14 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
       { label: "Save as PNG, high resolution (3×)", run: () => png(3) },
       { label: "Save as SVG (vector, for papers)", run: svg },
       { label: "Save signals as CSV", run: () => C.exportCsv(p.id) },
+      { label: "Spectrum and THD…", run: () => import("./drives").then(d => d.spectrumDialog(Math.max(0, chans().findIndex(c => c.sink === p.id && !c.probe)))) },
       "-" as unknown as Item,
       { label: `${!s.stacked ? "✓ " : ""}All inputs on one plot`, run: () => setParam("layout", "overlaid") },
       { label: `${s.stacked ? "✓ " : ""}One plot per input (stacked)`, run: () => setParam("layout", "stacked") },
       "-" as unknown as Item,
       { label: `${!s.y ? "✓ " : ""}Auto-scale the y axis`, run: () => act({ Batch: [{ SetParam: { id: p.id, key: "ymin", value: "auto" } }, { SetParam: { id: p.id, key: "ymax", value: "auto" } }] }) },
       { label: `${s.y ? "✓ " : ""}Fixed y range…`, run: () => yRangeDialog(p.id, s.y ?? (plots[0] ? [plots[0].scales.y.min ?? 0, plots[0].scales.y.max ?? 1] : [0, 1])) },
-    ].filter((_, k) => s.here || k < 4));
+    ].filter((_, k) => s.here || k < 5));
   };
 
   /** The plots drawn again off screen at a size and scale, for a picture. */

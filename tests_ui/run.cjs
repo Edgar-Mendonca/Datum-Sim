@@ -43,16 +43,18 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           if (c === "new_model") return f.state;
           if (c === "lin_analysis") return f.lin;
           if (c === "trim_info") return [["Level"], 4];
+          if (c === "spectrum") return { f0: 50, cycles: 4, t0: 0.12, t1: 0.2, dc: 0.3, harmonics: [2, 0, 0, 0, 0.2, 0, 0.1, 0, 0, 0], thd: 0.1118, f: [0, 12.5], mag: [0.3, 0] };
           if (c === "drive_tune") return { name: "Motor", data: { r: 1, ld: 0.5, lq: 0.5, kt: 0.01, j: 0.01, b: 0.1 }, tune: { iq: { p: a.wcI * 0.5, i: a.wcI, d: 0, n: 100 }, id: { p: a.wcI * 0.5, i: a.wcI, d: 0, n: 100 }, speed: { p: 200, i: 10000, d: 0, n: 100 }, current_margins: { wgc: a.wcI, pm: 90 }, speed_margins: { wgc: a.wcS, pm: 72 } } };
           if (c === "pid_plant") return { plant: { a: [[-2]], b: [[1]], c: [[2]], d: [[0]] }, cur: { p: 100, i: 200, d: 10, n: 100 }, name: "PID", wgc: 5 };
           if (c === "pid_design") return { pid: { p: 2 + a.pm / 100, i: 4, d: 0, n: 100 }, rule: "PI by loop shaping", note: "", report: { w: [1, 10], mag0: [0, -20], mag1: [3, -17], ph0: [-90, -120], ph1: [-80, -110], before: { pm: 40, gm_db: null, wgc: 5 }, after: { pm: a.pm, gm_db: null, wgc: a.wc }, step0: { t: [0, 1], y: [0, 1], unstable: false }, step1: { t: [0, 1], y: [0, 1], unstable: false } } };
           if (c === "trim") return { op: { name: "", t: 0, x: [3.53, 0, 1.41, 2], vars: [["H", 2]], note: "Level = 2" }, met: true, dmax: 1e-14, ymax: 1e-14, iters: 5, unmet: [], outputs: [["Level", 2]] };
           // The run ends before its start call returns (a model with no states takes 0.1 ms).
           if (c === "run") {
-            window.__emit("sim-done", { gen: 1, ok: true, error: null, issues: [], stats: f.results.stats, truncated: false, files: [] });
+            const gen = window.__gen = (window.__gen ?? 0) + 1;
+            window.__emit("sim-done", { gen, ok: true, error: null, issues: [], stats: f.results.stats, truncated: false, files: [] });
             // With Log all signals the run also logs block outputs for the probe.
-            if (window.__probeRun) { const pid = f.diagram.blocks.find(b => b.kind === "PID").id; return { ...f.started, chans: [...f.started.chans, { sink: pid, port: 0, elem: 0, name: "PID", probe: true }] }; }
-            return f.started;
+            if (window.__probeRun) { const pid = f.diagram.blocks.find(b => b.kind === "PID").id; return { ...f.started, gen, chans: [...f.started.chans, { sink: pid, port: 0, elem: 0, name: "PID", probe: true }] }; }
+            return { ...f.started, gen };
           }
           if (c === "apply") return { ...f.state, created: [999] };
           if (c === "value_at") return a.chans.map((_, k) => 0.5 + k);
@@ -484,6 +486,22 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(150);
   const pce = (await p.evaluate(() => window.__calls)).filter(c => c[0] === "apply").pop();
   check("Pacing sets the run's pace", JSON.stringify(pce?.[1] ?? {}).includes('"pace":1'), JSON.stringify(pce));
+
+  // 13b7. Spectrum and THD (0.3.1), after a run.
+  await p.click('.tabs > button:text-is("Model")');
+  await p.click('.canvas', { position: { x: 700, y: 500 } });
+  await p.click('.tabs > button:text-is("Model")');
+  await p.keyboard.press("F5");
+  await p.waitForTimeout(700);
+  await p.waitForTimeout(400);
+  await p.click('.tabs > button:text-is("Analyze")');
+  if (process.env.DEBUG) console.log("status:", await p.textContent(".status"));
+  await p.click('.ribbon button:has-text("Spectrum")');
+  await p.waitForTimeout(300);
+  const sp = await p.textContent(".dlg");
+  check("Spectrum shows the THD, the fundamental and the largest harmonics", sp.includes("11.18 %") && sp.includes("50 Hz") && sp.includes("h5 10 %") && (await p.$$(".dlg .specplot rect")).length === 10, sp.slice(0, 300));
+  await p.keyboard.press("Escape");
+  await p.click('.tabs > button:text-is("Model")');
 
   // 13c. Planned features (0.2.2): dimmed on their tab with the release; a greyed dialog; a switch hides them.
   await p.click('.tabs > button:text-is("Model")');

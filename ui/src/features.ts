@@ -19,8 +19,6 @@ export const FEATS: Feat[] = [
   // ---- Stage A: control design (0.2.x → 0.3.0)
 
   // ---- Stage B: drives and modules (0.3.x → 0.4.0)
-  f("fft", "analyze", "Signals", "0.3.1", "Spectrum (FFT)", "bode", "The spectrum of a signal over whole cycles of its fundamental, with the harmonics and the THD.",
-    [{ k: "pick", l: "Signal", what: "a signal" }, { k: "num", l: "Fundamental", v: "50", u: "Hz" }, { k: "num", l: "Cycles", v: "4" }, { k: "num", l: "Harmonics up to", v: "40" }]),
   f("svpwm", "model", "Drives", "0.3.2", "Space-Vector PWM", "motor", "Space-vector modulation and dead time in the PWM and inverter blocks.", [{ k: "choice", l: "Modulation", o: ["Sine", "Space vector"] }, { k: "num", l: "Dead time", v: "2e-6", u: "s" }]),
   f("losses", "model", "Drives", "0.3.3", "Inverter Losses", "motor", "Conduction and switching losses of the inverter from data-sheet values, and its efficiency.",
     [{ k: "num", l: "On-state voltage", v: "1.1", u: "V" }, { k: "num", l: "On-state resistance", v: "0.01", u: "Ω" }, { k: "num", l: "Switching energy", v: "2e-3", u: "J" }]),

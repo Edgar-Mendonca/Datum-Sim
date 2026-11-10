@@ -9,6 +9,7 @@ import { Help, helpCard, HELP } from "./help";
 import { SolverPick } from "./panels";
 import { invoke } from "./api";
 import { PlannedGroups, showPlanned, setShowPlanned } from "./planned";
+import { spectrumDialog } from "./drives";
 import { loopAnalysis, setPoint, trimDialog, opsDialog, pidTuner, driveTuner, liveOpen, setLiveOpen } from "./control";
 
 const GH = "https://github.com/Edgar-Mendonca/Datum-Sim";
@@ -126,7 +127,7 @@ export const Ribbon = () => (
     </Show>
     <Show when={tab() === "analyze"}>
       <G l="Linear Analysis" h="linear"><B big i="bode" l="Bode" run={() => C.analyze("bode")} /><B big i="specs" l="Step Response" run={() => C.analyze("step")} /><S><B i="solver" l="Poles and Zeros" run={() => C.analyze("pz")} /></S></G>
-      <G l="Signals" h="specs"><B big i="specs" l="Step Specs" run={C.stepInfo} /></G>
+      <G l="Signals" h="specs"><B big i="specs" l="Step Specs" run={C.stepInfo} /><B big i="bode" l="Spectrum" run={() => spectrumDialog()} title="Harmonics and THD of a signal over whole cycles of its fundamental" /></G>
       <G l="Results" h="exportres"><B big i="results" l="Results" run={() => C.view("results")} /><S><B i="csv" l="Save as CSV" run={() => C.exportCsv()} /><B i="plot" l="Send to Datum Plot" run={C.toPlot} /></S></G>
       <G l="Python" h="linear"><S><B i="py" l="Engine Version" run={() => C.engine()} /><B i="py" l="Restart Engine" run={() => C.engine(true)} /></S></G>
       <PlannedGroups tab="analyze" />

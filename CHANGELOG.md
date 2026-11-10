@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1 — 2026-11-10
+
+Drives in depth begins: spectrum and harmonic distortion.
+
+- **Analyze › Spectrum** (or a scope's More ▾ › Spectrum and THD) shows the harmonics of any logged signal over the last whole cycles of its fundamental, with the **THD**, the fundamental's amplitude and rms value, the DC part and the largest harmonics.
+- Leave the fundamental empty to find it, or type it. Choose how many cycles and how many harmonics.
+
+Checked: a 50 Hz signal with 10 % fifth and 5 % seventh harmonics and an offset gives an 11.18 % THD. Each harmonic and the DC part come out within 1e-4, with the fundamental given or found.
+
 ## 0.3.0 — 2026-11-10
 
 Control design, complete: the first stage of the roadmap is done. 0.3.0 brings together 0.2.2 to 0.2.10:

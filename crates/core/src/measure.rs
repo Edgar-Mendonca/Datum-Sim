@@ -86,8 +86,128 @@ pub fn step_marks(t: &[f64], y: &[f64]) -> Result<StepMarks, String> {
     Ok(StepMarks { y0, yf, t10, t90, rise: t90 - t10, peak: y[ip], tpeak: t[ip], overshoot, settle })
 }
 
+/// The spectrum of a signal over whole cycles of its fundamental, and its harmonic distortion.
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct Spectrum {
+    /// The fundamental (Hz) and the window analysed: the last `cycles` periods of the run.
+    pub f0: f64,
+    pub cycles: usize,
+    pub t0: f64,
+    pub t1: f64,
+    pub dc: f64,
+    /// Peak amplitude of each harmonic h = 1 … hmax (index 0 is the fundamental).
+    pub harmonics: Vec<f64>,
+    /// Total harmonic distortion: √(Σ h≥2 Aₕ²) / A₁, as a fraction.
+    pub thd: f64,
+    /// The whole spectrum up to hmax: frequencies (Hz) and peak amplitudes.
+    pub f: Vec<f64>,
+    pub mag: Vec<f64>,
+}
+
+/// In-place radix-2 FFT of (re, im); the length must be a power of two.
+fn fft(re: &mut [f64], im: &mut [f64]) {
+    let n = re.len();
+    let mut j = 0;
+    for i in 1..n {
+        let mut bit = n >> 1;
+        while j & bit != 0 {
+            j ^= bit;
+            bit >>= 1;
+        }
+        j |= bit;
+        if i < j {
+            re.swap(i, j);
+            im.swap(i, j);
+        }
+    }
+    let mut len = 2;
+    while len <= n {
+        let ang = -2.0 * std::f64::consts::PI / len as f64;
+        for s in (0..n).step_by(len) {
+            for k in 0..len / 2 {
+                let (wr, wi) = ((ang * k as f64).cos(), (ang * k as f64).sin());
+                let (a, b) = (s + k, s + k + len / 2);
+                let (xr, xi) = (re[b] * wr - im[b] * wi, re[b] * wi + im[b] * wr);
+                re[b] = re[a] - xr;
+                im[b] = im[a] - xi;
+                re[a] += xr;
+                im[a] += xi;
+            }
+        }
+        len <<= 1;
+    }
+}
+
+/// `n` samples of the signal over [t0, t1), linear between logged points.
+fn resample(t: &[f64], y: &[f64], t0: f64, t1: f64, n: usize) -> Vec<f64> {
+    (0..n).map(|k| value_at(t, y, t0 + (t1 - t0) * k as f64 / n as f64)).collect()
+}
+
+/// Peak amplitudes of the DFT bins 0 … n/2 of samples over a window.
+fn amplitudes(s: &[f64]) -> Vec<f64> {
+    let n = s.len();
+    let (mut re, mut im) = (s.to_vec(), vec![0.0; n]);
+    fft(&mut re, &mut im);
+    (0..=n / 2).map(|k| re[k].hypot(im[k]) / n as f64 * if k == 0 { 1.0 } else { 2.0 }).collect()
+}
+
+/// Spectrum and THD over the last `cycles` whole periods of the fundamental `f0` (Hz; 0 finds it:
+/// the strongest component of the run's second half).
+pub fn spectrum(t: &[f64], y: &[f64], f0: f64, cycles: usize, hmax: usize) -> Result<Spectrum, String> {
+    if t.len() < 8 {
+        return Err("The signal has too few points.".into());
+    }
+    let (ta, tb) = (t[0], *t.last().unwrap());
+    let hmax = hmax.clamp(2, 200);
+    let f0 = if f0 > 0.0 {
+        f0
+    } else {
+        let w0 = ta + (tb - ta) / 2.0;
+        let a = amplitudes(&resample(t, y, w0, tb, 1 << 14));
+        let k = (1..a.len()).max_by(|i, j| a[*i].total_cmp(&a[*j])).unwrap_or(1);
+        if a[k] <= 1e-12 * a[0].abs().max(1e-300) {
+            return Err("The signal does not oscillate: give the fundamental frequency.".into());
+        }
+        // Refine around the peak bin with the window of whole cycles it implies.
+        k as f64 / (tb - w0)
+    };
+    let period = 1.0 / f0;
+    let cycles = cycles.max(1).min(((tb - ta) / period).floor() as usize);
+    if cycles == 0 {
+        return Err(format!("The run is shorter than one period of {f0} Hz."));
+    }
+    let t0 = tb - cycles as f64 * period;
+    let mut n = 1024;
+    while n < 16 * hmax * cycles && n < 1 << 18 {
+        n <<= 1;
+    }
+    let a = amplitudes(&resample(t, y, t0, tb, n));
+    let harmonics: Vec<f64> = (1..=hmax).map(|h| a.get(h * cycles).cloned().unwrap_or(0.0)).collect();
+    if harmonics[0] <= 0.0 {
+        return Err("No fundamental at that frequency.".into());
+    }
+    let thd = harmonics[1..].iter().map(|v| v * v).sum::<f64>().sqrt() / harmonics[0];
+    let top = ((hmax + 1) * cycles).min(a.len() - 1);
+    Ok(Spectrum { f0, cycles, t0, t1: tb, dc: a[0], harmonics, thd, f: (0..=top).map(|k| k as f64 / (tb - t0)).collect(), mag: a[..=top].to_vec() })
+}
+
 #[cfg(test)]
 mod tests {
+    /// A 50 Hz sine (2) with 10 % fifth and 5 % seventh harmonics and an offset: THD √(0.1² + 0.05²),
+    /// each harmonic's amplitude, the DC, and the fundamental found without being told.
+    #[test]
+    fn spectrum_and_thd() {
+        use std::f64::consts::PI;
+        let t: Vec<f64> = (0..=200_000).map(|i| i as f64 * 1e-6).collect();
+        let y: Vec<f64> = t.iter().map(|t| 0.3 + 2.0 * (2.0 * PI * 50.0 * t).sin() + 0.2 * (2.0 * PI * 250.0 * t).sin() + 0.1 * (2.0 * PI * 350.0 * t + 1.0).sin()).collect();
+        for f0 in [50.0, 0.0] {
+            let s = super::spectrum(&t, &y, f0, 4, 40).unwrap();
+            assert!((s.f0 - 50.0).abs() < 1e-9, "{}", s.f0);
+            assert!((s.harmonics[0] - 2.0).abs() < 1e-4 && (s.harmonics[4] - 0.2).abs() < 1e-4 && (s.harmonics[6] - 0.1).abs() < 1e-4, "{:?}", &s.harmonics[..8]);
+            assert!((s.thd - 0.1118034).abs() < 1e-4 && (s.dc - 0.3).abs() < 1e-4, "{} {}", s.thd, s.dc);
+        }
+    }
+
     use super::*;
 
     /// A second-order step response (ζ = 0.5, ωn = 1) sampled finely: overshoot and peak time

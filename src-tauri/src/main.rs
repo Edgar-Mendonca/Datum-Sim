@@ -634,6 +634,14 @@ fn step_marks(st: State<St>, chan: usize) -> R<datum_core::measure::StepMarks> {
     datum_core::measure::step_marks(&r.t, y)
 }
 
+/// Spectrum and THD of one signal of the last run (0.3.1).
+#[tauri::command]
+fn spectrum(st: State<St>, chan: usize, f0: f64, cycles: usize, hmax: usize) -> R<datum_core::measure::Spectrum> {
+    let r = st.lock().run.results.clone().ok_or("Run the model first.")?;
+    let y = r.y.get(chan).ok_or("That signal is not in the results.")?;
+    datum_core::measure::spectrum(&r.t, y, f0, cycles, hmax)
+}
+
 #[derive(Serialize)]
 struct RunInfo {
     id: u64,
@@ -932,6 +940,7 @@ fn main() {
             control::pid_design,
             control::drive_tune,
             live_set,
+            spectrum,
             run_pace,
             control::trim,
             state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, find, myblocks, save_myblock, add_myblock, delete_myblock, open, save, save_file,

@@ -908,3 +908,4 @@ ul.plain { list-style: none; padding: 0; margin: 4px 0; }
 .livepanel .lnum { width: 100%; font-size: 11px; }
 .livepanel .lval { text-align: right; }
 .livepanel .grow { flex: 1; }
+.specplot { width: 100%; max-width: 640px; }
