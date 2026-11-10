@@ -68,10 +68,10 @@
       "items": [
         "Spectrum and THD (0.3.1)",
         "Space-vector PWM and dead time (0.3.2)",
-        "Inverter losses (0.3.3) and thermal networks (0.3.4)",
-        "Machine saturation and iron losses (0.3.5)",
-        "Machine parameters from the nameplate (0.3.6)",
-        "The robot arm module (0.3.7) and drive examples (0.3.8)"
+        "Inverter losses and thermal networks (0.3.3)",
+        "Machine saturation and iron losses (0.3.4)",
+        "Machine parameters from the nameplate (0.3.5)",
+        "The robot arm module (0.3.6) and drive examples (0.3.7)"
       ]
     },
     {

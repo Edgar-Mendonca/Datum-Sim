@@ -41,11 +41,12 @@ Where we are already strong, made stronger. This is what drive engineers check d
 | --- | --- |
 | 0.3.1 | **FFT and THD** on scopes (spectrum of a signal over chosen cycles) |
 | 0.3.2 | **Space-vector PWM** and **dead time** in the inverter |
-| 0.3.3 | **Inverter losses**: conduction and switching losses from data-sheet values, efficiency readout |
-| 0.3.4 | **Simple thermal**: heat from the losses into a thermal network (junction, case, heat sink) |
-| 0.3.5 | **Machine saturation** (magnetising curve) and iron losses for induction and PMSM |
-| 0.3.6 | **Parameters from the nameplate**: estimate the equivalent circuit from rated data |
-| **0.4.0** | **Milestone:** a drive examples set (efficiency map, thermal run, harmonic study), verification record |
+| 0.3.3 | **Inverter losses** (conduction and switching from data-sheet values) and a **thermal network** (junction, case, heat sink): one release, as they work together |
+| 0.3.4 | **Machine saturation** (magnetising curve) and iron losses for the induction machine |
+| 0.3.5 | **Parameters from the nameplate**: estimate the equivalent circuit from rated data |
+| 0.3.6 | **Modules** and the **robot arm module**: a two-link arm, trajectory, joint controllers, an animated view (added 2026-11-10 at the user's request) |
+| 0.3.7 | **Drive examples**: losses and junction temperature, a harmonics study, a saturated start |
+| **0.4.0** | **Milestone:** verification record, docs |
 
 ### Stage C: physical components (0.4.1 → 0.5.0)
 Draw mechanical, electrical and thermal parts as they are, connected by ports instead of signals. It is the biggest engine change, so it gets its own plan with questions first.

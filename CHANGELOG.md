@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.3 — 2026-11-10
+
+Inverter losses and junction temperature.
+
+- **Inverter losses** (Library › Drives) gives the conduction and switching losses of a two-level inverter from data-sheet values: the on-state voltage and resistance, and the switching energy at a reference current and voltage. Its inputs are the phase currents and the DC link voltage. It outputs the conduction, switching and total loss.
+- **Thermal network** turns heat into temperature: a Foster network of R–C stages from junction to ambient, taken from the data sheet's transient thermal impedance. One stage is a simple thermal mass.
+- Feed the losses into the thermal network to watch the junction temperature through a load cycle.
+
+Checked: currents of (10, −5, −5) A on 600 V give exactly 23.5 W of conduction loss and 8 W of switching loss. A 100 W step into a three-stage network follows 40 + Σ 100·Rᵢ·(1 − e^(−t/τᵢ)) within 1e-5 °C.
+
+The roadmap moves up one number from here: saturation is now 0.3.4, nameplate 0.3.5, the robot arm 0.3.6 and drive examples 0.3.7.
+
 ## 0.3.2 — 2026-11-10
 
 Space-vector modulation and dead time.

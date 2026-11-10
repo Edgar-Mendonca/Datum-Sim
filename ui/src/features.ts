@@ -19,13 +19,10 @@ export const FEATS: Feat[] = [
   // ---- Stage A: control design (0.2.x → 0.3.0)
 
   // ---- Stage B: drives and modules (0.3.x → 0.4.0)
-  f("losses", "model", "Drives", "0.3.3", "Inverter Losses", "motor", "Conduction and switching losses of the inverter from data-sheet values, and its efficiency.",
-    [{ k: "num", l: "On-state voltage", v: "1.1", u: "V" }, { k: "num", l: "On-state resistance", v: "0.01", u: "Ω" }, { k: "num", l: "Switching energy", v: "2e-3", u: "J" }]),
-  f("thermal", "model", "Drives", "0.3.4", "Thermal Network", "motor", "Heat from the losses into a thermal network: junction, case and heat sink.", [{ k: "table", l: "Stages", cols: ["R (K/W)", "τ (s)"] }]),
-  f("sat", "model", "Drives", "0.3.5", "Saturation", "motor", "Magnetic saturation and iron losses in the induction machine and PMSM."),
-  f("nameplate", "model", "Drives", "0.3.6", "From Nameplate", "motor", "The machine's equivalent circuit estimated from its nameplate: power, voltage, current, speed, efficiency, power factor.",
+  f("sat", "model", "Drives", "0.3.4", "Saturation", "motor", "Magnetic saturation and iron losses in the induction machine and PMSM."),
+  f("nameplate", "model", "Drives", "0.3.5", "From Nameplate", "motor", "The machine's equivalent circuit estimated from its nameplate: power, voltage, current, speed, efficiency, power factor.",
     [{ k: "num", l: "Power", v: "11", u: "kW" }, { k: "num", l: "Voltage", v: "400", u: "V" }, { k: "num", l: "Frequency", v: "50", u: "Hz" }, { k: "num", l: "Speed", v: "1460", u: "rpm" }, { k: "num", l: "Efficiency", v: "0.9" }, { k: "num", l: "Power factor", v: "0.85" }]),
-  f("robot", "modules", "Modules", "0.3.7", "Robot Arm", "motor", "A two-link robot arm with joint motors, a trajectory planner, joint controllers and an animated view of the arm."),
+  f("robot", "modules", "Modules", "0.3.6", "Robot Arm", "motor", "A two-link robot arm with joint motors, a trajectory planner, joint controllers and an animated view of the arm."),
 
   // ---- Stage C: physical components (0.4.x → 0.5.0)
   f("phys-rot", "modules", "Physical", "0.4.1", "Rotational", "block", "Inertia, spring, damper, gear and friction, connected by ports (the equations come from the connections)."),

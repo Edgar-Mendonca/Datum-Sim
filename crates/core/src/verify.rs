@@ -187,6 +187,36 @@ mod tests {
         }
     }
 
+    /// Inverter losses with currents (10, −5, −5) A on 600 V: conduction 1.1·20 + 0.01·150 = 23.5 W,
+    /// switching 10 kHz·2 mJ·(20/100)·(600/300) = 8 W. A thermal network under a 100 W step:
+    /// T = 40 + Σ 100·Rᵢ·(1 − e^(−t/τᵢ)).
+    #[test]
+    fn losses_and_thermal() {
+        let mut m = Mk::new(0.001, "rk45");
+        let i = m.add("Constant", &[("value", "[10 -5 -5]")]);
+        let dc = m.add("Constant", &[("value", "600")]);
+        let l = m.add("InverterLoss", &[]);
+        let sc = m.add("Scope", &[("n", "3")]);
+        m.wire(i, 0, l, 0);
+        m.wire(dc, 0, l, 1);
+        for k in 0..3 {
+            m.wire(l, k, sc, k);
+        }
+        let r = m.run();
+        let v: Vec<f64> = r.y.iter().map(|y| *y.last().unwrap()).collect();
+        assert!((v[0] - 23.5).abs() < 1e-12 && (v[1] - 8.0).abs() < 1e-12 && (v[2] - 31.5).abs() < 1e-12, "{v:?}");
+        let mut m = Mk::new(3.0, "rk45");
+        m.d.m.sim.rtol = 1e-9;
+        let p = m.add("Step", &[("time", "0"), ("final", "100")]);
+        let th = m.add("ThermalNetwork", &[]);
+        let sc = m.add("Scope", &[]);
+        m.wire(p, 0, th, 0);
+        m.wire(th, 0, sc, 0);
+        let r = m.run();
+        let want = |t: f64| 40.0 + [(0.1, 0.001), (0.2, 0.01), (0.3, 1.0)].iter().map(|(rr, tau)| 100.0 * rr * (1.0 - (-t / tau).exp())).sum::<f64>();
+        assert!(max_err(&r, 0, want) < 1e-5, "{}", max_err(&r, 0, want));
+    }
+
     /// Space-vector modulation: references of amplitude 1.1 (beyond the sine-PWM limit of 1) give
     /// phase voltages of exactly 1.1·V_dc/2 with the common-mode offset, and are clipped without
     /// it. Dead time: with m = 0 and currents (10, −5, −5) A, the poles lose ±V_dc·td·fc, so

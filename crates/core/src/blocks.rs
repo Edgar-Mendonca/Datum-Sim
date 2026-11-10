@@ -83,7 +83,7 @@ pub fn size(kind: &str) -> (f64, f64) {
         "BusCreator" | "BusSelector" => (14.0, 60.0),
         "Subsystem" => (100.0, 70.0),
         "DCMotor" | "PMSM" | "DCSepEx" | "DCShunt" | "DCSeries" | "DCCompound" | "InductionSC" | "InductionDC" | "PMSM3" | "SynRM" | "BLDC" | "Stepper" | "SRM" => (90.0, 80.0),
-        "DCLink" | "InverterDC" => (80.0, 50.0),
+        "DCLink" | "InverterDC" | "InverterLoss" | "ThermalNetwork" => (80.0, 50.0),
         "InductionWR" | "SyncField" => (100.0, 100.0),
         "Clarke" | "InvClarke" | "Park" | "InvPark" | "Encoder" => (60.0, 44.0),
         "ThreePhase" | "Inverter" | "PWM" => (70.0, 50.0),
@@ -290,6 +290,13 @@ pub fn library() -> Vec<Def> {
             vec![c("model", "Model", &["average", "switched (PWM)"], ""), n("fc", "Switching frequency", "5000", "Hz", "The carrier of the switched model; also sets the dead-time loss"), c("mod", "Modulation", &["sine", "space vector"], "Space vector: the common-mode offset −(max + min)/2 extends the linear range by 15 %"), n("td", "Dead time", "0", "s", "0 = none; above 0 the block takes the phase currents as a third input"), n("iband", "Current band", "0.1", "A", "Below this current the dead-time error fades smoothly (tanh)")]),
         d("PWM", "PWM", "Drives", "Sine-triangle pulse width modulation: compares each reference (−1…1) with a triangle carrier.", "Output +1 / −1 (or 1 / 0) per element. Switching instants are located exactly by the variable-step solvers. Space vector (three references): the common-mode offset −(max + min)/2 is added first.",
             vec![n("fc", "Carrier frequency", "1000", "Hz", ""), c("levels", "Output levels", &["−1 / +1", "0 / 1"], ""), c("mod", "Modulation", &["sine", "space vector"], "Space vector needs three references")]),
+        d("InverterLoss", "Inverter losses", "Drives", "Conduction and switching losses of a two-level inverter from data-sheet values. Inputs: phase currents i_abc, DC link voltage V_dc. Outputs: conduction loss, switching loss, total loss (W).",
+            "Per phase: conduction V₀·|i| + r·i² (one switch or diode always carries the phase current); switching f_s·E_sw·(|i|/I_ref)·(V_dc/V_ref), with E_sw = E_on + E_off + E_rr measured at I_ref and V_ref. Instantaneous values: average them over a cycle (a Mean block or the scope cursors). Feed the total to a Thermal network for the junction temperature.",
+            vec![n("V0", "On-state voltage V₀", "1.1", "V", "IGBT and diode, averaged"), n("r", "On-state resistance r", "0.01", "Ω", ""), n("Esw", "Switching energy E_sw", "0.002", "J", "E_on + E_off + E_rr per switching at I_ref, V_ref"),
+                 n("Iref", "Reference current I_ref", "100", "A", ""), n("Vref", "Reference voltage V_ref", "300", "V", ""), n("fs", "Switching frequency", "10000", "Hz", "")]),
+        d("ThermalNetwork", "Thermal network", "Drives", "Temperature from heat: a Foster network of R–C stages from junction to ambient (a heat sink, a winding). Input: heat P (W). Output: temperature T (°C).",
+            "T = T_amb + Σ Zᵢ, with τᵢ·dZᵢ/dt = Rᵢ·P − Zᵢ. Take Rᵢ and τᵢ from the data sheet's transient thermal impedance (junction–case), and add stages for the case–sink and the sink–ambient. One stage is a simple thermal mass: τ = R·C.",
+            vec![n("R", "Thermal resistances Rᵢ", "[0.1 0.2 0.3]", "K/W", "One per stage"), n("tau", "Time constants τᵢ", "[0.001 0.01 1]", "s", "One per stage"), n("Tamb", "Ambient temperature", "40", "°C", ""), n("T0", "Initial temperature", "40", "°C", "")]),
         d("DCLink", "DC link", "Drives", "The DC link capacitor of a drive, charged from a source through a resistance. Inputs: source voltage V_s, load current i_load. Outputs: link voltage V_dc, source current i_s.",
             "C·dV_dc/dt = i_s − i_load, i_s = (V_s − V_dc)/R_s. A diode rectifier only charges the link (i_s ≥ 0), so braking energy raises V_dc. Feed i_load from Inverter DC current.",
             vec![n("C", "Capacitance C", "0.002", "F", ""), n("Rs", "Source resistance R_s", "0.1", "Ω", ""), n("V0", "Initial voltage", "600", "V", ""),
@@ -403,6 +410,8 @@ pub fn ports(b: &Block) -> (usize, usize) {
         "Encoder" => (1, 2),
         "SRM" => (2, 4),
         "DCLink" | "InverterDC" => (2, if b.kind == "DCLink" { 2 } else { 1 }),
+        "InverterLoss" => (2, 3),
+        "ThermalNetwork" => (1, 1),
         _ => (1, 1),
     }
 }
@@ -426,6 +435,8 @@ pub fn port_names(b: &Block) -> (Vec<String>, Vec<String>) {
         "Encoder" => (vec![], s(&["θ_m", "ω_m"])),
         "SRM" => (s(&["v_abc", "T_L"]), s(&["ω", "T_e", "i_abc", "θ"])),
         "DCLink" => (s(&["V_s", "i_load"]), s(&["V_dc", "i_s"])),
+        "InverterLoss" => (s(&["i_abc", "V_dc"]), s(&["P_cond", "P_sw", "P_loss"])),
+        "ThermalNetwork" => (s(&["P"]), s(&["T"])),
         "InverterDC" => (s(&["m_abc", "i_abc"]), vec![]),
         "Subsystem" => {
             let Some(sd) = &b.sub else { return (vec![], vec![]) };

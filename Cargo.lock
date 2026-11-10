@@ -512,7 +512,7 @@ dependencies = [
 
 [[package]]
 name = "datum-core"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -520,7 +520,7 @@ dependencies = [
 
 [[package]]
 name = "datum-sim"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "chrono",
  "datum-core",
@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "datum-sim-cli"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "datum-core",
  "serde_json",

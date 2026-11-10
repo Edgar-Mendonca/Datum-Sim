@@ -628,6 +628,63 @@ impl Rt for InverterAvg {
     cb!();
 }
 
+/// Inverter losses from data-sheet values: conduction V₀|i| + r·i² and switching
+/// k·|i|·V_dc per phase, with k = f_s·E_sw/(I_ref·V_ref).
+#[derive(Clone)]
+struct InverterLoss {
+    v0: f64,
+    r: f64,
+    k: f64,
+}
+impl Rt for InverterLoss {
+    fn out(&self, _: &Ctx, _: &[f64], u: &[f64], y: &mut [f64]) {
+        let (mut pc, mut ps) = (0.0, 0.0);
+        for i in &u[..3] {
+            pc += self.v0 * i.abs() + self.r * i * i;
+            ps += self.k * i.abs() * u[3].abs();
+        }
+        y[0] = pc;
+        y[1] = ps;
+        y[2] = pc + ps;
+    }
+    cb!();
+}
+
+/// A Foster thermal network: T = T_amb + Σ Zᵢ, τᵢ·Zᵢ' = Rᵢ·P − Zᵢ; it starts at T0 spread over
+/// the stages in proportion to their resistances.
+#[derive(Clone)]
+struct Thermal {
+    r: Vec<f64>,
+    tau: Vec<f64>,
+    tamb: f64,
+    z0: f64,
+}
+impl Rt for Thermal {
+    fn rate(&self) -> Rate {
+        Rate::Continuous
+    }
+    fn nx(&self) -> usize {
+        self.r.len()
+    }
+    fn init(&mut self, x: &mut [f64]) {
+        for (k, xk) in x.iter_mut().enumerate() {
+            *xk = self.r[k] * self.z0;
+        }
+    }
+    fn feed(&self) -> bool {
+        false
+    }
+    fn out(&self, _: &Ctx, x: &[f64], _: &[f64], y: &mut [f64]) {
+        y[0] = self.tamb + x.iter().sum::<f64>();
+    }
+    fn deriv(&self, _: &Ctx, x: &[f64], u: &[f64], dx: &mut [f64]) {
+        for k in 0..x.len() {
+            dx[k] = (self.r[k] * u[0] - x[k]) / self.tau[k];
+        }
+    }
+    cb!();
+}
+
 /// Incremental encoder: the angle in counts (4 per pulse), and a speed estimate from the change
 /// of counts over each sample time.
 #[derive(Clone)]
@@ -849,7 +906,7 @@ impl Rt for Sensor {
 pub const KINDS: &[&str] = &[
     "DCSepEx", "DCShunt", "DCSeries", "DCCompound", "InductionSC", "InductionDC", "InductionWR", "PMSM3", "SynRM", "SyncField",
     "BLDC", "Stepper", "Clarke", "InvClarke", "Park", "InvPark", "ThreePhase", "Inverter", "PWM", "Encoder",
-    "SRM", "DCLink", "InverterDC", "Sensor",
+    "SRM", "DCLink", "InverterDC", "Sensor", "InverterLoss", "ThermalNetwork",
 ];
 
 pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Option<Result<(Box<dyn Rt>, Vec<usize>), String>> {
@@ -1022,6 +1079,28 @@ fn build_inner(kind: &str, p: &Pv, iw: &[usize]) -> Result<(Box<dyn Rt>, Vec<usi
                 oneway: p.t.get("currents").map(|s| s.as_str()) != Some("both ways"),
             };
             ok(m, vec![1, 1, 3, 1])
+        }
+        "InverterLoss" => {
+            need(iw, &[3, 1], &["phase currents", "DC voltage"])?;
+            let r = num(p, "r")?;
+            let v0 = num(p, "V0")?;
+            if r < 0.0 || v0 < 0.0 {
+                return Err("the on-state voltage and resistance cannot be negative".into());
+            }
+            ok(InverterLoss { v0, r, k: num(p, "Esw")?.max(0.0) * pos(p, "fs")? / (pos(p, "Iref")? * pos(p, "Vref")?) }, vec![1, 1, 1])
+        }
+        "ThermalNetwork" => {
+            need(iw, &[1], &["heat"])?;
+            let (r, tau) = (p.v("R")?, p.v("tau")?);
+            if r.is_empty() || r.len() != tau.len() {
+                return Err("give one time constant per thermal resistance".into());
+            }
+            if r.iter().any(|v| *v < 0.0) || tau.iter().any(|v| *v <= 0.0) {
+                return Err("thermal resistances must be at least 0 and time constants above 0".into());
+            }
+            let (tamb, t0) = (num(p, "Tamb")?, num(p, "T0")?);
+            let rs: f64 = r.iter().sum();
+            ok(Thermal { r, tau, tamb, z0: if rs > 0.0 { (t0 - tamb) / rs } else { 0.0 } }, vec![1])
         }
         "DCLink" => {
             need(iw, &[1, 1], &["source voltage", "load current"])?;
