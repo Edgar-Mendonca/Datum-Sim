@@ -483,6 +483,13 @@ mod tests {
                 "dcpos" => assert!((last(0) - 1.0).abs() < 0.01, "angle {}", last(0)),
                 // Induction motors run just below synchronous speed (157 rad/s) and carry their load.
                 "imdol" => assert!((152.0..156.0).contains(&last(0)) && (last(1) - last(2)).abs() < 0.5, "imdol {} {} {}", last(0), last(1), last(2)),
+                // The junction warms above the 40 °C ambient once the load is on.
+                "harmonics" => {
+                    let s = crate::measure::spectrum(&r.t, &r.y[0], 50.0, 4, 60).unwrap();
+                    assert!(s.thd > 0.005 && s.thd < 0.5 && s.harmonics[0] > 5.0, "harmonics THD {} I1 {}", s.thd, s.harmonics[0]);
+                }
+                "imsat" => assert!((150.0..157.0).contains(&last(0)), "imsat speed {}", last(0)),
+                "drivethermal" => assert!(last(r.y.len() - 1) > 41.0 && last(r.y.len() - 1) < 150.0, "junction {}", last(r.y.len() - 1)),
                 "imvf" => assert!((150.0..156.0).contains(&last(0)) && (last(1) - 50.0).abs() < 0.5, "imvf {} {}", last(0), last(1)),
                 "pmsmfoc" | "bldc" => assert!((last(0) - last(1)).abs() < 0.005 * last(1), "{} speed {} vs {}", ex.id, last(0), last(1)),
                 "syncmotor" => assert!((last(0) - 50.0 * std::f64::consts::PI).abs() < 0.01 && (last(1) - 3000.0).abs() < 30.0, "sync {} {}", last(0), last(1)),

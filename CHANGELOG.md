@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.7 — 2026-11-10
+
+Three new drive examples (File › New):
+
+- **PMSM drive: inverter losses and junction temperature.** The 15 kW field-oriented drive with the inverter's conduction and switching losses heating a junction through a three-stage thermal network. Watch it warm as the load comes on.
+- **Inverter harmonics: switched PWM into an induction motor.** A 2 kHz switched inverter feeds an 11 kW motor. Run it, then use Analyze › Spectrum on a stator current. Try space-vector modulation or another switching frequency.
+- **Induction motor start with saturation and iron loss.** The direct-on-line start with a saturating magnetising inductance and an iron-loss output. Set ψ_sat to 0 to compare with the linear motor.
+
+Checked: every example runs. The junction ends above the 40 °C ambient. The harmonics example's current has a finite THD with a fundamental above 5 A. The saturated motor runs up to just below synchronous speed.
+
 ## 0.3.6 — 2026-11-10
 
 Modules, starting with the robot arm.

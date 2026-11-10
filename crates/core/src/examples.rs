@@ -31,6 +31,9 @@ pub fn list() -> Vec<Example> {
         Example { id: "tank", name: "Pump and tank level control", what: "A pump fills a tank that drains through a valve (flow ∝ √level); a PI controller holds the level." },
         Example { id: "cruise", name: "Vehicle cruise control", what: "A car with aerodynamic drag and rolling resistance; a PI controller sets the drive force to hold the speed." },
         Example { id: "robotarm", name: "Robot arm: pick and place", what: "A two-link arm follows a smooth joint trajectory through four way points under computed-torque control; the Arm view animates the motion." },
+        Example { id: "drivethermal", name: "PMSM drive: inverter losses and junction temperature", what: "The 15 kW field-oriented drive with the inverter's conduction and switching losses and a junction-to-ambient thermal network: watch the junction warm up as the load comes on." },
+        Example { id: "harmonics", name: "Inverter harmonics: switched PWM into an induction motor", what: "A switched two-level inverter at 2 kHz feeds an 11 kW motor: run it, then Analyze › Spectrum on a stator current for its harmonics and THD; try space-vector modulation." },
+        Example { id: "imsat", name: "Induction motor start with saturation and iron loss", what: "The direct-on-line start of the 11 kW motor with a saturating magnetising inductance and an iron-loss estimate: compare the magnetising current with the linear motor (set ψ_sat to 0)." },
         Example { id: "thermostat", name: "Room thermostat (relay)", what: "A heater switched by a relay with hysteresis keeps a room warm; switching times are located exactly." },
     ]
 }
@@ -112,6 +115,9 @@ pub fn get(id: &str) -> Option<Model> {
         "blank" => Model::new(),
         "msd" => msd(),
         "robotarm" => robot_arm(),
+        "drivethermal" => drive_thermal(),
+        "harmonics" => harmonics(),
+        "imsat" => im_saturation(),
         "dcmotor" => dc_motor_speed(),
         "dcpos" => dc_motor_position(),
         "pmsm" => pmsm(),
@@ -313,6 +319,74 @@ fn pmsm() -> Model {
     // Ready for Control: the speed loop opens at the speed PI.
     b.point(pw, "open");
     b.done()
+}
+
+/// A block added to a finished example (used to extend one example into another).
+fn add_block(m: &mut Model, kind: &str, name: &str, x: f64, y: f64, params: &[(&str, &str)]) -> u32 {
+    let id = m.id();
+    let (w, h) = crate::blocks::size(kind);
+    m.root.blocks.push(Block { id, kind: kind.into(), name: name.into(), x, y, w, h, params: params.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(), ..Default::default() });
+    id
+}
+fn add_wire(m: &mut Model, from: (u32, usize), to: (u32, usize)) {
+    let id = m.id();
+    m.root.wires.push(Wire { id, from, to, ..Default::default() });
+}
+fn named(m: &Model, name: &str) -> u32 {
+    m.root.blocks.iter().find(|b| b.name == name).map(|b| b.id).unwrap_or(0)
+}
+
+fn drive_thermal() -> Model {
+    let mut m = pmsm_foc();
+    m.name = "PMSM drive: inverter losses and junction temperature".into();
+    m.notes = "The field-oriented PMSM drive, with the inverter's losses (from data-sheet values: 1.1 V, 10 mΩ, 2 mJ at 100 A and 300 V, 10 kHz) heating a junction through a three-stage thermal network (junction–case, case–sink, sink–ambient). The losses are instantaneous; the junction temperature follows their average.".into();
+    let (mot, dc) = (named(&m, "Motor 15 kW"), named(&m, "DC link"));
+    let l = add_block(&mut m, "InverterLoss", "Inverter losses", 900.0, 330.0, &[]);
+    let t = add_block(&mut m, "ThermalNetwork", "Junction temperature", 1020.0, 330.0, &[("R", "[0.05 0.1 0.25]"), ("tau", "[0.002 0.05 0.3]"), ("Tamb", "40"), ("T0", "40")]);
+    let s = add_block(&mut m, "Scope", "Losses and temperature", 1140.0, 320.0, &[("n", "2"), ("layout", "stacked")]);
+    add_wire(&mut m, (mot, 2), (l, 0));
+    add_wire(&mut m, (dc, 0), (l, 1));
+    add_wire(&mut m, (l, 2), (t, 0));
+    add_wire(&mut m, (l, 2), (s, 0));
+    add_wire(&mut m, (t, 0), (s, 1));
+    m
+}
+
+fn harmonics() -> Model {
+    let mut b = B::new(
+        "Inverter harmonics: switched PWM into an induction motor",
+        "A two-level inverter switching at 2 kHz (sine-triangle PWM, modulation 0.9) feeds an 11 kW motor that starts near its running speed. After the run, Analyze › Spectrum on a stator current gives its harmonics and THD (sidebands around 2 kHz = harmonic 40). Set the inverter's Modulation to space vector, or its switching frequency, and compare.",
+        0.4,
+    );
+    b.m.sim.max_step = 2e-5;
+    let r = b.blk("ThreePhase", "Modulation 0.9", 20.0, 60.0, &[("Vll", "0.9*sqrt(3)/sqrt(2)"), ("f", "50")]);
+    let dc = b.blk("Constant", "DC link 650 V", 20.0, 160.0, &[("value", "650")]);
+    let inv = b.blk("Inverter", "Inverter", 160.0, 70.0, &[("model", "switched (PWM)"), ("fc", "2000")]);
+    let m = b.motor("InductionSC", 0, "Motor 11 kW", 320.0, 70.0, &[("w0", "150")]);
+    let tl = b.blk("Constant", "Load torque", 160.0, 200.0, &[("value", "30")]);
+    let s1 = b.blk("Scope", "Stator currents", 520.0, 40.0, &[]);
+    let s2 = b.blk("Scope", "Phase voltages", 520.0, 160.0, &[]);
+    b.w(r, 0, inv, 0);
+    b.w(dc, 0, inv, 1);
+    b.w(inv, 0, m, 0);
+    b.w(tl, 0, m, 1);
+    b.w(m, 2, s1, 0);
+    b.w(inv, 0, s2, 0);
+    b.done()
+}
+
+fn im_saturation() -> Model {
+    let mut m = im_dol();
+    m.name = "Induction motor start with saturation and iron loss".into();
+    m.notes = "The direct-on-line start of the 11 kW fan drive, with the magnetising inductance saturating (ψ_sat = 1 Wb, so it halves at 1 Wb) and an iron-loss estimate (R_fe = 400 Ω, the last output). Set ψ_sat to 0 to compare with the linear motor: the no-load current is lower, and the inrush differs.".into();
+    for b in m.root.blocks.iter_mut().filter(|b| b.kind == "InductionSC") {
+        b.params.insert("psat".into(), "1".into());
+        b.params.insert("Rfe".into(), "400".into());
+    }
+    let mot = m.root.blocks.iter().find(|b| b.kind == "InductionSC").map(|b| b.id).unwrap_or(0);
+    let s = add_block(&mut m, "Scope", "Iron loss", 400.0, 260.0, &[]);
+    add_wire(&mut m, (mot, 4), (s, 0));
+    m
 }
 
 fn robot_arm() -> Model {
