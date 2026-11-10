@@ -44,54 +44,69 @@
   ],
   "roadmap": [
     {
-      "v": "0.3",
+      "v": "0.2.x → 0.3",
       "title": "Control design",
       "when": "Next",
       "items": [
-        "Operating points and linearisation of whole models",
-        "Nyquist and root locus",
-        "PID auto-tuning",
-        "Live tuning while the model runs",
-        "Buses",
-        "Solving algebraic loops"
+        "Analysis points and linearising whole models (0.2.3)",
+        "Nyquist, root locus and sensitivity (0.2.4)",
+        "Operating points: trim (0.2.5)",
+        "PID tuner (0.2.6) and drive tuning (0.2.7)",
+        "Live tuning and real-time pacing (0.2.8)",
+        "Buses (0.2.9) and solved algebraic loops (0.2.10)"
       ]
     },
     {
-      "v": "0.4",
+      "v": "0.3.x → 0.4",
+      "title": "Drives in depth and modules",
+      "when": "Next",
+      "items": [
+        "Spectrum and THD (0.3.1)",
+        "Space-vector PWM and dead time (0.3.2)",
+        "Inverter losses (0.3.3) and thermal networks (0.3.4)",
+        "Machine saturation and iron losses (0.3.5)",
+        "Machine parameters from the nameplate (0.3.6)",
+        "The robot arm module (0.3.7) and drive examples (0.3.8)"
+      ]
+    },
+    {
+      "v": "0.4.x → 0.5",
       "title": "Physical components",
       "when": "Later",
       "items": [
-        "Mechanical, rotational, electrical, hydraulic and thermal components you connect by ports"
+        "Rotational and translational mechanics, electrical, thermal and hydraulic components connected by ports",
+        "Motors connected to electrical and mechanical networks"
       ]
     },
     {
-      "v": "0.5",
+      "v": "0.5.x → 0.6",
       "title": "Exchange",
       "when": "Later",
       "items": [
-        "FMU import and export (FMI standard)",
-        "Modelica models through an external compiler"
+        "FMU export and import",
+        "Results as MAT and HDF5; building models from Python",
+        "Modelica through an external compiler"
       ]
     },
     {
-      "v": "0.6",
-      "title": "Studies",
+      "v": "0.6.x → 0.7",
+      "title": "Studies and logic",
       "when": "Later",
       "items": [
-        "State machines",
-        "Python blocks",
-        "Monte Carlo and sensitivity analysis",
-        "Fitting model parameters to measured data"
+        "State machines and Python blocks",
+        "Monte Carlo, sensitivity, optimisation and fitting",
+        "Report builder"
       ]
     },
     {
-      "v": "1.0",
-      "title": "Validated",
-      "when": "Goal",
+      "v": "0.7.x → 0.8",
+      "title": "Reach and speed",
+      "when": "Later",
       "items": [
-        "Validation suite and report",
-        "User guide",
-        "Signed installer"
+        "Linux and macOS installers",
+        "A fast compiled run mode",
+        "Variants and model comparison",
+        "Tutorials for teaching"
       ]
     }
   ]

@@ -2,6 +2,7 @@
 // Datum family site); keep it in step with docs/MEMORY.md (the roadmap table).
 import { For } from "solid-js";
 import { call } from "./store";
+import { PlannedByRelease } from "./planned";
 
 import site from "../../docs/site.json";
 
@@ -22,5 +23,6 @@ export const RoadmapPage = () => (
         </section>
       )}</For>
     </div>
+    <PlannedByRelease />
   </div>
 );

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2 — 2026-11-10
+
+The whole road ahead, in the window.
+
+- Every feature still to come now shows on its ribbon tab, dimmed, with the release that brings it. Click one to see the dialog it will have.
+- Two new ribbon tabs: **Control** (control design, arriving from 0.2.3) and **Modules** (ready-made systems such as the robot arm, and physical components).
+- File › Roadmap lists every planned feature by release.
+- View › Planned features hides them when you want the working tools only. When the ribbon is narrow, planned features move under More ▾.
+
 ## 0.2.1 — 2026-11-02
 
 Automation: run models from the command line and from Python.

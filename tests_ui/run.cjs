@@ -76,7 +76,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   check("diagram draws every wire", (await p.$$(".wire")).length === fix.diagram.wires.length);
   const nports = fix.diagram.blocks.reduce((a, b) => a + b.ins.length + b.outs.length, 0);
   check("every port is drawn", (await p.$$(".port")).length === nports);
-  check("ribbon tabs", JSON.stringify(await p.$$eval(".tabs > button:not(.file)", els => els.map(e => e.textContent))) === JSON.stringify(["Model", "Simulate", "Analyze", "View", "Help"]));
+  check("ribbon tabs", JSON.stringify(await p.$$eval(".tabs > button:not(.file)", els => els.map(e => e.textContent))) === JSON.stringify(["Model", "Simulate", "Analyze", "Control", "Modules", "View", "Help"]));
   check("library lists categories with planned blocks dimmed", (await p.$$(".libc")).length >= 8 && (await p.$$(".libi.off")).length >= 3);
 
   // 2b. Dragging a block from the library onto the diagram adds it there (0.1.0 bug on Windows: HTML drag and drop never reached the diagram).
@@ -333,7 +333,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   // 11. The ribbon never scrolls sideways.
   for (const w of [1280, 1600, 1000]) {
     await p.setViewportSize({ width: w, height: 900 });
-    for (const t of ["Model", "Simulate", "Analyze", "View", "Help"]) {
+    for (const t of ["Model", "Simulate", "Analyze", "Control", "Modules", "View", "Help"]) {
       await p.click(`.tabs > button:text-is("${t}")`);
       await p.waitForTimeout(80);
       const over = await p.$eval(".ribbon", el => el.scrollWidth - el.clientWidth);
@@ -382,10 +382,27 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.keyboard.press("Escape");
   await p.click('.tabs > button:text-is("Model")');
 
+  // 13c. Planned features (0.2.2): dimmed on their tab with the release; a greyed dialog; a switch hides them.
+  await p.click('.tabs > button:text-is("Control")');
+  await p.waitForTimeout(150);
+  const pl = await p.$$('.ribbon .rb.planned');
+  check("the Control tab shows planned features with their release", pl.length >= 3 && /\d+\.\d+/.test(await p.textContent('.ribbon .rb.planned .pv')), String(pl.length));
+  await pl[0].click();
+  await p.waitForTimeout(200);
+  check("a planned feature opens the dialog it will have, disabled", (await p.textContent(".dlg .pband")).includes("Available in") && (await p.$$(".dlg fieldset[disabled]")).length === 1);
+  await p.keyboard.press("Escape");
+  await p.click('.tabs > button:text-is("View")');
+  await p.click(".plannedchk");
+  await p.click('.tabs > button:text-is("Control")');
+  await p.waitForTimeout(150);
+  check("View › Planned features hides them", (await p.$$('.ribbon .rb.planned')).length === 0);
+  await p.click('.tabs > button:text-is("View")');
+  await p.click(".plannedchk");
+  await p.click('.tabs > button:text-is("Model")');
+
   // 14. Every view and File page opens without errors.
   for (const v of ["Variables", "Scopes", "Results", "Issues", "Diagram"]) { await p.click(`.side button[title="${v}"]`); await p.waitForTimeout(150); }
-  for (const k of ["print", "options", "roadmap", "about", "home"]) { await p.evaluate(() => document.querySelector(".tabs .file").click()); await p.waitForTimeout(100); await p.click(`.bs aside button:has-text("${{ print: "Print", options: "Options", roadmap: "Roadmap", about: "Updates", home: "Home" }[k]}")`); await p.waitForTimeout(200); }
-  check("roadmap lists the planned releases", (await p.textContent(".bsmain")).length > 0);
+  for (const k of ["print", "options", "roadmap", "about", "home"]) { await p.evaluate(() => document.querySelector(".tabs .file").click()); await p.waitForTimeout(100); await p.click(`.bs aside button:has-text("${{ print: "Print", options: "Options", roadmap: "Roadmap", about: "Updates", home: "Home" }[k]}")`); await p.waitForTimeout(200); if (k === "roadmap") check("roadmap lists the planned releases and every planned feature", (await p.textContent(".bsmain")).includes("Feature by feature")); }
   await p.click(".bs aside .back");
   for (let i = 0; i < 3 && (await p.evaluate(() => document.documentElement.dataset.theme)) !== "dark"; i++) await p.click(".theme");
   check("theme switches to dark", (await p.evaluate(() => document.documentElement.dataset.theme)) === "dark");

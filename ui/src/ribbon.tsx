@@ -8,6 +8,7 @@ import { Icon } from "./ui";
 import { Help, helpCard, HELP } from "./help";
 import { SolverPick } from "./panels";
 import { invoke } from "./api";
+import { PlannedGroups, showPlanned, setShowPlanned } from "./planned";
 
 const GH = "https://github.com/Edgar-Mendonca/Datum-Sim";
 
@@ -24,8 +25,6 @@ const B = (p: { i: string; l: string; run?: (e: MouseEvent) => void; big?: boole
 );
 const G = (p: { l: string; h?: string; children: JSX.Element }) => <div class="grp"><div class="items">{p.children}</div><div class="cap">{p.l}{p.h && <Help k={p.h} />}</div></div>;
 const S = (p: { children: JSX.Element }) => <div class="stack">{p.children}</div>;
-/** A planned tool: shown dimmed with the release it arrives in. */
-const Planned = (p: { i: string; l: string; v: string }) => <B i={p.i} l={p.l} off title={`${p.l}: planned for ${p.v}`} />;
 
 /** Tell Me / command search (Ctrl+K). */
 export const palette = () => openDialog(() => {
@@ -64,7 +63,7 @@ export const TitleBar = (p: { update: string | null }) => (
     </div>
     <nav class="tabs">
       <button class="file" onClick={() => setBackstage("home")}>File</button>
-      <For each={[["model", "Model"], ["simulate", "Simulate"], ["analyze", "Analyze"], ["view", "View"], ["help", "Help"]]}>{([k, l]) => <button classList={{ on: tab() === k }} onClick={() => setTab(k)}>{l}</button>}</For>
+      <For each={[["model", "Model"], ["simulate", "Simulate"], ["analyze", "Analyze"], ["control", "Control"], ["modules", "Modules"], ["view", "View"], ["help", "Help"]]}>{([k, l]) => <button classList={{ on: tab() === k }} onClick={() => setTab(k)}>{l}</button>}</For>
       <div class="ctxgrp" style={{ visibility: selBlocks().length ? "visible" : "hidden" }}><small>Block Tools</small><button classList={{ on: tab() === "format" }} onClick={() => setTab("format")}>Format</button></div>
     </nav>
   </header>
@@ -73,9 +72,14 @@ export const TitleBar = (p: { update: string | null }) => (
 /** Shrinks the ribbon in steps instead of scrolling sideways (FAMILY §6). */
 const fitRibbon = (el: HTMLElement) => {
   const fit = () => {
-    const gs = [...el.querySelectorAll<HTMLElement>(":scope > .grp")];
-    el.dataset.fit = "0"; gs.forEach(g => delete g.dataset.fit);
+    const all = [...el.querySelectorAll<HTMLElement>(":scope > .grp")];
+    const gs = all.filter(g => !g.classList.contains("planned")), pg = all.filter(g => g.classList.contains("planned") && !g.classList.contains("pmore"));
+    el.dataset.fit = "0"; all.forEach(g => { delete g.dataset.fit; delete g.dataset.hide; });
     const over = () => el.scrollWidth > el.clientWidth + 1;
+    // Planned groups give way first (listed under More ▾), so the working tools keep their size.
+    let hid = 0;
+    for (let i = pg.length - 1; i >= 0 && over(); i--) { pg[i].dataset.hide = ""; hid++; }
+    el.dataset.phid = String(hid);
     if (!over()) return;
     el.dataset.fit = "1";
     for (const lvl of ["2", "3"]) for (let i = gs.length - 1; i >= 0 && over(); i--) gs[i].dataset.fit = lvl;
@@ -99,6 +103,7 @@ export const Ribbon = () => (
       <G l="Variables" h="vars"><B big i="var" l="Variables" run={C.vars} on={view() === "vars"} /></G>
       <G l="Arrange" h="arrange"><S><B i="align" l="Align Left" run={() => C.align("left")} /><B i="align" l="Align Top" run={() => C.align("top")} /><B i="align" l="Align Centres" run={() => C.align("middle")} /></S><S><B i="fit" l="Fit Diagram" run={C.fit} /><B i="grid" l={`Snap ${opts().snap ? "on" : "off"}`} on={opts().snap} run={() => setOpts({ ...opts(), snap: !opts().snap })} /><B i="search" l="Find" run={C.find} title="Find a block or a signal (Ctrl+F)" /></S></G>
       <G l="Examples" h="blocks"><B big i="open" l="Examples" dd={exampleMenu} /></G>
+      <PlannedGroups tab="model" />
     </Show>
     <Show when={tab() === "simulate"}>
       <G l="Run" h="run">
@@ -111,16 +116,23 @@ export const Ribbon = () => (
       <G l="Solver" h="solver"><div class="rfields"><SolverPick />
         <Show when={["rk4", "heun", "euler"].includes(out()?.sim.solver ?? "")} fallback={<label>Tolerance <input class="mono" value={out()?.sim.rtol ?? 1e-6} onChange={e => +e.currentTarget.value > 0 && C.setSim("rtol", +e.currentTarget.value)} /></label>}>
           <label>Step <input class="mono" value={out()?.sim.step ?? 0.01} onChange={e => +e.currentTarget.value > 0 && C.setSim("step", +e.currentTarget.value)} /> s</label></Show></div></G>
-      <G l="Studies" h="sweep"><B big i="sweep" l="Parameter Sweep" run={C.sweep} /><S><Planned i="sweep" l="Monte Carlo" v="0.6" /><Planned i="specs" l="Sensitivity" v="0.6" /><Planned i="solver" l="Operating Point" v="0.3" /></S></G>
+      <G l="Studies" h="sweep"><B big i="sweep" l="Parameter Sweep" run={C.sweep} /></G>
       <G l="Scopes" h="scopes"><B big i="scope" l="Scopes" run={() => C.view("scopes")} dd={e => openMenu(e, scopeMenu())} />
         <S><label class="chk" title="Log every signal, so after a run you can read any wire by hovering it (the signal probe)"><input type="checkbox" class="logall" checked={!!out()?.sim.log_all} onChange={e => C.setSim("log_all", e.currentTarget.checked)} />Log all signals</label></S></G>
+      <PlannedGroups tab="simulate" />
     </Show>
     <Show when={tab() === "analyze"}>
-      <G l="Linear Analysis" h="linear"><B big i="bode" l="Bode" run={() => C.analyze("bode")} /><B big i="specs" l="Step Response" run={() => C.analyze("step")} /><S><B i="solver" l="Poles and Zeros" run={() => C.analyze("pz")} /><Planned i="bode" l="Nyquist" v="0.3" /><Planned i="bode" l="Root Locus" v="0.3" /></S></G>
-      <G l="Control Design" h="linear"><S><Planned i="solver" l="Linearise Model" v="0.3" /><Planned i="specs" l="PID Tuning" v="0.3" /><Planned i="solver" l="Trim" v="0.3" /></S></G>
-      <G l="Signals" h="specs"><B big i="specs" l="Step Specs" run={C.stepInfo} /><S><Planned i="plot" l="Fit to Data" v="0.6" /><Planned i="report" l="Report" v="0.6" /></S></G>
-      <G l="Results" h="exportres"><B big i="results" l="Results" run={() => C.view("results")} /><S><B i="csv" l="Save as CSV" run={() => C.exportCsv()} /><B i="plot" l="Send to Datum Plot" run={C.toPlot} /><Planned i="export" l="HDF5" v="0.2" /></S></G>
+      <G l="Linear Analysis" h="linear"><B big i="bode" l="Bode" run={() => C.analyze("bode")} /><B big i="specs" l="Step Response" run={() => C.analyze("step")} /><S><B i="solver" l="Poles and Zeros" run={() => C.analyze("pz")} /></S></G>
+      <G l="Signals" h="specs"><B big i="specs" l="Step Specs" run={C.stepInfo} /></G>
+      <G l="Results" h="exportres"><B big i="results" l="Results" run={() => C.view("results")} /><S><B i="csv" l="Save as CSV" run={() => C.exportCsv()} /><B i="plot" l="Send to Datum Plot" run={C.toPlot} /></S></G>
       <G l="Python" h="linear"><S><B i="py" l="Engine Version" run={() => C.engine()} /><B i="py" l="Restart Engine" run={() => C.engine(true)} /></S></G>
+      <PlannedGroups tab="analyze" />
+    </Show>
+    <Show when={tab() === "control"}>
+      <PlannedGroups tab="control" />
+    </Show>
+    <Show when={tab() === "modules"}>
+      <PlannedGroups tab="modules" />
     </Show>
     <Show when={tab() === "view"}>
       <G l="Views" h="views"><B big i="model" l="Diagram" run={() => C.view("model")} on={view() === "model"} /><B big i="scope" l="Scopes" run={() => C.view("scopes")} on={view() === "scopes"} />
@@ -128,6 +140,8 @@ export const Ribbon = () => (
       <G l="Zoom" h="zoom"><S><B i="zin" l="Zoom In" run={C.zoomIn} /><B i="zout" l="Zoom Out" run={C.zoomOut} /><B i="fit" l="Fit" run={C.fit} /></S></G>
       <G l="Show" h="show"><S><label class="chk"><input type="checkbox" checked={opts().grid} onChange={e => setOpts({ ...opts(), grid: e.currentTarget.checked })} />Grid</label><label class="chk"><input type="checkbox" checked={opts().snap} onChange={e => setOpts({ ...opts(), snap: e.currentTarget.checked })} />Snap to grid</label><label class="chk"><input type="checkbox" checked={scopes().length > 0} onChange={e => setScopes(e.currentTarget.checked ? [] : [])} disabled={!scopes().length} />Scopes dock</label></S>
         <S><label class="chk" title="Colour each block by how often its output changes: continuous, each sample time, constant"><input type="checkbox" class="ratechk" checked={showRates()} onChange={e => setShowRates(e.currentTarget.checked)} />Sample-time colours</label></S></G>
+      <G l="Planned" h="planned"><S><label class="chk" title="Show the features still to come, dimmed, with the release that brings each"><input type="checkbox" class="plannedchk" checked={showPlanned()} onChange={e => setShowPlanned(e.currentTarget.checked)} />Planned features</label></S></G>
+      <PlannedGroups tab="view" />
     </Show>
     <Show when={tab() === "format"}>
       <G l="Block" h="blocks"><B big i="flip" l="Flip" run={C.flip} /><B big i="rename" l="Rename" run={C.rename} /><S><B i="align" l="Align Left" run={() => C.align("left")} /><B i="align" l="Align Top" run={() => C.align("top")} /><B i="align" l="Align Centres" run={() => C.align("middle")} /></S></G>

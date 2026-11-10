@@ -8,6 +8,7 @@ import { Dialog } from "./ui";
 type Topic = { t: string; what: string; how?: string[]; tip?: string };
 export const HELP: Record<string, Topic> = {
   // Model tab
+  planned: { t: "Planned features", what: "Features still to come show dimmed on their ribbon tab, each with the release that brings it.", how: ["Click one to see the dialog it will have.", "File › Roadmap lists them all by release.", "Untick View › Planned features to hide them."] },
   clipboard: { t: "Clipboard", what: "Cut, copy and paste blocks with the wires between them.", how: ["Select blocks, Ctrl+C, then Ctrl+V: the copies appear a little to the right.", "Paste works inside subsystems too."] },
   blocks: { t: "Blocks", what: "Add, delete, flip and rename blocks.",
     how: ["Drag a block from the Library panel on the left onto the diagram, or double-click it in the library.", "Flip turns a block round so its inputs are on the right: handy for feedback paths.", "Delete (Del) removes the selected blocks and wires."] },
