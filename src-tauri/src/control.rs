@@ -3,9 +3,40 @@
 
 use crate::{base_dir, St, R};
 use datum_core::linearise::{self, At, TrimSpec, Trimmed};
+use datum_core::lti::{self, Pid, Ss};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use tauri::State;
+
+/// The plant a PID sees and its present gains: {plant, cur, name, report}.
+#[tauri::command]
+pub async fn pid_plant(st: State<'_, St>, id: u32, at: At) -> R<Value> {
+    let (m, base) = {
+        let a = st.lock();
+        (a.doc.m.clone(), base_dir(&a))
+    };
+    let (plant, cur, name) = linearise::pid_plant(&m, base.as_deref(), id, &at)?;
+    let now = lti::margins(&lti::series(&cur.ss(), &plant));
+    Ok(serde_json::json!({ "plant": plant, "cur": cur, "name": name, "wgc": if now.wgc.is_finite() { now.wgc } else { 0.0 } }))
+}
+
+/// Gains for a rule ("shape", "zn", "simc"), with the before-and-after report.
+#[tauri::command]
+pub async fn pid_design(plant: Ss, cur: Pid, rule: String, wc: f64, pm: f64, form: String) -> R<Value> {
+    let d = match rule.as_str() {
+        "zn" => lti::ziegler_nichols(&plant)?,
+        "simc" => lti::simc(&plant)?,
+        _ => lti::design(&plant, wc, pm, &form)?,
+    };
+    let mut pid = d.pid;
+    if pid.d != 0.0 && pid.n <= 0.0 {
+        pid.n = 100.0;
+    }
+    if pid.d == 0.0 {
+        pid.n = cur.n;
+    }
+    Ok(serde_json::json!({ "pid": pid, "rule": d.rule, "note": d.note, "report": linearise::pid_report(&plant, &cur, &pid) }))
+}
 
 /// The analysis-point outputs trim can hold, and the number of states.
 #[tauri::command]

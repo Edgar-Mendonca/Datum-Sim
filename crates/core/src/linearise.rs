@@ -4,7 +4,7 @@
 //! point, so nonlinear blocks and motors work too; linear blocks come out exact.
 
 use crate::compile::{self, Sim};
-use crate::lti::Ss;
+use crate::lti::{self, Ss};
 use crate::model::{Block, Diagram, Model, Wire};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -420,6 +420,67 @@ pub fn trim(m: &Model, base: Option<&Path>, spec: &TrimSpec) -> Result<Trimmed, 
     })
 }
 
+// ---------------------------------------------------------------- PID tuning
+
+/// The plant a PID block sees: the loop is cut at the PID's output and the PID's input (the
+/// error) is measured; the plant P is minus that transfer, so the loop is L = C·P.
+pub fn pid_plant(m: &Model, base: Option<&Path>, id: u32, at: &At) -> Result<(Ss, lti::Pid, String), String> {
+    let b = m.block(id).ok_or("Select a PID block first.")?;
+    if !matches!(b.kind.as_str(), "PID" | "DiscretePID") {
+        return Err(format!("'{}' is not a PID block.", b.name));
+    }
+    let name = b.name.clone();
+    let p = compile::block_numbers(m, id)?;
+    let g = |k: &str| p.get(k).cloned().unwrap_or(0.0);
+    let cur = lti::Pid { p: g("P"), i: g("I"), d: g("D"), n: g("N") };
+    let mut m2 = m.clone();
+    fn clear(d: &mut Diagram) {
+        d.wires.iter_mut().for_each(|w| w.point.clear());
+        d.blocks.iter_mut().filter_map(|b| b.sub.as_mut()).for_each(clear);
+    }
+    clear(&mut m2.root);
+    let parent = m2.parent_of(id).unwrap_or(0);
+    let d = m2.diagram_mut(parent).ok_or("The PID's diagram is missing.")?;
+    let src = d.wires.iter().find(|w| w.to == (id, 0)).map(|w| w.from).ok_or_else(|| format!("{name}: its input is not connected."))?;
+    if !d.wires.iter().any(|w| w.from == (id, 0)) {
+        return Err(format!("{name}: its output is not connected."));
+    }
+    for w in d.wires.iter_mut() {
+        if w.from == (id, 0) {
+            w.point = "open".into();
+        } else if w.from == src {
+            w.point = "out".into();
+        }
+    }
+    let l = linearise(&m2, base, &BTreeMap::new(), at)?;
+    // Outputs: the loop at the PID (0), then the error (1).
+    let te = l.ss.siso(0, 1);
+    let plant = Ss { a: te.a, b: te.b, c: vec![te.c[0].iter().map(|v| -v).collect()], d: vec![vec![-te.d[0][0]]] };
+    Ok((plant, cur, name))
+}
+
+/// Before and after: the loop's margins, Bode of L and closed-loop steps for the present gains
+/// and a design.
+pub fn pid_report(plant: &Ss, cur: &lti::Pid, new: &lti::Pid) -> serde_json::Value {
+    use serde_json::json;
+    let l0 = lti::series(&cur.ss(), plant);
+    let l1 = lti::series(&new.ss(), plant);
+    let w = lti::grid(&l1, 400);
+    let b0 = lti::bode(&l0, &w);
+    let b1 = lti::bode(&l1, &w);
+    let fin = |v: &[f64]| v.iter().map(|x| if x.is_finite() { json!(x) } else { serde_json::Value::Null }).collect::<Vec<_>>();
+    let cl = |l: &lti::Ss| l.feedback().ok();
+    let (c0, c1) = (cl(&l0), cl(&l1));
+    let tf = c1.as_ref().map_or(10.0, lti::span).max(c0.as_ref().map_or(0.0, |c| lti::span(c).min(4.0 * c1.as_ref().map_or(10.0, lti::span))));
+    let step = |c: &Option<lti::Ss>| c.as_ref().map(|c| {
+        let r = lti::response(c, tf, 500, false);
+        json!({ "t": fin(&r.t), "y": fin(&r.y), "unstable": c.poles().iter().any(|p| p.re > 1e-9) })
+    });
+    let mj = |m: lti::Margins| json!({ "gm_db": if m.gm_db.is_finite() { json!(m.gm_db) } else { serde_json::Value::Null }, "pm": if m.pm.is_finite() { json!(m.pm) } else { serde_json::Value::Null }, "wgc": if m.wgc.is_finite() { json!(m.wgc) } else { serde_json::Value::Null } });
+    json!({ "w": fin(&w), "mag0": fin(&b0.mag_db), "mag1": fin(&b1.mag_db), "ph0": fin(&b0.phase), "ph1": fin(&b1.phase),
+        "before": mj(lti::margins(&l0)), "after": mj(lti::margins(&l1)), "step0": step(&c0), "step1": step(&c1) })
+}
+
 /// Everything the Control tab shows for one input–output pair of a linearised model: the Bode
 /// plot, poles, step and impulse; for a loop (the same loop opening as input and output) also the
 /// margins, Nyquist, sensitivity, root locus and the closed loop's step and impulse.
@@ -435,8 +496,12 @@ pub fn report(l: &Linear, inp: usize, outp: usize) -> Result<serde_json::Value, 
     let fin = |v: &[f64]| v.iter().map(|x| if x.is_finite() { json!(x) } else { serde_json::Value::Null }).collect::<Vec<_>>();
     let bode = lti::bode(&g, &w);
     let poles: Vec<[f64; 2]> = g.poles().iter().map(|p| [p.re, p.im]).collect();
+    let mut notes = l.notes.clone();
+    if bode.mag_db.iter().all(|m| !m.is_finite() || *m < -150.0) {
+        notes.push("The gain is zero at this operating point: a block on the path is probably at a limit (a saturation, or a PID's output limits), so small changes do not pass. Try another operating point.".into());
+    }
     let mut v = json!({
-        "inputs": l.inputs, "outputs": l.outputs, "loops": l.loops, "t": l.t, "nx": l.x.len(), "notes": l.notes,
+        "inputs": l.inputs, "outputs": l.outputs, "loops": l.loops, "t": l.t, "nx": l.x.len(), "notes": notes,
         "loop": is_loop, "w": fin(&bode.w), "mag_db": fin(&bode.mag_db), "phase": fin(&bode.phase), "poles": poles,
         "a": l.ss.a, "b": l.ss.b, "c": l.ss.c, "d": l.ss.d,
         "dc": g.at(lti::Cx::new(0.0, 0.0)).re,
@@ -470,13 +535,33 @@ pub fn report(l: &Linear, inp: usize, outp: usize) -> Result<serde_json::Value, 
 mod tests {
     use super::*;
     use crate::examples;
-    use crate::lti;
 
     fn mark(m: &mut Model, from_name: &str, point: &str) {
         let id = m.root.blocks.iter().find(|b| b.name == from_name).unwrap().id;
         for w in m.root.wires.iter_mut().filter(|w| w.from.0 == id) {
             w.point = point.into();
         }
+    }
+
+    /// Tune the DC motor's speed PID for 20 rad/s and 60°: applied to the model, the real loop
+    /// (linearised again) has that crossover and margin.
+    #[test]
+    fn pid_tune_dc_motor() {
+        let mut m = examples::get("dcmotor").unwrap();
+        let id = m.root.blocks.iter().find(|b| b.kind == "PID").unwrap().id;
+        let (plant, cur, _) = pid_plant(&m, None, id, &At::Initial).unwrap();
+        assert_eq!((cur.p, cur.i, cur.d), (100.0, 200.0, 10.0));
+        let d = lti::design(&plant, 20.0, 60.0, "auto").unwrap();
+        let b = m.root.blocks.iter_mut().find(|b| b.id == id).unwrap();
+        for (k, v) in [("P", d.pid.p), ("I", d.pid.i), ("D", d.pid.d), ("N", if d.pid.n > 0.0 { d.pid.n } else { 100.0 })] {
+            b.params.insert(k.into(), format!("{v}"));
+        }
+        // At the start (before the reference steps) the PID is not at its ±24 V limits.
+        let l = linearise(&m, None, &BTreeMap::new(), &At::Initial).unwrap();
+        let mg = lti::margins(&l.ss.siso(0, 0));
+        assert!((mg.wgc - 20.0).abs() < 1e-3 && (mg.pm - 60.0).abs() < 1e-2, "{mg:?} {d:?}");
+        let r = pid_report(&plant, &cur, &d.pid);
+        assert!(r["after"]["pm"].as_f64().unwrap() > 59.9);
     }
 
     /// Trim the tank at 2 m with the set point free: the set point must be 2, the pump delivers

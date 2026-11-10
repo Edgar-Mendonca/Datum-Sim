@@ -197,7 +197,7 @@ mod tests {
         for (n, v) in [("R", "1"), ("L", "0.5"), ("Ke", "0.01"), ("Kt", "0.01"), ("J", "0.01"), ("b", "0.1")] {
             m.d.m.vars.push(crate::model::Var { name: n.into(), expr: v.into(), ..Default::default() });
         }
-        let r = m.add("Step", &[("time", "0")]);
+        let r = m.add("Step", &[("time", "0.2")]);
         let e = m.add("Sum", &[("signs", "+-")]);
         let c = m.add("PID", &[("P", "100"), ("I", "200"), ("D", "10"), ("upper", "24"), ("lower", "-24")]);
         let tl = m.add("Step", &[("time", "3"), ("final", "0.05")]);

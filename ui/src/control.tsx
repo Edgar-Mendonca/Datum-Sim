@@ -3,7 +3,7 @@
 import { For, Show, createSignal, JSX } from "solid-js";
 import uPlot from "uplot";
 import { num, invoke } from "./api";
-import { openDialog, closeDialog, act, selWires, toast, results, out } from "./store";
+import { openDialog, closeDialog, act, selWires, selBlocks, dview, toast, results, out } from "./store";
 import type { OpPoint } from "./api";
 import { Dialog, Tabs } from "./ui";
 import { OKABE } from "./scope";
@@ -175,6 +175,73 @@ export const opsDialog = () => openDialog(() => {
     </Show>
   </Dialog>;
 });
+
+/** Control › PID Tuner: tune a PID with two sliders (speed, robustness) or a classic rule. */
+export const pidTuner = () => {
+  const pids = (dview()?.blocks ?? []).filter(b => b.kind === "PID" || b.kind === "DiscretePID");
+  const sel = selBlocks().find(b => b.kind === "PID" || b.kind === "DiscretePID") ?? (pids.length === 1 ? pids[0] : undefined);
+  if (!sel) return toast(pids.length ? "Select the PID block to tune." : "This diagram has no PID block: open the diagram that holds it.");
+  openDialog(() => {
+    const [plant, setPlant] = createSignal<any>(null), [err, setErr] = createSignal("");
+    const [rule, setRule] = createSignal("shape"), [form, setForm] = createSignal("auto");
+    const [lw, setLw] = createSignal(0), [pm, setPm] = createSignal(60), [res, setRes] = createSignal<any>(null);
+    invoke<any>("pid_plant", { id: sel.id, at: { kind: "initial" } }).then(p => { setPlant(p); setLw(Math.log10(p.wgc > 0 ? p.wgc : 1)); design(); }).catch(e => setErr(String(e)));
+    let seq = 0;
+    const design = async () => {
+      const p = plant(); if (!p) return;
+      const my = ++seq;
+      try { const r = await invoke<any>("pid_design", { plant: p.plant, cur: p.cur, rule: rule(), wc: 10 ** lw(), pm: pm(), form: form() }); if (my === seq) { setRes(r); queueMicrotask(draw); } }
+      catch (e) { if (my === seq) setRes({ error: String(e) }); }
+    };
+    let host!: HTMLDivElement;
+    const draw = () => {
+      const r = res()?.report; if (!host || !r) return;
+      host.innerHTML = "";
+      const s0 = r.step0, s1 = r.step1;
+      if (s1) line(host, s1.t, [["Before", s0 && !s0.unstable ? s0.y : s1.t.map(() => null)], ["After", s1.y]], { xl: "Time (s)", yl: "closed-loop step", h: 200 });
+      line(host, r.w, [["Before", r.mag0], ["After", r.mag1]], { log: true, xl: "Frequency (rad/s)", yl: "|L| dB", h: 170 });
+    };
+    const m = (x: any) => x ? `phase margin ${x.pm == null ? "∞" : num(x.pm, 3) + "°"}, gain margin ${x.gm_db == null ? "∞" : num(x.gm_db, 3) + " dB"}${x.wgc == null ? "" : `, crossover ${num(x.wgc, 3)} rad/s`}` : "";
+    const apply = () => {
+      const r = res(); if (!r || r.error) return;
+      const vars = [...(out()?.vars ?? [])], ops: any[] = [];
+      let varsChanged = false;
+      for (const k of ["P", "I", "D", "N"] as const) {
+        const v = r.pid[k.toLowerCase()];
+        if (!isFinite(v)) continue;
+        const text = (sel.params?.[k] ?? "").trim(), vi = vars.findIndex(x => x.name === text);
+        const val = String(+v.toPrecision(6));
+        if (vi >= 0) { vars[vi] = { ...vars[vi], expr: val }; varsChanged = true; }
+        else ops.push({ SetParam: { id: sel.id, key: k, value: val } });
+      }
+      if (varsChanged) ops.push({ SetVars: { vars } });
+      act({ Batch: ops }).then(() => { toast(`${sel.name} tuned: one undoable edit.`, true); closeDialog(); });
+    };
+    return <Dialog title={`PID Tuner: ${sel.name}`} wide help="pidtune" ok={apply} okText="Apply">
+      <Show when={!err()} fallback={<p class="issue">{err()}</p>}>
+        <Show when={plant()} fallback={<p class="muted"><i class="spin" /> Finding the plant the PID sees…</p>}>
+          <div class="form pidform">
+            <label>Rule</label><div><select class="pidrule" value={rule()} onChange={e => { setRule(e.currentTarget.value); design(); }}><option value="shape">Speed and robustness (loop shaping)</option><option value="zn">Ziegler–Nichols (ultimate gain)</option><option value="simc">SIMC (first order plus dead time)</option></select></div>
+            <Show when={rule() === "shape"}>
+              <label>Speed</label><div class="larow"><input type="range" class="pidspeed" min={lw() - 2} max={lw() + 2} step="0.01" value={lw()} onInput={e => { setLw(+e.currentTarget.value); design(); }} /><span class="mono">{num(10 ** lw(), 3)} rad/s</span></div>
+              <label>Robustness</label><div class="larow"><input type="range" class="pidrob" min="30" max="85" step="1" value={pm()} onInput={e => { setPm(+e.currentTarget.value); design(); }} /><span class="mono">{pm()}° phase margin</span></div>
+              <label>Controller</label><div><select value={form()} onChange={e => { setForm(e.currentTarget.value); design(); }}><option value="auto">PI or PID, as needed</option><option value="PI">PI</option><option value="PID">PID</option></select></div>
+            </Show>
+          </div>
+          <Show when={res() && !res().error} fallback={<p class="issue">{res()?.error}</p>}>
+            <table class="tbl facts pidgains"><thead><tr><th /><th>P</th><th>I</th><th>D</th><th>N</th></tr></thead><tbody>
+              <tr><td>Now</td><For each={["p", "i", "d", "n"]}>{k => <td class="r mono">{num(plant().cur[k], 4)}</td>}</For></tr>
+              <tr><td><b>Tuned</b></td><For each={["p", "i", "d", "n"]}>{k => <td class="r mono"><b>{num(res().pid[k], 4)}</b></td>}</For></tr></tbody></table>
+            <p class="small">Before: {m(res().report.before)}.<br /><b>After: {m(res().report.after)}.</b></p>
+            <p class="muted small">{res().rule}. {res().note}</p>
+            <div class="anplot" ref={el => { host = el; queueMicrotask(draw); }} />
+          </Show>
+          <p class="muted small">The plant is linearised with the loop cut at {sel.name}'s output, at the model's initial state. Apply sets P, I, D and N (or the variables they use) in one undoable edit.{sel.kind === "DiscretePID" ? " The gains are designed in continuous time: good when the sample time is well below 1/crossover." : ""}</p>
+        </Show>
+      </Show>
+    </Dialog>;
+  });
+};
 
 /** The analysis point glyph on a wire: arrow in, a measuring circle, or a cut. */
 export const PointGlyph = (p: { kind: string; at: [number, number] }): JSX.Element => {

@@ -42,6 +42,8 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           if (c === "new_model") return f.state;
           if (c === "lin_analysis") return f.lin;
           if (c === "trim_info") return [["Level"], 4];
+          if (c === "pid_plant") return { plant: { a: [[-2]], b: [[1]], c: [[2]], d: [[0]] }, cur: { p: 100, i: 200, d: 10, n: 100 }, name: "PID", wgc: 5 };
+          if (c === "pid_design") return { pid: { p: 2 + a.pm / 100, i: 4, d: 0, n: 100 }, rule: "PI by loop shaping", note: "", report: { w: [1, 10], mag0: [0, -20], mag1: [3, -17], ph0: [-90, -120], ph1: [-80, -110], before: { pm: 40, gm_db: null, wgc: 5 }, after: { pm: a.pm, gm_db: null, wgc: a.wc }, step0: { t: [0, 1], y: [0, 1], unstable: false }, step1: { t: [0, 1], y: [0, 1], unstable: false } } };
           if (c === "trim") return { op: { name: "", t: 0, x: [3.53, 0, 1.41, 2], vars: [["H", 2]], note: "Level = 2" }, met: true, dmax: 1e-14, ymax: 1e-14, iters: 5, unmet: [], outputs: [["Level", 2]] };
           // The run ends before its start call returns (a model with no states takes 0.1 ms).
           if (c === "run") {
@@ -423,12 +425,27 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   check("saving sends one SetOps edit with the named point", JSON.stringify(so?.[1] ?? {}).includes('"SetOps"') && JSON.stringify(so[1]).includes('"2 m"'), JSON.stringify(so));
   await p.click('.tabs > button:text-is("Model")');
 
+  // 13b4. PID tuner (0.2.6): the sliders redesign; Apply is one Batch edit of the PID's gains.
+  // The diagram has one PID: the tuner takes it without a selection.
+  await p.click('.tabs > button:text-is("Control")');
+  await p.click('.ribbon button:has-text("PID Tuner")');
+  await p.waitForTimeout(400);
+  check("the PID tuner shows the present and tuned gains", (await p.textContent(".dlg")).includes("Tuned") && (await p.textContent(".dlg")).includes("phase margin"), (await p.textContent(".dlg")).slice(0, 200));
+  await p.$eval(".pidrob", el => { el.value = "70"; el.dispatchEvent(new Event("input", { bubbles: true })); });
+  await p.waitForTimeout(300);
+  check("moving Robustness redesigns", (await p.textContent(".dlg")).includes("After: phase margin 70°"));
+  await p.click(".dlg .btn.pri");
+  await p.waitForTimeout(300);
+  const pa = (await p.evaluate(() => window.__calls)).filter(c => c[0] === "apply").pop();
+  check("Apply sends one Batch edit with the gains", JSON.stringify(pa?.[1] ?? {}).includes('"Batch"') && JSON.stringify(pa[1]).includes("2.7"), JSON.stringify(pa));
+  await p.click('.tabs > button:text-is("Model")');
+
   // 13c. Planned features (0.2.2): dimmed on their tab with the release; a greyed dialog; a switch hides them.
   await p.click('.tabs > button:text-is("Control")');
   await p.waitForTimeout(150);
   const pl = await p.$$('.ribbon .rb.planned');
   check("the Control tab shows planned features with their release", pl.length >= 3 && /\d+\.\d+/.test(await p.textContent('.ribbon .rb.planned .pv')), String(pl.length));
-  await p.evaluate(() => document.querySelector(".ribbon .rb.planned[data-planned=pidtune]").click());
+  await p.evaluate(() => document.querySelector(".ribbon .rb.planned[data-planned=drivetune]").click());
   await p.waitForTimeout(200);
   check("a planned feature opens the dialog it will have, disabled", (await p.textContent(".dlg .pband")).includes("Available in") && (await p.$$(".dlg fieldset[disabled]")).length === 1);
   await p.click(".dlg .x");

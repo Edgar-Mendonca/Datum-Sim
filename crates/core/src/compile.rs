@@ -761,6 +761,16 @@ impl Ode for Runner<'_> {
     }
 }
 
+/// A block's numeric parameters, evaluated where it sits (model variables or its mask's).
+pub fn block_numbers(m: &Model, id: u32) -> Result<BTreeMap<String, f64>, String> {
+    let vars = eval_vars(m, &BTreeMap::new()).map_err(|e| e.into_iter().map(|i| i.msg).collect::<Vec<_>>().join("; "))?;
+    let (flat, _, scopes) = flatten(m, &mut vec![]);
+    let svars = scope_vars(&vars, &scopes, &mut vec![]);
+    let f = flat.iter().find(|f| f.id == id).ok_or("The block no longer exists.")?;
+    let p = params(f, &svars[f.scope], None)?;
+    Ok(p.m.into_iter().filter_map(|(k, v)| v.s().ok().map(|x| (k, x))).collect())
+}
+
 /// The model's variables as numbers (scalars only), for trim.
 pub fn var_values(m: &Model) -> Result<BTreeMap<String, f64>, Vec<Issue>> {
     Ok(eval_vars(m, &BTreeMap::new())?.into_iter().filter_map(|(k, v)| v.s().ok().map(|x| (k, x))).collect())

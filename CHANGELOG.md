@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.6 — 2026-11-10
+
+The PID Tuner.
+
+- **Control › PID Tuner** tunes a PID block in its real loop. The model is linearised with the loop cut at the PID's output, to give the plant the PID sees.
+- **Two sliders.** **Speed** sets the loop's crossover frequency and **Robustness** sets its phase margin. The gains follow as you move them.
+  - You see the gains now and after, the margins before and after, the closed-loop step response and |L|.
+  - It designs a PI when the plant allows one and a PID when it needs one, or you can choose which.
+- **Classic rules** alongside: Ziegler–Nichols (from the ultimate gain and period) and SIMC (from a first-order-plus-dead-time fit).
+- **Apply** sets P, I, D and N in one undoable edit. If a gain is a model variable (Kp), the variable changes.
+- Loop Analysis now says when the gain is zero because a block is at a limit.
+- The DC motor speed example's reference now steps at 0.2 s, so its starting point is not at the PID's limits.
+
+Checked: the DC motor's PID was tuned for 20 rad/s and 60°. Linearising the real model again with the new gains gives a 20 rad/s crossover and a 60° phase margin.
+
 ## 0.2.5 — 2026-11-10
 
 Operating points: find where the model rests, and analyse it there.

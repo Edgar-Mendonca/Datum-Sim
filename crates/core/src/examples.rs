@@ -211,14 +211,14 @@ fn motor_vars(b: &mut B) {
 fn dc_motor_speed() -> Model {
     let mut b = B::new(
         "DC motor speed control",
-        "A permanent-magnet DC motor (open the DC motor subsystem to see its equations) with a PID speed controller. The reference steps to 1 rad/s; at 3 s a load torque is applied and the controller recovers.",
+        "A permanent-magnet DC motor (open the DC motor subsystem to see its equations) with a PID speed controller. The reference steps to 1 rad/s at 0.2 s; at 3 s a load torque is applied and the controller recovers.",
         5.0,
     );
     motor_vars(&mut b);
     b.var("Kp", "100", "", "Proportional gain");
     b.var("Ki", "200", "1/s", "Integral gain");
     b.var("Kd", "10", "s", "Derivative gain");
-    let r = b.blk("Step", "Speed reference", 30.0, 80.0, &[("time", "0"), ("final", "1")]);
+    let r = b.blk("Step", "Speed reference", 30.0, 80.0, &[("time", "0.2"), ("final", "1")]);
     let e = b.blk("Sum", "Error", 150.0, 82.0, &[("signs", "+-")]);
     let c = b.blk("PID", "PID", 230.0, 78.0, &[("P", "Kp"), ("I", "Ki"), ("D", "Kd"), ("upper", "24"), ("lower", "-24")]);
     let tl = b.blk("Step", "Load torque", 230.0, 180.0, &[("time", "3"), ("final", "0.05")]);

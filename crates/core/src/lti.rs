@@ -6,7 +6,7 @@ use serde::Serialize;
 
 pub type M = Vec<Vec<f64>>;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, serde::Deserialize)]
 pub struct Ss {
     pub a: M,
     pub b: M,
@@ -579,7 +579,7 @@ pub fn loop_analysis(l: &Ss, w: &[f64]) -> Loop {
 
 // ---------------------------------------------------------------- PID design
 
-#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Serialize, serde::Deserialize, PartialEq)]
 pub struct Pid {
     pub p: f64,
     pub i: f64,

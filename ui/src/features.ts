@@ -17,8 +17,6 @@ const f = (id: string, tab: string, group: string, v: string, label: string, ico
 
 export const FEATS: Feat[] = [
   // ---- Stage A: control design (0.2.x → 0.3.0)
-  f("pidtune", "control", "Tuning", "0.2.6", "PID Tuner", "specs", "Select a PID and tune it with two sliders, speed and robustness; Ziegler–Nichols and SIMC alongside; one undoable Apply.",
-    [{ k: "pick", l: "PID", what: "a PID block" }, { k: "num", l: "Bandwidth", v: "10", u: "rad/s" }, { k: "num", l: "Phase margin", v: "60", u: "°" }, { k: "choice", l: "Rule", o: ["Loop shaping", "Ziegler–Nichols", "SIMC"] }]),
   f("drivetune", "control", "Tuning", "0.2.7", "Drive Tuning", "motor", "One click tunes a drive's current loop and speed loop from the motor's resistance, inductance and inertia.",
     [{ k: "pick", l: "Motor", what: "a motor block" }, { k: "num", l: "Current-loop bandwidth", v: "2000", u: "rad/s" }, { k: "num", l: "Speed-loop bandwidth", v: "200", u: "rad/s" }]),
   f("live", "control", "Live", "0.2.8", "Live Tuning", "var", "Sliders for variables marked as tunable: move one while the model runs and the scopes show the effect at once.",
