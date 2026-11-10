@@ -209,6 +209,13 @@ struct Induction {
     b: f64,
     w0: f64,
     wound: bool,
+    /// Leakage of each winding (stator first), the unsaturated Lm, and the saturation curve
+    /// i_m = ψ/Lm·(1 + (ψ/ψ_sat)^k) (ψ_sat = 0: linear); R_fe > 0: an iron-loss output.
+    ll: Vec<f64>,
+    lm: f64,
+    psat: f64,
+    ksat: f64,
+    rfe: f64,
 }
 
 impl Induction {
@@ -220,7 +227,51 @@ impl Induction {
         let n = 1 + self.nr();
         let pa: Vec<f64> = (0..n).map(|k| x[2 * k]).collect();
         let pb: Vec<f64> = (0..n).map(|k| x[2 * k + 1]).collect();
-        (mul(&self.minv, &pa), mul(&self.minv, &pb))
+        if self.psat <= 0.0 {
+            return (mul(&self.minv, &pa), mul(&self.minv, &pb));
+        }
+        let (ma, mb) = self.psi_m(x);
+        ((0..n).map(|k| (pa[k] - ma) / self.ll[k]).collect(), (0..n).map(|k| (pb[k] - mb) / self.ll[k]).collect())
+    }
+    /// The magnetising flux (α, β): ψ_m·(1/Lm(ψ_m) + Σ 1/L_lk) = Σ ψ_k/L_lk, with the saturated
+    /// Lm solved by Newton on the magnitude (the equation rises monotonically).
+    fn psi_m(&self, x: &[f64]) -> (f64, f64) {
+        let n = 1 + self.nr();
+        let s: f64 = self.ll.iter().map(|l| 1.0 / l).sum();
+        let (aa, ab) = (0..n).fold((0.0, 0.0), |(a, b), k| (a + x[2 * k] / self.ll[k], b + x[2 * k + 1] / self.ll[k]));
+        let amag = aa.hypot(ab);
+        if amag == 0.0 {
+            return (0.0, 0.0);
+        }
+        if self.psat <= 0.0 {
+            let m = amag / (1.0 / self.lm + s);
+            return (m * aa / amag, m * ab / amag);
+        }
+        let k = self.ksat;
+        let mut m = amag / (1.0 / self.lm + s);
+        for _ in 0..50 {
+            let r = (m / self.psat).powf(k);
+            let g = m * (1.0 + r) / self.lm + s * m - amag;
+            let dg = (1.0 + (k + 1.0) * r) / self.lm + s;
+            let step = g / dg;
+            m = (m - step).max(0.5 * m);
+            if step.abs() <= 1e-14 * m {
+                break;
+            }
+        }
+        (m * aa / amag, m * ab / amag)
+    }
+    /// Iron loss 1.5·|e_m|²/R_fe, with the magnetising EMF |e_m| = ω_s·|ψ_m| and ω_s the rotation
+    /// speed of the (first) rotor flux, found from the states alone.
+    fn iron(&self, x: &[f64], ia: &[f64], ib: &[f64]) -> f64 {
+        let m = 2 * (1 + self.nr());
+        let we = self.p * x[m];
+        let (pa, pb) = (x[2], x[3]);
+        let (da, db) = (-self.rr[0] * ia[1] - we * pb, -self.rr[0] * ib[1] + we * pa);
+        let r2 = pa * pa + pb * pb;
+        let ws = if r2 > 1e-18 { (pa * db - pb * da) / r2 } else { we };
+        let (ma, mb) = self.psi_m(x);
+        1.5 * (ws * ma.hypot(mb)).powi(2) / self.rfe
     }
     fn te(&self, x: &[f64], ia: &[f64], ib: &[f64]) -> f64 {
         1.5 * self.p * (x[0] * ib[0] - x[1] * ia[0])
@@ -252,6 +303,9 @@ impl Rt for Induction {
             let (ra, rb) = park(ia[1], ib[1], self.p * x[m + 1]);
             let (a, b, c) = inv_clarke(ra, rb);
             y[6..9].copy_from_slice(&[a, b, c]);
+        }
+        if self.rfe > 0.0 {
+            *y.last_mut().unwrap() = self.iron(x, &ia, &ib);
         }
     }
     fn deriv(&self, _: &Ctx, x: &[f64], u: &[f64], dx: &mut [f64]) {
@@ -969,8 +1023,19 @@ fn build_inner(kind: &str, p: &Pv, iw: &[usize]) -> Result<(Box<dyn Rt>, Vec<usi
             }
             let minv = inverse(&mm)?;
             let pp = pos(p, "p")?;
-            let m = Induction { rs: nonneg(p, "Rs")?, rr, minv, p: pp, j: pos(p, "J")?, b: nonneg(p, "b")?, w0: num(p, "w0")?, wound };
-            ok(m, if wound { vec![1, 1, 3, 1, 3] } else { vec![1, 1, 3, 1] })
+            let mut ll = vec![lls];
+            ll.extend(&llr);
+            let g = |k: &str| p.m.get(k).and_then(|v| v.s().ok()).unwrap_or(0.0);
+            let (psat, ksat, rfe) = (g("psat"), if g("ksat") > 0.0 { g("ksat") } else { 6.0 }, g("Rfe"));
+            if psat < 0.0 || rfe < 0.0 {
+                return Err("the saturation flux and the iron-loss resistance cannot be negative".into());
+            }
+            let m = Induction { rs: nonneg(p, "Rs")?, rr, minv, p: pp, j: pos(p, "J")?, b: nonneg(p, "b")?, w0: num(p, "w0")?, wound, ll, lm, psat, ksat, rfe };
+            let mut w = if wound { vec![1, 1, 3, 1, 3] } else { vec![1, 1, 3, 1] };
+            if rfe > 0.0 {
+                w.push(1);
+            }
+            ok(m, w)
         }
         "PMSM3" | "SynRM" => {
             need(iw, &[3, 1], &["stator voltages", "load torque"])?;

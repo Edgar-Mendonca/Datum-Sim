@@ -187,6 +187,52 @@ mod tests {
         }
     }
 
+    /// Saturation at no load: at synchronous speed (a huge inertia holds it) the rotor carries no
+    /// current, so V = Rs·I + jω(Lls·I + ψ_m) with I = ψ_m/Lm·(1 + (ψ_m/ψ_sat)^k). The stator
+    /// current's peak matches that, and is larger than without saturation; the iron loss is
+    /// 1.5·(ω·ψ_m)²/R_fe.
+    #[test]
+    fn induction_saturation_and_iron_loss() {
+        let w = 2.0 * std::f64::consts::PI * 50.0;
+        let run = |psat: &str| {
+            let mut m = Mk::new(1.0, "rk45");
+            m.d.m.sim.rtol = 1e-8;
+            m.d.m.sim.max_step = 1e-4;
+            let v = m.add("ThreePhase", &[("Vll", "400"), ("f", "50")]);
+            let tl = m.add("Constant", &[("value", "0")]);
+            let im = m.add("InductionSC", &[("Rs", "0.5"), ("Lls", "0.003"), ("Lm", "0.1"), ("Llr", "0.003"), ("Rr", "0.4"), ("p", "2"), ("J", "1e9"), ("w0", &format!("{}", w / 2.0)), ("psat", psat), ("ksat", "6"), ("Rfe", "300")]);
+            let sc = m.add("Scope", &[("n", "2")]);
+            m.wire(v, 0, im, 0);
+            m.wire(tl, 0, im, 1);
+            m.wire(im, 2, sc, 0);
+            m.wire(im, 4, sc, 1);
+            let r = m.run();
+            let n0 = r.t.partition_point(|t| *t < 0.9);
+            let peak = r.y[0][n0..].iter().fold(0.0f64, |a, v| a.max(v.abs()));
+            (peak, *r.y[3].last().unwrap())
+        };
+        let vp = 400.0 * 2f64.sqrt() / 3f64.sqrt();
+        // Solve the no-load phasor equation for ψ_m by bisection.
+        let solve = |psat: f64| {
+            let cur = |psi: f64| psi / 0.1 * (1.0 + if psat > 0.0 { (psi / psat).powi(6) } else { 0.0 });
+            let (mut lo, mut hi) = (0.0, 2.0);
+            for _ in 0..200 {
+                let mid = 0.5 * (lo + hi);
+                let i = cur(mid);
+                if ((0.5 * i).powi(2) + (w * (0.003 * i + mid)).powi(2)).sqrt() > vp { hi = mid } else { lo = mid }
+            }
+            (cur(lo), lo)
+        };
+        let (i_lin, _) = solve(0.0);
+        let (i_sat, psi) = solve(0.9);
+        let (p_lin, _) = run("0");
+        let (p_sat, pfe) = run("0.9");
+        assert!((p_lin / i_lin - 1.0).abs() < 2e-3 && (p_sat / i_sat - 1.0).abs() < 2e-3, "lin {p_lin} vs {i_lin}; sat {p_sat} vs {i_sat}");
+        assert!(p_sat > 1.3 * p_lin, "{p_sat} {p_lin}");
+        let want = 1.5 * (w * psi).powi(2) / 300.0;
+        assert!((pfe / want - 1.0).abs() < 5e-3, "{pfe} vs {want}");
+    }
+
     /// Inverter losses with currents (10, −5, −5) A on 600 V: conduction 1.1·20 + 0.01·150 = 23.5 W,
     /// switching 10 kHz·2 mJ·(20/100)·(600/300) = 8 W. A thermal network under a 100 W step:
     /// T = 40 + Σ 100·Rᵢ·(1 − e^(−t/τᵢ)).

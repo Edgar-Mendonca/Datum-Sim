@@ -340,8 +340,15 @@ fn im_params(double: bool) -> Vec<P> {
         v.push(n("Rr2", "Inner cage resistance Rr2", "0.15", "Ω", "Running cage"));
         v.push(n("Llr2", "Inner cage leakage Llr2", "0.0058", "H", ""));
     }
-    v.extend([n("p", "Pole pairs p", "2", "", ""), n("J", "Inertia J", "0.07", "kg·m²", ""), n("b", "Viscous friction b", "0", "N·m·s/rad", ""), n("w0", "Initial speed", "0", "rad/s", "")]);
+    v.extend([n("p", "Pole pairs p", "2", "", ""), n("J", "Inertia J", "0.07", "kg·m²", ""), n("b", "Viscous friction b", "0", "N·m·s/rad", ""), n("w0", "Initial speed", "0", "rad/s", ""),
+              n("psat", "Saturation flux ψ_sat", "0", "Wb", "0 = no saturation. The magnetising current is ψ/Lm·(1 + (ψ/ψ_sat)^k), so Lm halves at ψ_sat"),
+              n("ksat", "Saturation sharpness k", "6", "", "Larger = a sharper knee"),
+              n("Rfe", "Iron-loss resistance R_fe", "0", "Ω", "0 = none; above 0 the block adds an output: the iron loss P_fe (W)")]);
     v
+}
+
+fn has_rfe(b: &Block) -> bool {
+    param(b, "Rfe").trim().parse::<f64>().is_ok_and(|v| v > 0.0)
 }
 
 pub fn def(kind: &str) -> Option<Def> {
@@ -400,8 +407,9 @@ pub fn ports(b: &Block) -> (usize, usize) {
         "PMSM" => (3, 5),
         "DCSepEx" | "SyncField" => (3, 5),
         "DCShunt" | "DCCompound" => (2, 5),
-        "DCSeries" | "InductionSC" | "InductionDC" | "PMSM3" | "SynRM" => (2, 4),
-        "InductionWR" => (3, 5),
+        "InductionSC" | "InductionDC" => (2, if has_rfe(b) { 5 } else { 4 }),
+        "DCSeries" | "PMSM3" | "SynRM" => (2, 4),
+        "InductionWR" => (3, if has_rfe(b) { 6 } else { 5 }),
         "BLDC" => (2, 5),
         "Stepper" => (3, 5),
         "ThreePhase" => (0, 1),
@@ -425,8 +433,8 @@ pub fn port_names(b: &Block) -> (Vec<String>, Vec<String>) {
         "DCSepEx" => (s(&["V_a", "V_f", "T_L"]), s(&["ω", "i_a", "i_f", "T_e", "θ"])),
         "DCShunt" | "DCCompound" => (s(&["V", "T_L"]), s(&["ω", "i_a", "i_f", "T_e", "θ"])),
         "DCSeries" => (s(&["V", "T_L"]), s(&["ω", "i", "T_e", "θ"])),
-        "InductionSC" | "InductionDC" | "PMSM3" | "SynRM" => (s(&["v_abc", "T_L"]), s(&["ω", "T_e", "i_abc", "θ"])),
-        "InductionWR" => (s(&["v_abc", "vr_abc", "T_L"]), s(&["ω", "T_e", "i_abc", "θ", "ir_abc"])),
+        "InductionSC" | "InductionDC" | "PMSM3" | "SynRM" => (s(&["v_abc", "T_L"]), s(&["ω", "T_e", "i_abc", "θ", "P_fe"])),
+        "InductionWR" => (s(&["v_abc", "vr_abc", "T_L"]), s(&["ω", "T_e", "i_abc", "θ", "ir_abc", "P_fe"])),
         "SyncField" => (s(&["v_abc", "v_f", "T_L"]), s(&["ω", "T_e", "i_abc", "i_f", "θ"])),
         "BLDC" => (s(&["V", "T_L"]), s(&["ω", "i", "T_e", "θ", "hall"])),
         "Stepper" => (s(&["v_A", "v_B", "T_L"]), s(&["ω", "T_e", "θ", "i_A", "i_B"])),

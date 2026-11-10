@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.4 — 2026-11-10
+
+Magnetic saturation and iron losses in the induction machine.
+
+- **Saturation flux ψ_sat** (squirrel-cage, double-cage and wound-rotor motors): the magnetising current becomes ψ/Lm·(1 + (ψ/ψ_sat)^k), so the magnetising inductance halves at ψ_sat. A sharpness k sets the knee. 0 keeps the machine linear, as before.
+- **Iron-loss resistance R_fe**: above 0, the motor gets one more output, the iron loss P_fe = 1.5·|e_m|²/R_fe from the magnetising EMF. It is an estimate for loss and efficiency studies; the model's currents do not include it.
+- Models made before this release run exactly as they did.
+
+Checked: at no load and synchronous speed, the stator current's peak matches the no-load phasor equation within 0.2 %, linear and saturated. Saturation raises it by more than 30 % on 400 V. The iron loss matches 1.5·(ω·ψ_m)²/R_fe within 0.5 %.
+
+Saturation of the PMSM is not in this release.
+
 ## 0.3.3 — 2026-11-10
 
 Inverter losses and junction temperature.
