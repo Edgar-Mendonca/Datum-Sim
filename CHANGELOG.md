@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.4 — 2026-11-10
+
+More views of the loop in Control › Loop Analysis.
+
+- **Nyquist**: the loop L(jω) with the −1 point. It shows the number of encirclements, the open-loop poles in the right half-plane, and the stability verdict.
+- **Root locus**: the closed-loop poles as the loop gain is scaled from 0.001 to 1000 times. It marks the open-loop poles and the poles at today's gain.
+- **Sensitivity**: |S| and |T| over frequency, and the peak sensitivity Ms as a robustness figure.
+- Each view also has its own button in the Control tab.
+
+Checked against textbook loops: K/(s+1)³ has its phase crossover at √3 rad/s and is stable for K < 8. At K = 10 it has two right-half-plane closed-loop poles and two encirclements.
+
 ## 0.2.3 — 2026-11-10
 
 Control design starts: analyse the whole model, not one block.

@@ -131,7 +131,7 @@ export const Ribbon = () => (
     </Show>
     <Show when={tab() === "control"}>
       <G l="Analysis Points" h="points"><B big i="wire" l="Loop Opening" run={() => setPoint("open")} title="Cut the loop on the selected wire's signal, for open-loop analysis" /><S><B i="wire" l="Input" run={() => setPoint("in")} title="Add a test signal on the selected wire's signal" /><B i="wire" l="Output" run={() => setPoint("out")} title="Measure the selected wire's signal" /><B i="del" l="Remove Point" run={() => setPoint("")} /></S></G>
-      <G l="Linearise" h="loop"><B big i="bode" l="Loop Analysis" run={() => loopAnalysis()} title="Linearise the whole model between its analysis points: Bode, margins, step and poles" /><S><B i="specs" l="Step Response" run={() => loopAnalysis("step")} /><B i="solver" l="Poles" run={() => loopAnalysis("poles")} /></S></G>
+      <G l="Linearise" h="loop"><B big i="bode" l="Loop Analysis" run={() => loopAnalysis()} title="Linearise the whole model between its analysis points: Bode, margins, step and poles" /><S><B i="bode" l="Nyquist" run={() => loopAnalysis("nyquist")} /><B i="solver" l="Root Locus" run={() => loopAnalysis("rlocus")} /><B i="specs" l="Sensitivity" run={() => loopAnalysis("sens")} /></S><S><B i="specs" l="Step Response" run={() => loopAnalysis("step")} /><B i="solver" l="Poles" run={() => loopAnalysis("poles")} /></S></G>
       <PlannedGroups tab="control" />
     </Show>
     <Show when={tab() === "modules"}>

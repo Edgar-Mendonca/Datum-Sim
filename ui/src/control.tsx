@@ -9,9 +9,7 @@ import { OKABE } from "./scope";
 
 /** Tabs of the Loop analysis dialog, in the order they arrived. */
 const ALL_TABS: [string, string][] = [["bode", "Bode"], ["nyquist", "Nyquist"], ["rlocus", "Root locus"], ["sens", "Sensitivity"], ["step", "Step and impulse"], ["poles", "Poles"]];
-/** The tabs built so far (Nyquist, root locus and sensitivity arrive in 0.2.4). */
-const ON = ["bode", "step", "poles"];
-export const LOOP_TABS = ALL_TABS.filter(([k]) => ON.includes(k));
+export const LOOP_TABS = ALL_TABS;
 
 /** Put an analysis point on the selected wire's signal. */
 export const setPoint = (point: string) => {

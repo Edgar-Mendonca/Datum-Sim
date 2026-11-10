@@ -394,6 +394,15 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.click('.dlg .dtabs button:has-text("Poles")');
   await p.waitForTimeout(200);
   check("the Poles tab draws the poles", (await p.$$(".dlg .xyplot path")).length >= 1);
+  await p.click('.dlg .dtabs button:has-text("Nyquist")');
+  await p.waitForTimeout(200);
+  check("the Nyquist tab draws L(jω) and the −1 point", (await p.$$(".dlg .xyplot path")).length >= 3 && (await p.textContent(".dlg")).includes("encirclement"));
+  await p.click('.dlg .dtabs button:has-text("Root locus")');
+  await p.waitForTimeout(200);
+  check("the root locus draws the poles as the gain varies", (await p.$$(".dlg .xyplot circle")).length > 20);
+  await p.click('.dlg .dtabs button:has-text("Sensitivity")');
+  await p.waitForTimeout(200);
+  check("the Sensitivity tab plots S and T with Ms", (await p.$$(".dlg .uplot")).length === 1 && (await p.textContent(".dlg")).includes("Peak sensitivity Ms"));
   await p.keyboard.press("Escape");
   await p.click('.tabs > button:text-is("Model")');
 
