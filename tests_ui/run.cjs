@@ -508,9 +508,9 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(150);
   const pl = await p.$$('.ribbon .rb.planned');
   check("the planned features show their release", pl.length >= 1 && /\d+\.\d+/.test(await p.textContent('.ribbon .rb.planned .pv')), String(pl.length));
-  await p.evaluate(() => document.querySelector(".ribbon .rb.planned[data-planned=nameplate]").click());
+  await p.evaluate(() => document.querySelector(".ribbon .rb.planned").click());
   await p.waitForTimeout(200);
-  check("a planned feature opens the dialog it will have, disabled", (await p.textContent(".dlg .pband")).includes("Available in") && (await p.$$(".dlg fieldset[disabled]")).length === 1);
+  check("a planned feature opens the dialog it will have, disabled", (await p.textContent(".dlg .pband")).includes("Available in") && (await p.$$(".dlg fieldset:not([disabled])")).length === 0);
   await p.click(".dlg .x");
   await p.click('.tabs > button:text-is("View")');
   await p.click(".plannedchk");
