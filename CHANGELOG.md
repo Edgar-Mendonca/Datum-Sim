@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.2 — 2026-11-10
+
+Space-vector modulation and dead time.
+
+- **Inverter › Modulation: space vector** adds the common-mode offset −(max + min)/2 to the references. The linear range then reaches 2/√3 ≈ 1.155 instead of 1, about 15 % more voltage from the same DC link. It works in the average and the switched model.
+- **PWM › Modulation: space vector** does the same for three gate references.
+- **Inverter › Dead time**: above 0, the inverter takes the phase currents as a third input. Each leg loses V_dc·t_d·f_s against its current, the average effect of the dead time. It fades smoothly near zero current, over a current band you set.
+
+Checked: references of amplitude 1.1 give phase voltages of exactly 1.1·V_dc/2 with space vector and are clipped without it. A dead time of 2 µs at 10 kHz on 600 V shifts the phase voltages by −4/3 and +2/3 of 12 V, as the formula says.
+
 ## 0.3.1 — 2026-11-10
 
 Drives in depth begins: spectrum and harmonic distortion.

@@ -530,6 +530,36 @@ struct Pwm {
     /// Inverter output: phase voltages from the legs (needs Vdc); else ±1 or 0/1 gate signals.
     inverter: bool,
     unipolar: bool,
+    /// Space-vector modulation (common-mode offset), and the dead-time error td·fc with its band.
+    sv: bool,
+    dt: f64,
+    iband: f64,
+}
+
+/// References with the space-vector common-mode offset −(max + min)/2 (three phases), or as they are.
+fn modulate(u: &[f64], n: usize, sv: bool) -> Vec<f64> {
+    let m = &u[..n];
+    if sv && n == 3 {
+        let (hi, lo) = (m[0].max(m[1]).max(m[2]), m[0].min(m[1]).min(m[2]));
+        m.iter().map(|v| v - 0.5 * (hi + lo)).collect()
+    } else {
+        m.to_vec()
+    }
+}
+
+/// Phase voltages from three pole voltages (common mode removed), with the dead-time error:
+/// each pole loses V_dc·td·fc against the sign of its current (smoothed over the current band).
+fn phases(pole: [f64; 3], vdc: f64, dt: f64, iband: f64, i: Option<&[f64]>, y: &mut [f64]) {
+    let mut p = pole;
+    if let (true, Some(i)) = (dt > 0.0, i) {
+        for k in 0..3 {
+            p[k] -= vdc * dt * (i[k] / iband).tanh();
+        }
+    }
+    let mean = (p[0] + p[1] + p[2]) / 3.0;
+    for k in 0..3 {
+        y[k] = p[k] - mean;
+    }
 }
 impl Rt for Pwm {
     fn init(&mut self, _: &mut [f64]) {
@@ -544,10 +574,8 @@ impl Rt for Pwm {
         let leg = |k: usize| if self.on[k] { 1.0 } else { -1.0 };
         if self.inverter {
             let vdc = u[n];
-            let mean = (0..n).map(leg).sum::<f64>() / n as f64;
-            for (k, yk) in y.iter_mut().enumerate() {
-                *yk = 0.5 * vdc * (leg(k) - mean);
-            }
+            let pole = [0.5 * vdc * leg(0), 0.5 * vdc * leg(1), 0.5 * vdc * leg(2)];
+            phases(pole, vdc, self.dt, self.iband, u.get(n + 1..n + 4), y);
         } else {
             for (k, yk) in y.iter_mut().enumerate() {
                 *yk = if self.unipolar { (leg(k) + 1.0) / 2.0 } else { leg(k) };
@@ -556,8 +584,9 @@ impl Rt for Pwm {
     }
     fn update(&mut self, c: &Ctx, _: &mut [f64], u: &[f64]) {
         let cr = carrier(c.t, self.fc);
+        let m = modulate(u, self.on.len(), self.sv);
         for (k, on) in self.on.iter_mut().enumerate() {
-            *on = u[k] > cr;
+            *on = m[k] > cr;
         }
     }
     fn next_hit(&self, t: f64) -> f64 {
@@ -574,23 +603,27 @@ impl Rt for Pwm {
     }
     fn zc(&self, c: &Ctx, _: &[f64], u: &[f64], z: &mut [f64]) {
         let cr = carrier(c.t, self.fc);
+        let m = modulate(u, self.on.len(), self.sv);
         for (k, zk) in z.iter_mut().enumerate() {
-            *zk = u[k] - cr;
+            *zk = m[k] - cr;
         }
     }
     cb!();
 }
 
-/// Average-model inverter: phase voltages Vdc/2·(m − mean m), references limited to ±1.
+/// Average-model inverter: phase voltages Vdc/2·(m − mean m), references limited to ±1 (after
+/// the space-vector offset, if chosen), with the dead-time error.
 #[derive(Clone)]
-struct InverterAvg;
+struct InverterAvg {
+    sv: bool,
+    dt: f64,
+    iband: f64,
+}
 impl Rt for InverterAvg {
     fn out(&self, _: &Ctx, _: &[f64], u: &[f64], y: &mut [f64]) {
-        let m: Vec<f64> = (0..3).map(|k| u[k].clamp(-1.0, 1.0)).collect();
-        let mean = m.iter().sum::<f64>() / 3.0;
-        for k in 0..3 {
-            y[k] = 0.5 * u[3] * (m[k] - mean);
-        }
+        let m = modulate(u, 3, self.sv);
+        let pole = [0.5 * u[3] * m[0].clamp(-1.0, 1.0), 0.5 * u[3] * m[1].clamp(-1.0, 1.0), 0.5 * u[3] * m[2].clamp(-1.0, 1.0)];
+        phases(pole, u[3], self.dt, self.iband, u.get(4..7), y);
     }
     cb!();
 }
@@ -940,17 +973,31 @@ fn build_inner(kind: &str, p: &Pv, iw: &[usize]) -> Result<(Box<dyn Rt>, Vec<usi
             ok(ThreePhase { amp: vll * SQ3.recip() * 2f64.sqrt(), w: 2.0 * PI * num(p, "f")?, ph: num(p, "phase")? }, vec![3])
         }
         "Inverter" => {
-            need(iw, &[3, 1], &["modulation", "DC voltage"])?;
-            if p.t.get("model").map(|s| s.as_str()) == Some("switched (PWM)") {
-                ok(Pwm { fc: pos(p, "fc")?, on: vec![false; 3], inverter: true, unipolar: false }, vec![3])
+            let sv = p.t.get("mod").map(|s| s.as_str()) == Some("space vector");
+            let (fc, td) = (pos(p, "fc")?, p.m.get("td").and_then(|m| m.s().ok()).unwrap_or(0.0));
+            if td < 0.0 || td * fc >= 0.5 {
+                return Err("the dead time must be at least 0 and well below half a switching period".into());
+            }
+            let iband = p.m.get("iband").and_then(|m| m.s().ok()).unwrap_or(0.1).max(1e-9);
+            if td > 0.0 {
+                need(iw, &[3, 1, 3], &["modulation", "DC voltage", "phase currents"])?;
             } else {
-                ok(InverterAvg, vec![3])
+                need(iw, &[3, 1], &["modulation", "DC voltage"])?;
+            }
+            if p.t.get("model").map(|s| s.as_str()) == Some("switched (PWM)") {
+                ok(Pwm { fc, on: vec![false; 3], inverter: true, unipolar: false, sv, dt: td * fc, iband }, vec![3])
+            } else {
+                ok(InverterAvg { sv, dt: td * fc, iband }, vec![3])
             }
         }
         "PWM" => {
             let w = iw.first().cloned().unwrap_or(1);
             let unipolar = p.t.get("levels").map(|s| s.as_str()) == Some("0 / 1");
-            ok(Pwm { fc: pos(p, "fc")?, on: vec![false; w], inverter: false, unipolar }, vec![w])
+            let sv = p.t.get("mod").map(|s| s.as_str()) == Some("space vector");
+            if sv && w != 3 {
+                return Err("space-vector modulation needs three references".into());
+            }
+            ok(Pwm { fc: pos(p, "fc")?, on: vec![false; w], inverter: false, unipolar, sv, dt: 0.0, iband: 1.0 }, vec![w])
         }
         "Encoder" => {
             need(iw, &[1], &["angle"])?;

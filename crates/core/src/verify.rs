@@ -187,6 +187,43 @@ mod tests {
         }
     }
 
+    /// Space-vector modulation: references of amplitude 1.1 (beyond the sine-PWM limit of 1) give
+    /// phase voltages of exactly 1.1·V_dc/2 with the common-mode offset, and are clipped without
+    /// it. Dead time: with m = 0 and currents (10, −5, −5) A, the poles lose ±V_dc·td·fc, so
+    /// v_a = −4/3·e and v_b = v_c = 2/3·e with e = V_dc·td·fc.
+    #[test]
+    fn svpwm_and_dead_time() {
+        let run = |modn: &str| {
+            let mut m = Mk::new(0.02, "rk4");
+            m.d.m.sim.step = 1e-5;
+            let src = m.add("ThreePhase", &[("Vll", &format!("{}", 1.1 * 3f64.sqrt() / 2f64.sqrt())), ("f", "50")]);
+            let dc = m.add("Constant", &[("value", "2")]);
+            let inv = m.add("Inverter", &[("mod", modn)]);
+            let sc = m.add("Scope", &[]);
+            m.wire(src, 0, inv, 0);
+            m.wire(dc, 0, inv, 1);
+            m.wire(inv, 0, sc, 0);
+            let r = m.run();
+            r.t.iter().zip(&r.y[0]).map(|(t, v)| (v - 1.1 * (2.0 * std::f64::consts::PI * 50.0 * t).cos()).abs()).fold(0.0, f64::max)
+        };
+        assert!(run("space vector") < 1e-9, "{}", run("space vector"));
+        assert!(run("sine") > 0.05, "{}", run("sine"));
+        let mut m = Mk::new(0.001, "rk4");
+        let z = m.add("Constant", &[("value", "[0 0 0]")]);
+        let dc = m.add("Constant", &[("value", "600")]);
+        let i = m.add("Constant", &[("value", "[10 -5 -5]")]);
+        let inv = m.add("Inverter", &[("td", "2e-6"), ("fc", "10000")]);
+        let sc = m.add("Scope", &[]);
+        m.wire(z, 0, inv, 0);
+        m.wire(dc, 0, inv, 1);
+        m.wire(i, 0, inv, 2);
+        m.wire(inv, 0, sc, 0);
+        let r = m.run();
+        let e = 600.0 * 2e-6 * 10000.0 * (50f64).tanh();
+        let v: Vec<f64> = r.y.iter().map(|y| *y.last().unwrap()).collect();
+        assert!((v[0] + 4.0 / 3.0 * e).abs() < 1e-9 && (v[1] - 2.0 / 3.0 * e).abs() < 1e-9 && (v[2] - 2.0 / 3.0 * e).abs() < 1e-9, "{v:?}");
+    }
+
     /// Algebraic loops are solved: y = u − k·y gives u/(1 + k); y + y³ = 2 gives 1; and inside
     /// a dynamic loop x' = −y, y = x − k·y the state decays as e^(−t/(1+k)).
     #[test]
