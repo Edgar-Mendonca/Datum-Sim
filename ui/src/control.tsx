@@ -3,7 +3,8 @@
 import { For, Show, createSignal, JSX } from "solid-js";
 import uPlot from "uplot";
 import { num, invoke } from "./api";
-import { openDialog, act, selWires, toast, results } from "./store";
+import { openDialog, closeDialog, act, selWires, toast, results, out } from "./store";
+import type { OpPoint } from "./api";
 import { Dialog, Tabs } from "./ui";
 import { OKABE } from "./scope";
 
@@ -50,14 +51,14 @@ const deg = (v: number | null | undefined) => v == null ? "∞" : `${num(v, 4)}�
 const rads = (v: number | null | undefined) => v == null ? "" : ` at ${num(v, 4)} rad/s`;
 
 /** Linearise the model at an operating point and look at one input–output pair. */
-export const loopAnalysis = (first = "bode") => openDialog(() => {
-  const [at, setAt] = createSignal("initial"), [t, setT] = createSignal(1);
+export const loopAnalysis = (first = "bode", op?: number) => openDialog(() => {
+  const [at, setAt] = createSignal(op != null ? `op${op}` : "initial"), [t, setT] = createSignal(1);
   const [inp, setInp] = createSignal(0), [outp, setOutp] = createSignal(0);
   const [tab, setTab] = createSignal(first), [busy, setBusy] = createSignal(false);
   const [r, setR] = createSignal<any>(null);
   const go = async () => {
     setBusy(true);
-    try { setR(await invoke<any>("lin_analysis", { at: at() === "time" ? { kind: "time", t: t() } : { kind: "initial" }, inp: inp(), outp: outp() })); }
+    try { setR(await invoke<any>("lin_analysis", { at: at() === "time" ? { kind: "time", t: t() } : at().startsWith("op") ? { kind: "op", i: +at().slice(2) } : { kind: "initial" }, inp: inp(), outp: outp() })); }
     catch (e) { setR({ error: String(e) }); }
     finally { setBusy(false); }
   };
@@ -99,7 +100,7 @@ export const loopAnalysis = (first = "bode") => openDialog(() => {
   return <Dialog title="Loop analysis" wide help="loop" extra={<button class="btn" onClick={copy} disabled={!r() || r().error}>Copy A, B, C, D</button>}>
     <div class="lahead form">
       <label>Operating point</label>
-      <div class="larow"><select class="laat" value={at()} onChange={e => { setAt(e.currentTarget.value); go(); }}><option value="initial">Initial state</option><option value="time" disabled={!results()}>Time in the last run</option></select>
+      <div class="larow"><select class="laat" value={at()} onChange={e => { setAt(e.currentTarget.value); go(); }}><option value="initial">Initial state</option><option value="time" disabled={!results()}>Time in the last run</option><For each={out()?.ops ?? []}>{(o, i) => <option value={`op${i()}`}>Operating point: {o.name}</option>}</For></select>
         <Show when={at() === "time"}><input class="mono latime" value={t()} onChange={e => { const v = +e.currentTarget.value; if (isFinite(v)) { setT(v); go(); } }} /> s</Show></div>
       <Show when={r() && !r().error}>
         <label>From</label><div><select class="lain" value={inp()} onChange={e => { setInp(+e.currentTarget.value); go(); }}><For each={r().inputs}>{(n: string, i) => <option value={i()}>{n}</option>}</For></select></div>
@@ -114,6 +115,63 @@ export const loopAnalysis = (first = "bode") => openDialog(() => {
         <For each={r().notes}>{(n: string) => <p class="muted small">{n}</p>}</For>
         <Show when={!r().loop}><p class="muted small">Margins, Nyquist, sensitivity and the root locus are for a loop: choose a loop opening as both From and To.</p></Show>
       </Show>
+    </Show>
+  </Dialog>;
+});
+
+/** Control › Trim: find where the model rests with chosen outputs held. */
+export const trimDialog = () => openDialog(() => {
+  const [info, setInfo] = createSignal<[string[], number] | null>(null), [err, setErr] = createSignal("");
+  const [hold, setHold] = createSignal<Record<string, string>>({}), [free, setFree] = createSignal<string[]>([]);
+  const [res, setRes] = createSignal<any>(null), [busy, setBusy] = createSignal(false), [name, setName] = createSignal("");
+  invoke<[string[], number]>("trim_info").then(setInfo).catch(e => setErr(String(e)));
+  const find = async () => {
+    setBusy(true); setRes(null);
+    const h = Object.entries(hold()).filter(([, v]) => v.trim() !== "" && isFinite(+v)).map(([k, v]) => [k, +v]);
+    try { setRes(await invoke<any>("trim", { spec: { hold: h, free: free(), t: 0 } })); } catch (e) { setRes({ error: String(e) }); } finally { setBusy(false); }
+  };
+  const save = () => {
+    const r = res(); if (!r || r.error) return;
+    const n = name().trim() || `Point ${(out()?.ops?.length ?? 0) + 1}`;
+    act({ SetOps: { ops: [...(out()?.ops ?? []), { ...r.op, name: n }] } }).then(() => { toast(`Operating point “${n}” saved.`, true); closeDialog(); });
+  };
+  return <Dialog title="Trim: find an operating point" wide help="trim">
+    <Show when={!err()} fallback={<p class="issue">{err()}</p>}>
+      <Show when={info()} fallback={<p class="muted"><i class="spin" /> Reading the model…</p>}>
+        <p class="muted small">Trim finds the states where every derivative is zero (the model at rest), with the outputs you choose held at their values. Outputs are the model's analysis-point outputs; free variables are model variables trim may change (a set point, a load, a supply).</p>
+        <h4>Hold these outputs</h4>
+        <Show when={info()![0].length} fallback={<p class="muted">No outputs: mark a wire as an analysis Output (Control › Output) to hold its value.</p>}>
+          <table class="tbl"><tbody><For each={info()![0]}>{n => <tr><td>{n}</td><td><input class="mono trimhold" placeholder="free" value={hold()[n] ?? ""} onInput={e => setHold({ ...hold(), [n]: e.currentTarget.value })} /></td></tr>}</For></tbody></table>
+        </Show>
+        <h4>Variables trim may change</h4>
+        <Show when={out()?.vars.length} fallback={<p class="muted">The model has no variables.</p>}>
+          <div class="trimvars"><For each={out()!.vars}>{v => <label class="chk"><input type="checkbox" checked={free().includes(v.name)} onChange={e => setFree(e.currentTarget.checked ? [...free(), v.name] : free().filter(x => x !== v.name))} />{v.name} <span class="muted">= {v.expr}</span></label>}</For></div>
+        </Show>
+        <p><button class="btn pri trimgo" disabled={busy()} onClick={find}>{busy() ? "Searching…" : "Find operating point"}</button></p>
+        <Show when={res()}><Show when={!res().error} fallback={<p class="issue">{res().error}</p>}>
+          <p class={res().met ? "ok" : "issue"}>{res().met ? `Found in ${res().iters} iterations: the model is at rest.` : "Not found exactly:"}</p>
+          <For each={res().unmet}>{(u: string) => <p class="issue small">{u}</p>}</For>
+          <table class="tbl facts"><tbody>
+            <For each={res().outputs}>{(o: [string, number]) => <tr><td>{o[0]}</td><td class="r mono">{num(o[1], 6)}</td></tr>}</For>
+            <For each={res().op.vars}>{(o: [string, number]) => <tr><td>Variable {o[0]}</td><td class="r mono">{num(o[1], 6)}</td></tr>}</For>
+            <tr><td>States</td><td class="r mono">{res().op.x.length}</td></tr>
+          </tbody></table>
+          <div class="larow"><input class="trimname" placeholder="Name, e.g. 2 m level" value={name()} onInput={e => setName(e.currentTarget.value)} /><button class="btn pri trimsave" onClick={save}>Save operating point</button></div>
+        </Show></Show>
+      </Show>
+    </Show>
+  </Dialog>;
+});
+
+/** Control › Operating Points: the saved points; linearise at one or delete it. */
+export const opsDialog = () => openDialog(() => {
+  const ops = () => out()?.ops ?? [];
+  const del = (i: number) => act({ SetOps: { ops: ops().filter((_, k) => k !== i) } });
+  return <Dialog title="Operating points" help="trim">
+    <Show when={ops().length} fallback={<p class="muted">No operating points yet. Control › Trim finds one and saves it here.</p>}>
+      <table class="tbl"><thead><tr><th>Name</th><th>Holds</th><th>Variables</th><th /></tr></thead><tbody><For each={ops()}>{(o: OpPoint, i) => <tr>
+        <td>{o.name}</td><td class="muted">{o.note}</td><td class="mono small">{o.vars.map(v => `${v[0]} = ${num(v[1], 4)}`).join(", ")}</td>
+        <td><button class="btn sm" onClick={() => { closeDialog(); setTimeout(() => loopAnalysis("bode", i())); }}>Loop analysis here</button> <button class="btn sm" onClick={() => del(i())}>Delete</button></td></tr>}</For></tbody></table>
     </Show>
   </Dialog>;
 });

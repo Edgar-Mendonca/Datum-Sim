@@ -26,6 +26,8 @@ pub enum Op {
     /// An analysis point on a wire's signal ("in", "out", "open" or "" to remove). Like a name,
     /// it belongs to the signal, so every wire from the same output takes it.
     SetPoint { id: u32, point: String },
+    /// Replace the saved operating points.
+    SetOps { ops: Vec<crate::model::OpPoint> },
     /// Fill colour of blocks ("" = none).
     SetColor { ids: Vec<u32>, color: String },
     /// Give a subsystem a mask, change it, or remove it (None). Values set for parameters that
@@ -364,6 +366,12 @@ fn exec(m: &mut Model, op: Op, created: &mut Vec<u32>) -> Result<(), String> {
             for w in d.wires.iter_mut().filter(|w| w.from == from) {
                 w.name = name.clone();
             }
+        }
+        Op::SetOps { ops } => {
+            if ops.iter().any(|o| o.name.trim().is_empty() || o.x.iter().any(|v| !v.is_finite())) {
+                return Err("An operating point needs a name and finite states.".into());
+            }
+            m.ops = ops;
         }
         Op::SetPoint { id, point } => {
             if !["", "in", "out", "open"].contains(&point.as_str()) {

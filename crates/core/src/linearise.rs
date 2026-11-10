@@ -20,6 +20,8 @@ pub enum At {
     Time { t: f64 },
     /// A saved state (an operating point from trim).
     State { t: f64, x: Vec<f64> },
+    /// A saved operating point of the model, by index (its states and variable values).
+    Op { i: usize },
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -133,7 +135,16 @@ fn prepare(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>, at: &At
     if pts.is_empty() {
         return Err("Mark where to look first: right-click a wire › Analysis point › Loop opening (or an Input and an Output).".into());
     }
-    let sim = compile::compile(&m2, base, over).map_err(msg)?;
+    let mut over = over.clone();
+    let at = match at {
+        At::Op { i } => {
+            let op = m.ops.get(*i).ok_or("That operating point no longer exists.")?;
+            over.extend(op.vars.iter().cloned());
+            &At::State { t: op.t, x: op.x.clone() }
+        }
+        a => a,
+    };
+    let sim = compile::compile(&m2, base, &over).map_err(msg)?;
     let (mut sim, t, x) = match at {
         At::Initial => {
             let x = sim.x0.clone();
@@ -149,6 +160,7 @@ fn prepare(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>, at: &At
             }
             (sim, *t, x.clone())
         }
+        At::Op { .. } => unreachable!(),
     };
     let mut order: Vec<&Pt> = pts.iter().filter(|p| p.kind == "open").collect();
     order.extend(pts.iter().filter(|p| p.kind == "in"));
@@ -257,6 +269,151 @@ pub fn linearise(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>, a
     })
 }
 
+// ---------------------------------------------------------------- trim
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct TrimSpec {
+    /// Analysis-point outputs to hold, by name, with their values.
+    pub hold: Vec<(String, f64)>,
+    /// Model variables trim may change, by name (they start from their values in the model).
+    pub free: Vec<String>,
+    /// The time the sources are read at (0 = the start).
+    pub t: f64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Trimmed {
+    pub op: crate::model::OpPoint,
+    pub met: bool,
+    /// The largest derivative and the largest output miss at the end.
+    pub dmax: f64,
+    pub ymax: f64,
+    pub iters: usize,
+    /// Equations not met, in words.
+    pub unmet: Vec<String>,
+    /// The outputs at the point.
+    pub outputs: Vec<(String, f64)>,
+}
+
+/// The names trim can hold (analysis-point outputs) and the states' count.
+pub fn trim_info(m: &Model, base: Option<&Path>) -> Result<(Vec<String>, usize), String> {
+    let p = prepare(m, base, &BTreeMap::new(), &At::Initial)?;
+    Ok((p.outs.into_iter().map(|o| o.1).collect(), p.x.len()))
+}
+
+/// Find the states (and free variables) where every derivative is zero and the held outputs have
+/// their values: Levenberg–Marquardt on the compiled model, from the model's initial state.
+pub fn trim(m: &Model, base: Option<&Path>, spec: &TrimSpec) -> Result<Trimmed, String> {
+    let vals = compile::var_values(m).map_err(msg)?;
+    let mut v0 = vec![];
+    for f in &spec.free {
+        v0.push(*vals.get(f).ok_or_else(|| format!("No model variable '{f}'.") )?);
+    }
+    let base_prep = prepare(m, base, &BTreeMap::new(), &At::Initial)?;
+    let names: Vec<String> = base_prep.outs.iter().map(|o| o.1.clone()).collect();
+    let mut hold = vec![];
+    for (n, v) in &spec.hold {
+        hold.push((names.iter().position(|x| x == n).ok_or_else(|| format!("'{n}' is not an analysis-point output."))?, *v));
+    }
+    let n = base_prep.x.len();
+    let nv = v0.len();
+    let t = if spec.t > 0.0 { spec.t } else { m.sim.start };
+    // Residuals at (x, v): derivatives, then the held outputs' misses.
+    let build = |v: &[f64]| -> Result<Prep, String> {
+        let over: BTreeMap<String, f64> = spec.free.iter().cloned().zip(v.iter().cloned()).collect();
+        prepare(m, base, &over, &At::Initial)
+    };
+    let res = |p: &mut Prep, x: &[f64]| -> Vec<f64> {
+        let mut dx = vec![0.0; n];
+        p.sim.eval(t, x, &mut dx);
+        let mut r = dx;
+        r.extend(hold.iter().map(|(k, v)| p.sim.signal(p.outs[*k].0) - v));
+        r
+    };
+    let mut z: Vec<f64> = base_prep.x.clone();
+    z.extend(&v0);
+    let mut prep = base_prep;
+    let mut r = res(&mut prep, &z[..n]);
+    let norm = |r: &[f64]| r.iter().map(|v| v * v).sum::<f64>();
+    let mut lam = 1e-3;
+    let mut iters = 0;
+    let nz = n + nv;
+    while iters < 300 && norm(&r) > 1e-24 {
+        iters += 1;
+        // Jacobian by forward differences: states on the compiled model, variables by recompiling.
+        let mut j = vec![vec![0.0; nz]; r.len()];
+        for c in 0..nz {
+            let h = 1e-7 * z[c].abs().max(1.0);
+            let mut zp = z.clone();
+            zp[c] += h;
+            let rp = if c < n {
+                res(&mut prep, &zp[..n])
+            } else {
+                let mut p2 = build(&zp[n..])?;
+                res(&mut p2, &zp[..n])
+            };
+            for i in 0..r.len() {
+                j[i][c] = (rp[i] - r[i]) / h;
+            }
+        }
+        let jtj: Vec<f64> = (0..nz).flat_map(|a| (0..nz).map(move |b| (a, b))).map(|(a, b)| (0..r.len()).map(|i| j[i][a] * j[i][b]).sum()).collect();
+        let jtr: Vec<f64> = (0..nz).map(|a| -(0..r.len()).map(|i| j[i][a] * r[i]).sum::<f64>()).collect();
+        let mut stepped = false;
+        for _ in 0..12 {
+            let mut aa = jtj.clone();
+            for k in 0..nz {
+                aa[k * nz + k] += lam * (jtj[k * nz + k] + 1e-9);
+            }
+            let Some(lu) = crate::linalg::Lu::new(aa, nz) else {
+                lam *= 10.0;
+                continue;
+            };
+            let mut d = jtr.clone();
+            lu.solve(&mut d);
+            let zn: Vec<f64> = z.iter().zip(&d).map(|(a, b)| a + b).collect();
+            let mut pn = if nv > 0 { build(&zn[n..])? } else { build(&[])? };
+            let rn = res(&mut pn, &zn[..n]);
+            if rn.iter().all(|v| v.is_finite()) && norm(&rn) < norm(&r) {
+                z = zn;
+                r = rn;
+                prep = pn;
+                lam = (lam / 3.0).max(1e-12);
+                stepped = true;
+                break;
+            }
+            lam *= 4.0;
+        }
+        if !stepped {
+            break;
+        }
+    }
+    let dmax = r[..n].iter().fold(0.0f64, |a, v| a.max(v.abs()));
+    let ymax = r[n..].iter().fold(0.0f64, |a, v| a.max(v.abs()));
+    let scale = z.iter().fold(1.0f64, |a, v| a.max(v.abs()));
+    let tol = 1e-6 * scale;
+    let mut unmet = vec![];
+    for (k, (i, v)) in hold.iter().enumerate() {
+        if r[n + k].abs() > tol {
+            unmet.push(format!("{} stays at {} instead of {v}", names[*i], prep.sim.signal(prep.outs[*i].0)));
+        }
+    }
+    if dmax > tol {
+        unmet.push(format!("The model is not at rest: a derivative is still {dmax:.3e}. Some states may have no rest point (an integrator with a constant input), or a held output fights another."));
+    }
+    let outputs = prep.outs.iter().map(|o| (o.1.clone(), prep.sim.signal(o.0))).collect();
+    let note = spec.hold.iter().map(|(n, v)| format!("{n} = {v}")).collect::<Vec<_>>().join(", ");
+    Ok(Trimmed {
+        op: crate::model::OpPoint { name: String::new(), t, x: z[..n].to_vec(), vars: spec.free.iter().cloned().zip(z[n..].iter().cloned()).collect(), note },
+        met: unmet.is_empty(),
+        dmax,
+        ymax,
+        iters,
+        unmet,
+        outputs,
+    })
+}
+
 /// Everything the Control tab shows for one input–output pair of a linearised model: the Bode
 /// plot, poles, step and impulse; for a loop (the same loop opening as input and output) also the
 /// margins, Nyquist, sensitivity, root locus and the closed loop's step and impulse.
@@ -314,6 +471,36 @@ mod tests {
         for w in m.root.wires.iter_mut().filter(|w| w.from.0 == id) {
             w.point = point.into();
         }
+    }
+
+    /// Trim the tank at 2 m with the set point free: the set point must be 2, the pump delivers
+    /// the drain flow Cv·√2, and the PI's integral holds that command (I·x = Cv·√2).
+    #[test]
+    fn trim_tank() {
+        let mut m = examples::get("tank").unwrap();
+        m.vars.push(crate::model::Var { name: "H".into(), expr: "1".into(), ..Default::default() });
+        for b in m.root.blocks.iter_mut().filter(|b| b.name == "Level set point") {
+            b.params.insert("initial".into(), "H".into());
+        }
+        mark(&mut m, "Level", "out");
+        let (outs, nx) = trim_info(&m, None).unwrap();
+        assert_eq!(outs, vec!["Level".to_string()]);
+        let r = trim(&m, None, &TrimSpec { hold: vec![("Level".into(), 2.0)], free: vec!["H".into()], t: 0.0 }).unwrap();
+        assert!(r.met, "{r:?}");
+        let q = 0.5 * 2f64.sqrt();
+        assert!((r.op.vars[0].1 - 2.0).abs() < 1e-7, "{r:?}");
+        assert_eq!(r.op.x.len(), nx);
+        // The pump (1/(2s+1)) outputs half its state; the PI's integral is the first of its states.
+        assert!(r.op.x.iter().any(|v| (0.5 * v - q).abs() < 1e-7) && r.op.x.iter().any(|v| (v - q / 0.2).abs() < 1e-6), "{r:?}");
+        // Linearise there: the closed loop from the saved point.
+        let mut m2 = m.clone();
+        let mut op = r.op.clone();
+        op.name = "2 m".into();
+        m2.ops.push(op);
+        mark(&mut m2, "Level", "out");
+        mark(&mut m2, "PI", "open");
+        let l = linearise(&m2, None, &BTreeMap::new(), &At::Op { i: 0 }).unwrap();
+        assert_eq!(l.loops, 1);
     }
 
     /// The mass–spring–damper between its force and its position: 1/(m s² + c s + k).

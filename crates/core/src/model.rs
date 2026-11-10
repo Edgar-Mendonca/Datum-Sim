@@ -19,6 +19,22 @@ pub struct Model {
     pub root: Diagram,
     /// The next free id for blocks and wires (ids are unique in the whole model).
     pub next: u32,
+    /// Saved operating points (0.2.5): states and variable values where the model is at rest.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub ops: Vec<OpPoint>,
+}
+
+/// An operating point found by trim (or taken from a run): to linearise around.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OpPoint {
+    pub name: String,
+    pub t: f64,
+    pub x: Vec<f64>,
+    /// Model variables the trim changed, with their values there.
+    pub vars: Vec<(String, f64)>,
+    /// What it holds, in words (for the list).
+    pub note: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

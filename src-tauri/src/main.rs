@@ -90,6 +90,7 @@ struct Out {
     notes: String,
     vars: Vec<Var>,
     sim: SimSettings,
+    ops: Vec<model::OpPoint>,
     path: Option<String>,
     dirty: bool,
     undo: bool,
@@ -107,6 +108,7 @@ fn out(a: &App) -> Out {
         notes: m.notes.clone(),
         vars: m.vars.clone(),
         sim: m.sim.clone(),
+        ops: m.ops.clone(),
         path: a.doc.path.clone(),
         dirty: a.doc.dirty,
         undo: a.doc.can_undo(),
@@ -896,6 +898,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             control::lin_analysis,
+            control::trim_info,
+            control::trim,
             state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, find, myblocks, save_myblock, add_myblock, delete_myblock, open, save, save_file,
             run, control, results, series, value_at, step_marks, runs, run_series, sweep_series, run_sweep, export_csv, analyze, step_info, engine,
             options, set_options, autosave, recovery, recover, recent, startup_file, open_url, automation, version, quit, check_update, install_update

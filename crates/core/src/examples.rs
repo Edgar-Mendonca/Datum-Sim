@@ -343,6 +343,9 @@ fn tank() -> Model {
     b.w(sp, 0, sc, 1);
     b.w(p, 0, sf, 0);
     b.w(v, 0, sf, 1);
+    // Ready for Control: the level is an output (trim holds it), the loop opens at the PI.
+    b.point(h, "out");
+    b.point(c, "open");
     b.done()
 }
 

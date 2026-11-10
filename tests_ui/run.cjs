@@ -41,6 +41,8 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           if (c === "save_myblock" || c === "add_myblock") return c === "save_myblock" ? "/blocks/x.dsimblock" : { ...f.state, created: [998] };
           if (c === "new_model") return f.state;
           if (c === "lin_analysis") return f.lin;
+          if (c === "trim_info") return [["Level"], 4];
+          if (c === "trim") return { op: { name: "", t: 0, x: [3.53, 0, 1.41, 2], vars: [["H", 2]], note: "Level = 2" }, met: true, dmax: 1e-14, ymax: 1e-14, iters: 5, unmet: [], outputs: [["Level", 2]] };
           // The run ends before its start call returns (a model with no states takes 0.1 ms).
           if (c === "run") {
             window.__emit("sim-done", { gen: 1, ok: true, error: null, issues: [], stats: f.results.stats, truncated: false, files: [] });
@@ -404,6 +406,21 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(200);
   check("the Sensitivity tab plots S and T with Ms", (await p.$$(".dlg .uplot")).length === 1 && (await p.textContent(".dlg")).includes("Peak sensitivity Ms"));
   await p.keyboard.press("Escape");
+  await p.click('.tabs > button:text-is("Model")');
+
+  // 13b3. Trim (0.2.5): hold an output, find, save as an operating point (one SetOps edit).
+  await p.click('.tabs > button:text-is("Control")');
+  await p.click('.ribbon button:has-text("Trim")');
+  await p.waitForTimeout(300);
+  await p.fill(".trimhold", "2");
+  await p.click(".trimgo");
+  await p.waitForTimeout(300);
+  check("Trim reports the operating point it found", (await p.textContent(".dlg")).includes("the model is at rest") && (await p.textContent(".dlg")).includes("Variable H"));
+  await p.fill(".trimname", "2 m");
+  await p.click(".trimsave");
+  await p.waitForTimeout(300);
+  const so = (await p.evaluate(() => window.__calls)).filter(c => c[0] === "apply").pop();
+  check("saving sends one SetOps edit with the named point", JSON.stringify(so?.[1] ?? {}).includes('"SetOps"') && JSON.stringify(so[1]).includes('"2 m"'), JSON.stringify(so));
   await p.click('.tabs > button:text-is("Model")');
 
   // 13c. Planned features (0.2.2): dimmed on their tab with the release; a greyed dialog; a switch hides them.

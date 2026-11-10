@@ -17,9 +17,6 @@ const f = (id: string, tab: string, group: string, v: string, label: string, ico
 
 export const FEATS: Feat[] = [
   // ---- Stage A: control design (0.2.x → 0.3.0)
-  f("trim", "control", "Operating Points", "0.2.5", "Trim", "solver", "Find where the model is at rest, with chosen outputs held at chosen values (the tank at 2 m, the motor at 1500 rpm).",
-    [{ k: "table", l: "Hold", cols: ["Output", "Value"] }, { k: "table", l: "Free", cols: ["Variable", "Start"] }]),
-  f("ops", "control", "Operating Points", "0.2.5", "Operating Points", "list", "Saved, named operating points of the model: states and variables, to linearise or start a run from."),
   f("pidtune", "control", "Tuning", "0.2.6", "PID Tuner", "specs", "Select a PID and tune it with two sliders, speed and robustness; Ziegler–Nichols and SIMC alongside; one undoable Apply.",
     [{ k: "pick", l: "PID", what: "a PID block" }, { k: "num", l: "Bandwidth", v: "10", u: "rad/s" }, { k: "num", l: "Phase margin", v: "60", u: "°" }, { k: "choice", l: "Rule", o: ["Loop shaping", "Ziegler–Nichols", "SIMC"] }]),
   f("drivetune", "control", "Tuning", "0.2.7", "Drive Tuning", "motor", "One click tunes a drive's current loop and speed loop from the motor's resistance, inductance and inertia.",

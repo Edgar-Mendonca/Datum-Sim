@@ -761,6 +761,11 @@ impl Ode for Runner<'_> {
     }
 }
 
+/// The model's variables as numbers (scalars only), for trim.
+pub fn var_values(m: &Model) -> Result<BTreeMap<String, f64>, Vec<Issue>> {
+    Ok(eval_vars(m, &BTreeMap::new())?.into_iter().filter_map(|(k, v)| v.s().ok().map(|x| (k, x))).collect())
+}
+
 /// For linearisation and trim: the system as a function of its states and held inputs.
 impl Sim {
     pub fn node_of(&self, id: u32) -> Option<usize> {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.5 — 2026-11-10
+
+Operating points: find where the model rests, and analyse it there.
+
+- **Trim** (Control tab) finds the states where every derivative is zero. It holds the analysis-point outputs you choose at their values and changes the model variables you allow, for example a set point or a load. If it cannot meet everything, it says which equations are unmet.
+- **Save** the result as a named operating point, as one undoable edit, kept in the model file.
+- **Operating Points** lists the saved points. Loop Analysis can linearise around any of them.
+- The pump and tank example is ready: its level is an output and its loop opens at the PI.
+
+Checked: the tank held at 2 m with its set point free gives a set point of 2, a pump flow of Cv·√2, and a PI integral of Cv·√2 / I.
+
 ## 0.2.4 — 2026-11-10
 
 More views of the loop in Control › Loop Analysis.

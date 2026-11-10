@@ -12,8 +12,9 @@ export interface Var { name: string; expr: string; unit: string; note: string }
 export interface SimSettings { start: number; stop: number; solver: string; step: number; max_step: number; rtol: number; atol: number; log_all?: boolean }
 export interface Out {
   name: string; notes: string; vars: Var[]; sim: SimSettings; path: string | null; dirty: boolean; undo: boolean; redo: boolean;
-  clip: boolean; running: boolean; rev: number; created: number[];
+  clip: boolean; running: boolean; rev: number; created: number[]; ops?: OpPoint[];
 }
+export interface OpPoint { name: string; t: number; x: number[]; vars: [string, number][]; note: string }
 export interface BlockView {
   id: number; kind: string; name: string; x: number; y: number; w: number; h: number; flip: boolean; label: string;
   ins: Pt[]; outs: Pt[]; in_names: string[]; out_names: string[]; params: Record<string, string>; sub: boolean; color?: string; mask?: Mask;
