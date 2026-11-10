@@ -164,6 +164,11 @@ pub struct Sim {
     /// Sinks writing CSV files at the end: (block, file, channel range).
     pub files: Vec<(u32, String, Vec<usize>)>,
     tseg: f64,
+    /// Torn blocks of algebraic loops (node indices), the last solution of their outputs, and the
+    /// time a solve failed.
+    tears: Vec<usize>,
+    guess: Vec<f64>,
+    alg_fail: Option<f64>,
 }
 
 fn eval_vars(m: &Model, over: &BTreeMap<String, f64>) -> Result<BTreeMap<String, Mat>, Vec<Issue>> {
@@ -449,18 +454,22 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
             }
         }
     }
-    // Execution order: Kahn's algorithm on direct-feedthrough edges.
+    // Execution order: Kahn's algorithm on direct-feedthrough edges. A loop with no state (an
+    // algebraic loop) is torn: one block in it is computed by Newton iteration at each evaluation.
+    let mut tear = vec![false; n];
+    let mut order;
+    loop {
     let mut indeg = vec![0usize; n];
     let mut users: Vec<Vec<usize>> = vec![vec![]; n];
     for (i, f) in flat.iter().enumerate() {
-        if rts[i].feed() {
+        if rts[i].feed() && !tear[i] {
             for (src, _) in f.inputs.iter().flatten() {
                 indeg[i] += 1;
                 users[*src].push(i);
             }
         }
     }
-    let mut order = Vec::with_capacity(n);
+    order = Vec::with_capacity(n);
     let mut q: Vec<usize> = (0..n).filter(|i| indeg[*i] == 0).collect();
     while let Some(i) = q.pop() {
         order.push(i);
@@ -471,7 +480,10 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
             }
         }
     }
-    if order.len() < n {
+    if order.len() == n {
+        break;
+    }
+    {
         // Walk back along feedthrough inputs inside the remaining set until a block repeats.
         let left: Vec<bool> = (0..n).map(|i| indeg[i] > 0).collect();
         let start = (0..n).find(|i| left[*i]).unwrap();
@@ -490,11 +502,16 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
         path.reverse();
         let mut names: Vec<String> = path.iter().map(|i| flat[*i].name.clone()).collect();
         names.push(names[0].clone());
-        issues.push(err(flat[path[0]].id, format!(
-            "Algebraic loop: {}. Every loop needs a block with state (an Integrator, Transfer function with more poles than zeros, Delay or Unit delay).",
-            names.join(" → ")
-        )));
-        return Err(issues);
+        if tear.iter().filter(|t| **t).count() >= 20 {
+            issues.push(err(flat[path[0]].id, format!(
+                "Algebraic loop: {}. Every loop needs a block with state (an Integrator, Transfer function with more poles than zeros, Delay or Unit delay).",
+                names.join(" → ")
+            )));
+            return Err(issues);
+        }
+        tear[path[0]] = true;
+        issues.push(Issue { id: flat[path[0]].id, msg: format!("Algebraic loop {} is solved by iteration at each step (slower; a small delay or filter in the loop avoids it).", names.join(" → ")), warn: true });
+    }
     }
     // Lay out signals (outputs of a block are contiguous), states and zero-crossings.
     let mut off = 0;
@@ -564,7 +581,12 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
         }
     }
     let nz = zo;
+    let tears: Vec<usize> = (0..n).filter(|i| tear[*i]).collect();
+    let nguess: usize = tears.iter().map(|i| ow[*i].iter().sum::<usize>()).sum();
     Ok(Sim {
+        tears,
+        guess: vec![0.0; nguess],
+        alg_fail: None,
         rates,
         nodes,
         order,
@@ -720,6 +742,9 @@ impl Sim {
 
     /// Compute every output at (t, x).
     fn outputs(&mut self, c: &Ctx, x: &[f64]) {
+        if !self.tears.is_empty() {
+            return self.solve_loops(c, x);
+        }
         let Sim { nodes, order, sig, ubuf, .. } = self;
         for &i in order.iter() {
             let nd = &nodes[i];
@@ -727,6 +752,75 @@ impl Sim {
             let w: usize = nd.out_w.iter().sum();
             nd.rt.out(c, &x[nd.xo..nd.xo + nd.nx], ubuf, &mut sig[nd.out_off..nd.out_off + w]);
         }
+    }
+
+    /// With the torn blocks' outputs set to g, compute the rest; return what the torn blocks
+    /// would output minus g.
+    fn tear_residual(&mut self, c: &Ctx, x: &[f64], g: &[f64]) -> Vec<f64> {
+        let Sim { nodes, order, sig, ubuf, tears, .. } = self;
+        let mut k = 0;
+        for &i in tears.iter() {
+            let nd = &nodes[i];
+            let w: usize = nd.out_w.iter().sum();
+            sig[nd.out_off..nd.out_off + w].copy_from_slice(&g[k..k + w]);
+            k += w;
+        }
+        for &i in order.iter() {
+            if tears.contains(&i) {
+                continue;
+            }
+            let nd = &nodes[i];
+            Self::gather(sig, &nd.ins, ubuf);
+            let w: usize = nd.out_w.iter().sum();
+            nd.rt.out(c, &x[nd.xo..nd.xo + nd.nx], ubuf, &mut sig[nd.out_off..nd.out_off + w]);
+        }
+        let mut r = Vec::with_capacity(g.len());
+        let mut tmp = vec![];
+        for &i in tears.iter() {
+            let nd = &nodes[i];
+            Self::gather(sig, &nd.ins, ubuf);
+            let w: usize = nd.out_w.iter().sum();
+            tmp.clear();
+            tmp.resize(w, 0.0);
+            nd.rt.out(c, &x[nd.xo..nd.xo + nd.nx], ubuf, &mut tmp);
+            let at = r.len();
+            r.extend(tmp.iter().zip(&g[at..at + w]).map(|(h, gi)| h - gi));
+        }
+        r
+    }
+
+    /// Newton's method on the torn outputs, from the last solution; the Jacobian by differences.
+    fn solve_loops(&mut self, c: &Ctx, x: &[f64]) {
+        let n = self.guess.len();
+        let mut g = self.guess.clone();
+        let mut r = self.tear_residual(c, x, &g);
+        let big = |v: &[f64]| v.iter().fold(0.0f64, |a, b| a.max(b.abs()));
+        for _ in 0..60 {
+            if big(&r) <= 1e-11 * (1.0 + big(&g)) {
+                break;
+            }
+            let mut j = vec![0.0; n * n];
+            for k in 0..n {
+                let h = 1e-7 * g[k].abs().max(1.0);
+                let mut g2 = g.clone();
+                g2[k] += h;
+                let r2 = self.tear_residual(c, x, &g2);
+                for i in 0..n {
+                    j[i * n + k] = (r2[i] - r[i]) / h;
+                }
+            }
+            let Some(lu) = crate::linalg::Lu::new(j, n) else { break };
+            let mut d: Vec<f64> = r.iter().map(|v| -v).collect();
+            lu.solve(&mut d);
+            for k in 0..n {
+                g[k] += d[k];
+            }
+            r = self.tear_residual(c, x, &g);
+        }
+        if !(big(&r) <= 1e-8 * (1.0 + big(&g))) && self.alg_fail.is_none() {
+            self.alg_fail = Some(c.t);
+        }
+        self.guess = g;
     }
 
     fn zcs(&mut self, c: &Ctx, x: &[f64], z: &mut [f64]) {
@@ -933,6 +1027,10 @@ pub fn run<'a>(sim: Sim, ctl: Option<&'a Control>, on_major: Option<&'a mut dyn 
     let k = chans.len();
     let mut r = Runner { sim, res: Results { chans, y: vec![vec![]; k], ..Default::default() }, ctl, on_major, anchor: None };
     let st: Stats = solve::drive(&mut r, &mut x, &opts)?;
+    if let Some(t) = r.sim.alg_fail {
+        let names: Vec<String> = r.sim.tears.iter().map(|i| r.sim.nodes[*i].name.clone()).collect();
+        return Err(format!("The algebraic loop through {} has no solution near t = {t:.6} s (Newton's method did not converge).", names.join(", ")));
+    }
     let mut res = r.res;
     res.stats = RunStats { steps: st.steps, rejected: st.rejected, fevals: st.fevals, events: st.events, stopped: st.stopped, ms: started.elapsed().as_secs_f64() * 1e3 };
     Ok(res)

@@ -17,7 +17,6 @@ const f = (id: string, tab: string, group: string, v: string, label: string, ico
 
 export const FEATS: Feat[] = [
   // ---- Stage A: control design (0.2.x → 0.3.0)
-  f("algloop", "simulate", "Solver", "0.2.10", "Algebraic Loops", "solver", "A loop without a state is solved at each step (Newton iteration) instead of being reported as an error."),
 
   // ---- Stage B: drives and modules (0.3.x → 0.4.0)
   f("fft", "analyze", "Signals", "0.3.1", "Spectrum (FFT)", "bode", "The spectrum of a signal over whole cycles of its fundamental, with the harmonics and the THD.",

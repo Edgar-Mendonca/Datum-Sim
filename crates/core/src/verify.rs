@@ -187,6 +187,48 @@ mod tests {
         }
     }
 
+    /// Algebraic loops are solved: y = u − k·y gives u/(1 + k); y + y³ = 2 gives 1; and inside
+    /// a dynamic loop x' = −y, y = x − k·y the state decays as e^(−t/(1+k)).
+    #[test]
+    fn algebraic_loops_solved() {
+        let mut m = Mk::new(1.0, "rk45");
+        let u = m.add("Constant", &[("value", "3")]);
+        let s = m.add("Sum", &[("signs", "+-")]);
+        let k = m.add("Gain", &[("k", "2")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(u, 0, s, 0);
+        m.wire(s, 0, k, 0);
+        m.wire(k, 0, s, 1);
+        m.wire(s, 0, sc, 0);
+        // y + y³ = 2: y = 2 − y³.
+        let two = m.add("Constant", &[("value", "2")]);
+        let s2 = m.add("Sum", &[("signs", "+-")]);
+        let cube = m.add("Fcn", &[("expr", "u^3")]);
+        m.wire(two, 0, s2, 0);
+        m.wire(s2, 0, cube, 0);
+        m.wire(cube, 0, s2, 1);
+        m.wire(s2, 0, sc, 1);
+        let sim = compile(&m.d.m, None, &none()).unwrap();
+        assert!(sim.warnings.iter().any(|w| w.msg.contains("solved by iteration")), "{:?}", sim.warnings);
+        let r = m.run();
+        assert!((r.y[0].last().unwrap() - 1.0).abs() < 1e-9 && (r.y[1].last().unwrap() - 1.0).abs() < 1e-9, "{} {}", r.y[0].last().unwrap(), r.y[1].last().unwrap());
+        // Dynamic: x' = −y, y = x − 2y (so y = x/3), x(0) = 1.
+        let mut m = Mk::new(3.0, "rk45");
+        let i = m.add("Integrator", &[("ic", "1")]);
+        let s = m.add("Sum", &[("signs", "+-")]);
+        let k = m.add("Gain", &[("k", "2")]);
+        let neg = m.add("Gain", &[("k", "-1")]);
+        let sc = m.add("Scope", &[]);
+        m.wire(i, 0, s, 0);
+        m.wire(s, 0, k, 0);
+        m.wire(k, 0, s, 1);
+        m.wire(s, 0, neg, 0);
+        m.wire(neg, 0, i, 0);
+        m.wire(i, 0, sc, 0);
+        let r = m.run();
+        assert!(max_err(&r, 0, |t| (-t / 3.0).exp()) < 1e-5, "{}", max_err(&r, 0, |t| (-t / 3.0).exp()));
+    }
+
     /// Buses: three signals (one of them a vector) grouped by a Bus Creator, passed through
     /// Goto/From tags, and picked out by name in another order: each arrives unchanged.
     #[test]
@@ -346,13 +388,24 @@ mod tests {
 
     #[test]
     fn algebraic_loop_is_reported() {
+        // Solved, with a warning that names the loop.
         let mut m = Mk::new(1.0, "rk45");
         let s = m.add("Sum", &[("signs", "+-")]);
         let g = m.add("Gain", &[("k", "2")]);
         m.wire(s, 0, g, 0);
         m.wire(g, 0, s, 1);
-        let e = compile(&m.d.m, None, &none()).err().unwrap();
-        assert!(e.iter().any(|i| i.msg.starts_with("Algebraic loop: ") && i.msg.contains("Gain") && i.msg.contains("Sum")), "{e:?}");
+        let w = compile(&m.d.m, None, &none()).unwrap().warnings;
+        assert!(w.iter().any(|i| i.msg.starts_with("Algebraic loop ") && i.msg.contains("Gain") && i.msg.contains("Sum")), "{w:?}");
+        // y = 1 + y has no solution: the run stops with an error that names the loop.
+        let mut m = Mk::new(1.0, "rk45");
+        let c = m.add("Constant", &[("value", "1")]);
+        let s = m.add("Sum", &[("signs", "++")]);
+        let g = m.add("Gain", &[("k", "1")]);
+        m.wire(c, 0, s, 0);
+        m.wire(s, 0, g, 0);
+        m.wire(g, 0, s, 1);
+        let e = simulate(&m.d.m, None, &none()).unwrap_err();
+        assert!(e.iter().any(|i| i.msg.contains("algebraic loop") && i.msg.contains("no solution")), "{e:?}");
     }
 
     #[test]

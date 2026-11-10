@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.10 — 2026-11-10
+
+Algebraic loops are solved.
+
+- A loop with no state in it, such as y = u − k·y or y + y³ = 2, used to be an error. It is now **solved at each step** by Newton's method on one block in the loop, with a warning that names the loop. A small delay or filter in the loop avoids the cost.
+- If such a loop has no solution, for example y = 1 + y, the run stops with an error that names the loop.
+- Linearising and trim work through these loops too.
+
+Checked: y = 3 − 2y gives 1, and y + y³ = 2 gives 1. A loop with a state, x′ = −y with y = x − 2y, decays as e^(−t/3).
+
 ## 0.2.9 — 2026-11-10
 
 Buses: many signals on one wire.
