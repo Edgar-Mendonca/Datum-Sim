@@ -54,11 +54,11 @@ fn hidden(id: u32, kind: &str, name: String, params: &[(&str, &str)]) -> Block {
 }
 
 /// Copy of the model with the analysis points made real.
-fn with_points(m: &Model) -> (Model, Vec<Pt>) {
+fn with_points(m: &Model, cut: bool) -> (Model, Vec<Pt>) {
     let mut m2 = m.clone();
     let mut next = max_id(&m.root).max(m.next) + 1;
     let mut pts = vec![];
-    fn walk(d: &mut Diagram, next: &mut u32, pts: &mut Vec<Pt>, prefix: &str) {
+    fn walk(d: &mut Diagram, next: &mut u32, pts: &mut Vec<Pt>, prefix: &str, cut: bool) {
         let names: BTreeMap<u32, String> = d.blocks.iter().map(|b| (b.id, b.name.clone())).collect();
         // One point per signal (every wire from the same output carries it).
         let mut sigs: Vec<((u32, usize), String, String)> = vec![];
@@ -70,6 +70,8 @@ fn with_points(m: &Model) -> (Model, Vec<Pt>) {
             }
         }
         for (from, kind, name) in sigs {
+            // For trim the model runs whole: every point only measures.
+            let kind = if cut { kind } else { "out".to_string() };
             let mut id = || {
                 *next += 1;
                 *next
@@ -106,11 +108,11 @@ fn with_points(m: &Model) -> (Model, Vec<Pt>) {
         for b in d.blocks.iter_mut() {
             let p = format!("{prefix}{}/", b.name);
             if let Some(s) = b.sub.as_mut() {
-                walk(s, next, pts, &p);
+                walk(s, next, pts, &p, cut);
             }
         }
     }
-    walk(&mut m2.root, &mut next, &mut pts, "");
+    walk(&mut m2.root, &mut next, &mut pts, "", cut);
     m2.next = next + 1;
     (m2, pts)
 }
@@ -131,7 +133,11 @@ struct Prep {
 }
 
 fn prepare(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>, at: &At) -> Result<Prep, String> {
-    let (m2, pts) = with_points(m);
+    prepare_cut(m, base, over, at, true)
+}
+
+fn prepare_cut(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>, at: &At, cut: bool) -> Result<Prep, String> {
+    let (m2, pts) = with_points(m, cut);
     if pts.is_empty() {
         return Err("Mark where to look first: right-click a wire › Analysis point › Loop opening (or an Input and an Output).".into());
     }
@@ -298,7 +304,7 @@ pub struct Trimmed {
 
 /// The names trim can hold (analysis-point outputs) and the states' count.
 pub fn trim_info(m: &Model, base: Option<&Path>) -> Result<(Vec<String>, usize), String> {
-    let p = prepare(m, base, &BTreeMap::new(), &At::Initial)?;
+    let p = prepare_cut(m, base, &BTreeMap::new(), &At::Initial, false)?;
     Ok((p.outs.into_iter().map(|o| o.1).collect(), p.x.len()))
 }
 
@@ -310,7 +316,7 @@ pub fn trim(m: &Model, base: Option<&Path>, spec: &TrimSpec) -> Result<Trimmed, 
     for f in &spec.free {
         v0.push(*vals.get(f).ok_or_else(|| format!("No model variable '{f}'.") )?);
     }
-    let base_prep = prepare(m, base, &BTreeMap::new(), &At::Initial)?;
+    let base_prep = prepare_cut(m, base, &BTreeMap::new(), &At::Initial, false)?;
     let names: Vec<String> = base_prep.outs.iter().map(|o| o.1.clone()).collect();
     let mut hold = vec![];
     for (n, v) in &spec.hold {
@@ -322,7 +328,7 @@ pub fn trim(m: &Model, base: Option<&Path>, spec: &TrimSpec) -> Result<Trimmed, 
     // Residuals at (x, v): derivatives, then the held outputs' misses.
     let build = |v: &[f64]| -> Result<Prep, String> {
         let over: BTreeMap<String, f64> = spec.free.iter().cloned().zip(v.iter().cloned()).collect();
-        prepare(m, base, &over, &At::Initial)
+        prepare_cut(m, base, &over, &At::Initial, false)
     };
     let res = |p: &mut Prep, x: &[f64]| -> Vec<f64> {
         let mut dx = vec![0.0; n];
@@ -484,7 +490,7 @@ mod tests {
         }
         mark(&mut m, "Level", "out");
         let (outs, nx) = trim_info(&m, None).unwrap();
-        assert_eq!(outs, vec!["Level".to_string()]);
+        assert!(outs.contains(&"Level".to_string()), "{outs:?}");
         let r = trim(&m, None, &TrimSpec { hold: vec![("Level".into(), 2.0)], free: vec!["H".into()], t: 0.0 }).unwrap();
         assert!(r.met, "{r:?}");
         let q = 0.5 * 2f64.sqrt();
