@@ -220,6 +220,45 @@ mod tests {
         assert!((r.y[1].last().unwrap() + 0.5).abs() > 0.1, "it falls");
     }
 
+    /// A payload on the table rests at its height less m·g/k; a tool that closes on it and lifts
+    /// carries it (sagging m·g/k_grip below the tool); opening drops it back to the table. The
+    /// force on the tool while held, at rest, is the object's weight.
+    #[test]
+    fn payload_grasp_and_release() {
+        let mut m = Mk::new(3.0, "rk45");
+        m.d.m.sim.max_step = 1e-3;
+        let zt = m.add("Fcn", &[("expr", "0.025 + 0.2*min(max(t-1, 0), 1)")]);
+        let xy = m.add("Constant", &[("value", "[0.45 0.1]")]);
+        let tool = m.add("Mux", &[("n", "2")]);
+        let v = m.add("Constant", &[("value", "[0 0 0]")]);
+        let grip = m.add("Step", &[("time", "0.5"), ("final", "1")]);
+        let open = m.add("Step", &[("time", "2.6"), ("final", "-1")]);
+        let gs = m.add("Sum", &[("signs", "++")]);
+        let pl = m.add("Payload", &[]);
+        let s = m.add("Scope", &[("n", "3")]);
+        let ck = m.add("Constant", &[("value", "1")]);
+        m.wire(ck, 0, zt, 0);
+        m.wire(xy, 0, tool, 0);
+        m.wire(zt, 0, tool, 1);
+        m.wire(tool, 0, pl, 0);
+        m.wire(v, 0, pl, 1);
+        m.wire(grip, 0, gs, 0);
+        m.wire(open, 0, gs, 1);
+        m.wire(gs, 0, pl, 2);
+        m.wire(pl, 0, s, 0);
+        m.wire(pl, 1, s, 1);
+        m.wire(pl, 2, s, 2);
+        let r = m.run();
+        let at_t = |k: usize, t: f64| at(&r, k, t);
+        let (mg, kt, kg) = (0.5 * 9.81, 1e5, 2e4);
+        assert!((at_t(2, 0.45) - (0.0 - mg / kt)).abs() < 1e-6, "rest {}", at_t(2, 0.45));
+        // Lifted to 0.225 m by t = 2; held below the tool by m·g/k_grip.
+        assert!((at_t(2, 2.4) - (0.225 - mg / kg)).abs() < 1e-5, "held {}", at_t(2, 2.4));
+        assert!((at_t(5, 2.4) + mg).abs() < 1e-3 && at_t(6, 2.4) == 1.0, "force {} held {}", at_t(5, 2.4), at_t(6, 2.4));
+        // Released at 2.6 s: back on the table by 3 s.
+        assert!(at_t(6, 2.9) == 0.0 && (at_t(2, 3.0) + mg / kt).abs() < 1e-3, "dropped {}", at_t(2, 3.0));
+    }
+
     /// The 7-joint arm under computed torque follows a joint trajectory (exact model: error below
     /// 1e-5 rad); with PD + gravity it settles on the final way point; joint motors at stall give
     /// η·N·Kt·V/R.

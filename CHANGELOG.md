@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.6 — 2026-11-11
+
+Gripper and contact: pick things up.
+
+- **Payload and table** (Library › Robot arm): an object on a table that the tool can pick up.
+  - The table holds it up by spring–damper contact, and it slides with damping.
+  - Closing the grip (input ≥ 0.5) with the tool within the capture distance holds it to the tool until the grip opens.
+  - It outputs its position, the force on the tool and whether it is held.
+- **Robot arm › Tool force input: yes** adds a second input: a force on the tool, so the arm feels a held payload's weight (Jᵀ·F).
+- The Robot arm block has a fourth output: the **tool's velocity**.
+- **3D view › Show an object: yes** adds a second input for an object's position, drawn as a box.
+
+Checked:
+- On the table, the payload rests at the table height less m·g/k.
+- Closed on and lifted, it is carried m·g/k_grip below the tool, and the force on the tool equals its weight.
+- Opened, it drops back to the table.
+
+The gripper is simple: it holds by a spring–damper when closed nearby. The 7-joint arm's fingers do not move yet.
+
 ## 0.4.5 — 2026-11-11
 
 Controllers for any arm, and motors on the joints.

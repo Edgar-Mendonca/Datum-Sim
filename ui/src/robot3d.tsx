@@ -7,10 +7,10 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { num, invoke } from "./api";
-import { results, running, liveTick, themeTick } from "./store";
+import { results, running, liveTick, themeTick, dview } from "./store";
 
 interface Mesh { body: number | null; file: string; r: number[][]; p: number[]; scale: number[] }
-interface Frames { lib: string; meshes: Mesh[]; parents: (number | null)[]; t: number[]; links: number[][]; joints: number[][]; tool: number[][] }
+interface Frames { lib: string; meshes: Mesh[]; parents: (number | null)[]; t: number[]; links: number[][]; joints: number[][]; tool: number[][]; object?: number[][] }
 
 const COLOURS = [0xc2410c, 0x3b4859, 0xe58a5a, 0x5b6878, 0xa3360a, 0x8a96a3, 0xf0c2a6, 0x2f4157];
 
@@ -33,7 +33,8 @@ export const Robot3D = (p: { id: number }) => {
   const robot = new THREE.Group();
   scene.add(robot);
   let parts: { body: number | null; obj: THREE.Object3D }[] = [];
-  let skel: THREE.Line | null = null, path: THREE.Line | null = null, toolDot: THREE.Mesh | null = null;
+  let skel: THREE.Line | null = null, path: THREE.Line | null = null, toolDot: THREE.Mesh | null = null, box: THREE.Mesh | null = null;
+  const size = () => { const v = parseFloat(dview()?.blocks.find(b => b.id === p.id)?.params?.size ?? ""); return isFinite(v) && v > 0 ? v : 0.05; };
   let controls: OrbitControls | null = null;
   const draw = () => renderer?.render(scene, camera);
 
@@ -66,6 +67,7 @@ export const Robot3D = (p: { id: number }) => {
       skel.geometry.setFromPoints(pts);
     }
     if (toolDot) { const T = x.tool[Math.min(i, x.tool.length - 1)]; toolDot.position.set(T[0], T[1], T[2]); }
+    if (box && x.object?.length) { const O = x.object[Math.min(i, x.object.length - 1)]; box.position.set(O[0], O[1], O[2]); }
     draw();
   };
 
@@ -96,6 +98,9 @@ export const Robot3D = (p: { id: number }) => {
     robot.add(path);
     toolDot = new THREE.Mesh(new THREE.SphereGeometry(0.015), new THREE.MeshBasicMaterial({ color: 0x2563eb }));
     robot.add(toolDot);
+    box = null;
+    if (x.object?.length) { const s = size(); box = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshStandardMaterial({ color: 0x16a34a })); robot.add(box); }
+    host.dataset.object = x.object?.length ? "1" : "0";
     place(k());
   };
 

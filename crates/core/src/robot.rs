@@ -210,7 +210,75 @@ impl Rt for Ik {
     }
 }
 
-pub const KINDS: &[&str] = &["RobotArm2", "ArmTrajectory", "ArmController", "ArmIK", "RobotArm", "ArmIKN", "ToolPath", "ArmControllerN", "ArmGravity", "ArmInvDyn", "JointDrive"];
+pub const KINDS: &[&str] = &["RobotArm2", "ArmTrajectory", "ArmController", "ArmIK", "RobotArm", "ArmIKN", "ToolPath", "ArmControllerN", "ArmGravity", "ArmInvDyn", "JointDrive", "Payload"];
+
+/// An object the gripper can pick up, resting on a table (0.4.6). States: position and velocity.
+/// The table pushes up by spring–damper contact below its height, with sliding damping. When the
+/// grip input closes (≥ 0.5) with the tool within the capture distance, the object is held by a
+/// stiff spring–damper to the tool until the grip opens. Inputs: tool position, tool velocity,
+/// grip. Outputs: object position, the force on the tool, held (1/0).
+#[derive(Clone)]
+struct Payload {
+    m: f64,
+    g: f64,
+    p0: [f64; 3],
+    h: f64,
+    kt: f64,
+    ct: f64,
+    cf: f64,
+    kg: f64,
+    cg: f64,
+    cap: f64,
+    held: bool,
+}
+impl Payload {
+    fn grip_force(&self, x: &[f64], u: &[f64]) -> [f64; 3] {
+        if !self.held {
+            return [0.0; 3];
+        }
+        std::array::from_fn(|i| self.kg * (u[i] - x[i]) + self.cg * (u[3 + i] - x[3 + i]))
+    }
+}
+impl Rt for Payload {
+    fn rate(&self) -> Rate {
+        Rate::Continuous
+    }
+    fn nx(&self) -> usize {
+        6
+    }
+    fn init(&mut self, x: &mut [f64]) {
+        x[..3].copy_from_slice(&self.p0);
+        x[3..].fill(0.0);
+        self.held = false;
+    }
+    fn out(&self, _: &Ctx, x: &[f64], u: &[f64], y: &mut [f64]) {
+        let f = self.grip_force(x, u);
+        y[..3].copy_from_slice(&x[..3]);
+        y[3..6].copy_from_slice(&[-f[0], -f[1], -f[2]]);
+        y[6] = if self.held { 1.0 } else { 0.0 };
+    }
+    fn deriv(&self, _: &Ctx, x: &[f64], u: &[f64], dx: &mut [f64]) {
+        let f = self.grip_force(x, u);
+        let mut a = [f[0] / self.m, f[1] / self.m, f[2] / self.m - self.g];
+        let pen = self.h - x[2];
+        if pen > 0.0 {
+            let fz = (self.kt * pen - self.ct * x[5]).max(0.0);
+            a[2] += fz / self.m;
+            a[0] -= self.cf * x[3] / self.m;
+            a[1] -= self.cf * x[4] / self.m;
+        }
+        dx[..3].copy_from_slice(&x[3..6]);
+        dx[3..].copy_from_slice(&a);
+    }
+    fn update(&mut self, _: &Ctx, x: &mut [f64], u: &[f64]) {
+        let close = u[6] >= 0.5;
+        let d = ((0..3).map(|i| (u[i] - x[i]).powi(2)).sum::<f64>()).sqrt();
+        self.held = close && (self.held || d <= self.cap);
+    }
+    fn clone_box(&self) -> Box<dyn Rt> {
+        Box::new(self.clone())
+    }
+}
 
 /// Blocks that take their robot from a Robot arm block named in their "arm" parameter.
 pub const USES_ARM: &[&str] = &["ArmIKN", "ArmControllerN", "ArmGravity", "ArmInvDyn"];
@@ -386,6 +454,8 @@ impl Rt for ToolPath {
 pub struct ArmN {
     pub c: crate::multibody::Chain,
     pub q0: Vec<f64>,
+    /// A second input: a force on the tool (world frame), adding Jᵀ·F to the joint torques.
+    pub ext: bool,
 }
 impl Rt for ArmN {
     fn rate(&self) -> Rate {
@@ -408,10 +478,23 @@ impl Rt for ArmN {
         let n = self.c.n;
         y[..2 * n].copy_from_slice(x);
         y[2 * n..2 * n + 3].copy_from_slice(&self.c.tool_pos(&x[..n]));
+        // The tool's velocity, J_v·q̇.
+        let j = self.c.jacobian(&x[..n]);
+        for r in 0..3 {
+            y[2 * n + 3 + r] = (0..n).map(|k| j[r * n + k] * x[n + k]).sum();
+        }
     }
     fn deriv(&self, _: &Ctx, x: &[f64], u: &[f64], dx: &mut [f64]) {
         let n = self.c.n;
-        let tau: Vec<f64> = (0..n).map(|i| if u.len() == 1 { u[0] } else { u[i] }).collect();
+        let w = if self.ext { u.len() - 3 } else { u.len() };
+        let mut tau: Vec<f64> = (0..n).map(|i| if w == 1 { u[0] } else { u[i] }).collect();
+        if self.ext {
+            let f = &u[w..w + 3];
+            let j = self.c.jacobian(&x[..n]);
+            for k in 0..n {
+                tau[k] += (0..3).map(|r| j[r * n + k] * f[r]).sum::<f64>();
+            }
+        }
         let a = self.c.accel(&x[..n], &x[n..], &tau);
         dx[..n].copy_from_slice(&x[n..]);
         dx[n..].copy_from_slice(&a);
@@ -434,6 +517,8 @@ pub struct Frames {
     pub links: Vec<Vec<f64>>,
     pub joints: Vec<Vec<f64>>,
     pub tool: Vec<[f64; 3]>,
+    /// An object's position per frame (the view's second input, when connected).
+    pub object: Vec<[f64; 3]>,
 }
 
 /// The frames for the RobotView block `view` from the last run's results: its input must come
@@ -453,7 +538,8 @@ pub fn frames(m: &crate::model::Model, base: Option<&std::path::Path>, view: u32
         let meshes = if lib.is_empty() { vec![] } else { crate::urdf::library(lib, 9.81)?.meshes };
         Ok((c, lib.to_string(), meshes))
     })?;
-    let cols: Vec<usize> = (0..r.chans.len()).filter(|i| r.chans[*i].sink == view && !r.chans[*i].probe).collect();
+    let cols: Vec<usize> = (0..r.chans.len()).filter(|i| r.chans[*i].sink == view && !r.chans[*i].probe && r.chans[*i].port == 0).collect();
+    let boxc: Vec<usize> = (0..r.chans.len()).filter(|i| r.chans[*i].sink == view && !r.chans[*i].probe && r.chans[*i].port == 1).collect();
     if cols.len() != c.n {
         return Err(format!("Run the model first: the view needs the arm's {} joint angles.", c.n));
     }
@@ -463,7 +549,7 @@ pub fn frames(m: &crate::model::Model, base: Option<&std::path::Path>, view: u32
     if idx.last() != Some(&(len - 1)) && len > 0 {
         idx.push(len - 1);
     }
-    let mut f = Frames { lib, meshes, parents: c.bodies.iter().map(|b| b.parent).collect(), t: vec![], links: vec![], joints: vec![], tool: vec![] };
+    let mut f = Frames { lib, meshes, parents: c.bodies.iter().map(|b| b.parent).collect(), t: vec![], links: vec![], joints: vec![], tool: vec![], object: vec![] };
     for i in idx {
         let q: Vec<f64> = cols.iter().map(|k| r.y[*k][i]).collect();
         let ps = c.pose(&q);
@@ -471,6 +557,9 @@ pub fn frames(m: &crate::model::Model, base: Option<&std::path::Path>, view: u32
         f.links.push(ps.lr.iter().zip(&ps.lp).flat_map(|(rr, pp)| rr.iter().flatten().cloned().chain(pp.iter().cloned()).collect::<Vec<_>>()).collect());
         f.joints.push(ps.jp.iter().flatten().cloned().collect());
         f.tool.push(c.tool_pos(&q));
+        if boxc.len() == 3 {
+            f.object.push([r.y[boxc[0]][i], r.y[boxc[1]][i], r.y[boxc[2]][i]]);
+        }
     }
     Ok(f)
 }
@@ -574,6 +663,20 @@ pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Option<Result<(Box<dyn Rt>, Ve
                 }
                 Ok((Box::new(JointDrive { r, l, kt: get("Kt")?, ke: get("Ke")?, gear: get("N")?, eff: get("eta")? }), vec![n, n]))
             }
+            "Payload" => {
+                if iw.len() != 3 || iw[0] != 3 || iw[1] != 3 || iw[2] != 1 {
+                    return Err("its inputs must be the tool position (3), the tool velocity (3) and the grip (1)".into());
+                }
+                let p0 = p.v("p0")?;
+                if p0.len() != 3 {
+                    return Err("the start position takes x y z".into());
+                }
+                let m = s(p, "m")?;
+                if m <= 0.0 {
+                    return Err("the mass must be positive".into());
+                }
+                Ok((Box::new(Payload { m, g: s(p, "g")?, p0: [p0[0], p0[1], p0[2]], h: s(p, "table")?, kt: s(p, "kt")?, ct: s(p, "ct")?, cf: s(p, "cf")?, kg: s(p, "kg")?, cg: s(p, "cg")?, cap: s(p, "cap")?, held: false }), vec![3, 3, 1]))
+            }
             "ToolPath" => {
                 let m: &Mat = p.m.get("points").ok_or("points is missing")?;
                 if m.c != 4 || m.r < 2 {
@@ -588,15 +691,16 @@ pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Option<Result<(Box<dyn Rt>, Ve
             "RobotArm" => {
                 let c = chain(p)?;
                 let n = c.n;
-                if iw.len() != 1 || (iw[0] != n && iw[0] != 1) {
-                    return Err(format!("its input must be the joint torques τ (width {n})"));
+                let ext = p.t.get("ext").map(|s| s.as_str()) == Some("yes");
+                if iw.len() != if ext { 2 } else { 1 } || (iw[0] != n && iw[0] != 1) || (ext && iw[1] != 3) {
+                    return Err(format!("its input must be the joint torques τ (width {n}){}", if ext { " and a force on the tool (width 3)" } else { "" }));
                 }
                 let q0 = p.v("q0")?;
                 let mut c = c;
                 if let Ok(a) = p.v("armature") {
                     c.armature = per_joint(a, n, "Armature")?;
                 }
-                Ok((Box::new(ArmN { c, q0 }), vec![n, n, 3]))
+                Ok((Box::new(ArmN { c, q0, ext }), vec![n, n, 3, 3]))
             }
             "RobotArm2" => {
                 // Width 1 is allowed (the same torque on both joints); it also lets a loop through a
