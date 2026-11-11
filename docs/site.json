@@ -7,7 +7,7 @@
   "for": "Control, mechanical, electrical, process and mechatronics engineers, researchers and students.",
   "about": [
     "Datum Sim models and simulates dynamic systems. You draw the system as blocks and wires: sources, transfer functions, state space, continuous and discrete PID controllers, lookup tables, and a motor library with DC, induction, synchronous, switched reluctance, BLDC and stepper motors, inverters, losses, thermal networks and transforms, and a robot arm module. Group blocks into subsystems, give them parameters of their own with a mask, and keep them in your own library. Then press Run and watch the signals on live scopes.",
-    "Five solvers cover everything from simple fixed-step runs to stiff systems; the variable-step solvers find switching times exactly. Discrete controllers run at their own sample times, and the diagram can colour every block by its rate. Motors come with typical values for low, medium and high voltage ratings. Scopes have measuring cursors, step-response marks and comparison of earlier runs, and a probe reads any wire after a run. Models also run from the command line and from Python, for scripts, batch studies and build servers. For control design the engine linearises the whole model between points you mark on wires: loop Bode plots with gain and phase margins, Nyquist, root locus, sensitivity and closed-loop responses. It finds operating points, tunes a PID with two sliders (speed and robustness) or a whole motor drive from the motor's data, and lets you move variables on sliders while the model runs, in real time if you like. Buses carry named signals, and loops without a state are solved. Parameter sweeps run in the app's own engine, and the solvers, main blocks, motors and analyses are checked against known answers."
+    "Five solvers cover everything from simple fixed-step runs to stiff systems; the variable-step solvers find switching times exactly. Discrete controllers run at their own sample times, and the diagram can colour every block by its rate. Motors come with typical values for low, medium and high voltage ratings. Scopes have measuring cursors, step-response marks and comparison of earlier runs, and a probe reads any wire after a run. Models also run from the command line and from Python, for scripts, batch studies and build servers. For control design the engine linearises the whole model between points you mark on wires: loop Bode plots with gain and phase margins, Nyquist, root locus, sensitivity and closed-loop responses. It finds operating points, tunes a PID with two sliders (speed and robustness) or a whole motor drive from the motor's data, and lets you move variables on sliders while the model runs, in real time if you like. Buses carry named signals, and loops without a state are solved. Parameter sweeps run in the app's own engine, and the solvers, main blocks, motors and analyses are checked against known answers. Robot arms with any number of joints, or loaded from URDF files, move in a 3D view, with inverse kinematics, model-based controllers, a gripper and a task scheduler for pick and place."
   ],
   "steps": [
     {
@@ -30,6 +30,7 @@
     "Live tuning: move variables on sliders while the model runs, in real time or faster",
     "Drives in depth: spectrum and THD, space-vector PWM and dead time, inverter losses with junction temperature, induction-machine saturation and iron loss, and machine parameters from the nameplate",
     "A robot arm module: a two-link arm, smooth joint trajectories, computed-torque control, inverse kinematics and an animated view",
+    "Robotics: arms with any number of joints, a 6-joint and a 7-joint arm, robots from URDF files, a 3D view, inverse kinematics, controllers, joint motors, a gripper with a payload, a task scheduler and pick-and-place examples",
     "Scopes with two measuring cursors, step-response marks, comparison of the last five runs, stacked plots, and PNG or SVG pictures",
     "A signal probe: hover any wire after a run to read its value",
     "Wires that route themselves: move segments, branch from a wire, name signals; notes, block colours and Find on the diagram",
@@ -79,7 +80,7 @@
     {
       "v": "0.4.x → 0.5",
       "title": "Robotics",
-      "when": "Next",
+      "when": "Done (0.5.0)",
       "items": [
         "Robot arms with any number of joints, and robots loaded from description files (a 6-joint and a 7-joint arm included)",
         "A 3D view of the robot",
@@ -90,7 +91,7 @@
     {
       "v": "0.5.x → 0.6",
       "title": "Physical components",
-      "when": "Later",
+      "when": "Next",
       "items": [
         "Rotational and translational mechanics, electrical, thermal and hydraulic components connected by ports",
         "Motors connected to electrical and mechanical networks"

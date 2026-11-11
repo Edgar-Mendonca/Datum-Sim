@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0 — 2026-11-11
+
+Robotics: the third stage of the roadmap is done. 0.5.0 brings together 0.4.1 to 0.4.8:
+
+- **Robot arms with any number of joints**, from DH tables or **URDF files**. A **6-joint industrial arm** and a **7-joint arm** come with the app.
+- A **3D view** with the robots' own parts: play, drag through time, turn the camera, trace the tool's path.
+- **Inverse kinematics** for any arm, and straight **tool paths**.
+- **Controllers** for any arm (computed torque, PD + gravity), **gravity** and **inverse dynamics** blocks, and **joint motors** with gears.
+- A **payload** on a table that a **gripper** picks up, its weight felt by the arm.
+- A **task scheduler**.
+- **Pick-and-place examples** with both arms.
+
+New in 0.5.0: the verification record for the stage (docs/verification/2026-11-11-robotics.md).
+
+Next on the roadmap: physical components (0.5.1 → 0.6.0), starting with its own plan and questions.
+
 ## 0.4.8 — 2026-11-11
 
 Pick and place, with both arms.

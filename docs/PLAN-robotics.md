@@ -1,6 +1,6 @@
 # Plan: robotics (stage R, 0.4.1 → 0.5.0)
 
-Written 2026-11-11 (session 9). The user's choices: robotics comes **before** stage C (physical components), and **both** arms matter: a 6-joint industrial arm and a 7-joint arm. Status: **waiting for the user's go-ahead and the answers in §6.**
+Written 2026-11-11 (session 9). The user's choices: robotics comes **before** stage C (physical components), and **both** arms matter: a 6-joint industrial arm and a 7-joint arm. Status: **built and released 2026-11-11 (0.4.1 → 0.5.0)** with the defaults in §6 ("go ahead"). Record: `docs/verification/2026-11-11-robotics.md`.
 
 ## 1. Why, and where we start
 

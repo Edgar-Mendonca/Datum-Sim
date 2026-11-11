@@ -1,6 +1,6 @@
 # Datum Sim: plan and roadmap from 0.2.1
 
-Written 2026-11-07 (session 9), after the comparison (`docs/COMPARISON.md`). Status: **agreed 2026-11-10** ("go ahead, A and B only"); stages A (0.2.2 → 0.3.0) and B (0.3.1 → 0.4.0) built and released 2026-11-10; stage C after the user has tested A and B. Defaults used for the questions in §6: all items, a release per patch, sliders for tunable variables, two-slider PID tuner with Ziegler–Nichols and SIMC, drive tuning, the DC motor, tank and PMSM as examples.
+Written 2026-11-07 (session 9), after the comparison (`docs/COMPARISON.md`). Status: **agreed 2026-11-10** ("go ahead, A and B only"); stages A (0.2.2 → 0.3.0) and B (0.3.1 → 0.4.0) built and released 2026-11-10, stage R (robotics, 0.4.1 → 0.5.0) on 2026-11-11; stage C (0.5.x) next, with its own plan and questions. Defaults used for the questions in §6: all items, a release per patch, sliders for tunable variables, two-slider PID tuner with Ziegler–Nichols and SIMC, drive tuning, the DC motor, tank and PMSM as examples.
 
 ## 1. Where we are
 

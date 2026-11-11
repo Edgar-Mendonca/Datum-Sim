@@ -191,8 +191,16 @@
 | 0.3.6 | Modules tab and the robot arm module (`robot.rs`, `ui/src/robot.tsx`) | ✅ |
 | 0.3.7 | Drive examples: losses and junction temperature, harmonics, saturated start | ✅ |
 | 0.4.0 | Stage B milestone: record 2026-11-10-drives, real-app check of the robot arm | ✅ |
-| 0.4.x | Stage R: robotics (any serial arm, URDF, 3D view, IK, controllers, gripper, task scheduler; a 6-joint and a 7-joint arm) → 0.5.0. `docs/PLAN-robotics.md`, waiting for go-ahead | 🔜 |
-| 0.5.x | Stage C: physical components → 0.6.0 | ⬜ |
+| 0.4.1 | Any serial arm (`multibody.rs`: RNEA, mass matrix, forward dynamics; DH tables) | ✅ |
+| 0.4.2 | URDF import (`urdf.rs`, roxmltree) and the 6-joint and 7-joint arms (`assets/robots`, meshes in `ui/public/robots`) | ✅ |
+| 0.4.3 | 3D view (three.js, `ui/src/robot3d.tsx`, loaded lazily) | ✅ |
+| 0.4.4 | Jacobian, inverse kinematics (damped least squares), tool paths | ✅ |
+| 0.4.5 | Controllers for any arm, gravity and inverse-dynamics blocks, joint motors, armature | ✅ |
+| 0.4.6 | Payload with table contact and gripper; tool force input; tool velocity output; box in the 3D view | ✅ |
+| 0.4.7 | Task scheduler (step sequencer) | ✅ |
+| 0.4.8 | Pick-and-place examples with both arms; compiler width hints | ✅ |
+| 0.5.0 | Stage R milestone: record 2026-11-11-robotics | ✅ |
+| 0.5.x | Stage C: physical components → 0.6.0 (its own plan and questions first) | 🔜 |
 | 0.6.x | Exchange: FMU, MAT/HDF5, building models from Python, Modelica | ⬜ |
 | 0.7.x | State machines, Python blocks, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
 | 1.0 | Validation suite and report, user guide, signed installer | ⬜ |
@@ -301,6 +309,21 @@
 - The user asked how a reference manipulator workflow (task scheduler, computed torque, 3D multibody verification with contact) compares with ours. The page could not be fetched (network); answered from search results and knowledge, and said so.
 - Recommendation agreed: robot dynamics in Rust (general rigid-body algorithms), URDF import, a 3D view with three.js, and Python for scripting only, not inside the loop. The user chose robotics **before** stage C and wants **both** a 6-joint and a 7-joint arm.
 - Wrote `docs/PLAN-robotics.md` (0.4.1 → 0.5.0, four questions). Renumbered: C 0.5.x, D 0.6.x, E 0.7.x, F 0.8.x, in ROADMAP, site.json and the planned features in the window.
+
+### 2026-11-11: Session 9 continued (stage R: 0.4.1 → 0.5.0)
+- The user said "go ahead" to `docs/PLAN-robotics.md` with the defaults: a few MB for meshes (in the end 0.4 MB of collision meshes), simple contact, a small task scheduler, and a release per step.
+- Built and released 0.4.1 to 0.4.8 and 0.5.0.
+  - New engine files: `multibody.rs`, `urdf.rs`; `robot.rs` grew the N-joint blocks.
+  - The window: `robot3d.tsx` (three.js 0.170.0, MIT, loaded only when a 3D view opens).
+  - The robots come from example-robot-data (BSD-2-Clause); the 6-joint arm's description is BSD and the 7-joint arm's Apache-2.0. Recorded in NOTICE.
+- Blocks that need an arm take it from the Robot arm block named in their "arm" parameter. The compiler merges that block's parameters into theirs (`robot::USES_ARM`). `robot::width_hint` lets loops of robot blocks settle their widths.
+- Bugs found and fixed:
+  - the 3D canvas was removed by Solid's re-render;
+  - the app's security policy blocked the mesh files (found in the real app; a UI check reads the policy now);
+  - a width deadlock between arm, controller and payload;
+  - the payload's resting height in the first pick-and-place draft.
+- The session disk filled once with build output (25 GB); `cargo clean` freed it.
+- Record: `docs/verification/2026-11-11-robotics.md`.
 
 ## 5. Known limits and next steps
 
