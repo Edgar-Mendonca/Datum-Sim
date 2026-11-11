@@ -686,6 +686,16 @@ mod tests {
                     let s = crate::measure::spectrum(&r.t, &r.y[0], 50.0, 4, 60).unwrap();
                     assert!(s.thd > 0.005 && s.thd < 0.5 && s.harmonics[0] > 5.0, "harmonics THD {} I1 {}", s.thd, s.harmonics[0]);
                 }
+                // The box ends on the table at the place point, after being carried.
+                "pick6" | "pick7" => {
+                    let place: [f64; 2] = if ex.id == "pick6" { [0.25, -0.4] } else { [0.35, -0.35] };
+                    let ch = |n: &str| r.chans.iter().position(|c| c.name == n).unwrap();
+                    let (xc, yc, zc) = (ch("Box.p[1]"), ch("Box.p[2]"), ch("Box.p[3]"));
+                    let peak = r.y[zc].iter().cloned().fold(f64::MIN, f64::max);
+                    let (x, y) = (r.y[xc].last().unwrap(), r.y[yc].last().unwrap());
+                    assert!(peak > 0.2, "{}: box never lifted ({peak})", ex.id);
+                    assert!((x - place[0]).abs() < 0.02 && (y - place[1]).abs() < 0.02 && (r.y[zc].last().unwrap() - 0.025).abs() < 0.01, "{}: box at ({x}, {y}, {})", ex.id, r.y[zc].last().unwrap());
+                }
                 "imsat" => assert!((150.0..157.0).contains(&last(0)), "imsat speed {}", last(0)),
                 "drivethermal" => assert!(last(r.y.len() - 1) > 41.0 && last(r.y.len() - 1) < 150.0, "junction {}", last(r.y.len() - 1)),
                 "imvf" => assert!((150.0..156.0).contains(&last(0)) && (last(1) - 50.0).abs() < 0.5, "imvf {} {}", last(0), last(1)),

@@ -31,6 +31,8 @@ pub fn list() -> Vec<Example> {
         Example { id: "tank", name: "Pump and tank level control", what: "A pump fills a tank that drains through a valve (flow ∝ √level); a PI controller holds the level." },
         Example { id: "cruise", name: "Vehicle cruise control", what: "A car with aerodynamic drag and rolling resistance; a PI controller sets the drive force to hold the speed." },
         Example { id: "robotarm", name: "Robot arm: pick and place", what: "A two-link arm follows a smooth joint trajectory through four way points under computed-torque control; the Arm view animates the motion." },
+        Example { id: "pick6", name: "Pick and place: 6-joint arm", what: "The 6-joint industrial arm picks a box off the table and puts it down elsewhere: a task scheduler, inverse kinematics, computed-torque control, a gripper, and the box's weight felt by the arm. Watch it in the 3D view." },
+        Example { id: "pick7", name: "Pick and place: 7-joint arm", what: "The same task with the 7-joint arm: scheduler, inverse kinematics, computed-torque control, gripper and 3D view." },
         Example { id: "arm6swing", name: "6-joint arm in 3D: swinging under gravity", what: "The 6-joint industrial arm, with no motor torque, swings down under its own weight and settles through joint friction; double-click the 3D view and press Play." },
         Example { id: "drivethermal", name: "PMSM drive: inverter losses and junction temperature", what: "The 15 kW field-oriented drive with the inverter's conduction and switching losses and a junction-to-ambient thermal network: watch the junction warm up as the load comes on." },
         Example { id: "harmonics", name: "Inverter harmonics: switched PWM into an induction motor", what: "A switched two-level inverter at 2 kHz feeds an 11 kW motor: run it, then Analyze › Spectrum on a stator current for its harmonics and THD; try space-vector modulation." },
@@ -117,6 +119,8 @@ pub fn get(id: &str) -> Option<Model> {
         "msd" => msd(),
         "robotarm" => robot_arm(),
         "arm6swing" => arm6_swing(),
+        "pick6" => pick_place("arm6", "6-joint industrial arm", [0.45, 0.15], [0.25, -0.4]),
+        "pick7" => pick_place("arm7", "7-joint arm", [0.5, 0.15], [0.35, -0.35]),
         "drivethermal" => drive_thermal(),
         "harmonics" => harmonics(),
         "imsat" => im_saturation(),
@@ -389,6 +393,61 @@ fn im_saturation() -> Model {
     let s = add_block(&mut m, "Scope", "Iron loss", 400.0, 260.0, &[]);
     add_wire(&mut m, (mot, 4), (s, 0));
     m
+}
+
+/// A pick-and-place cell: task scheduler → inverse kinematics → computed-torque controller →
+/// arm, with a payload on a table, its weight fed back to the arm, and a 3D view.
+fn pick_place(lib: &str, robot: &str, pick: [f64; 2], place: [f64; 2]) -> Model {
+    let (up, down) = (0.3, 0.035);
+    let steps = format!(
+        "[1 {px} {py} {up} 0; 1.5 {px} {py} {down} 0; 0.5 {px} {py} {down} 1; 1.5 {px} {py} {up} 1; 2 {qx} {qy} {up} 1; 1.5 {qx} {qy} {down} 1; 0.5 {qx} {qy} {down} 0; 1.5 {qx} {qy} {up} 0]",
+        px = pick[0], py = pick[1], qx = place[0], qy = place[1]
+    );
+    // Start exactly on the first target: solve it here.
+    let c = crate::urdf::library(lib, 9.81).expect("library robot").chain;
+    let seed: Vec<f64> = c.bodies.iter().filter(|b| b.dof.is_some()).map(|b| if b.lo.is_finite() && b.hi.is_finite() { 0.5 * (b.lo + b.hi) } else { 0.0 }).collect();
+    let seed: Vec<f64> = seed.iter().enumerate().map(|(i, v)| v + [0.0, -0.6, 0.9, -0.3, 0.2, 0.3, 0.0][i.min(6)]).collect();
+    let (q0, _, _) = c.ik([pick[0], pick[1], up], None, &seed, 500);
+    let q0s = format!("[{}]", q0.iter().map(|v| format!("{v:.6}")).collect::<Vec<_>>().join(" "));
+    let zeros = format!("[{}]", vec!["0"; c.n].join(" "));
+    let mut b = B::new(
+        &format!("Pick and place: {robot}"),
+        &format!("The {robot} picks the green box off the table at ({}, {}) and puts it down at ({}, {}). The Task scheduler gives the tool position and the grip step by step; Inverse kinematics turns the position into joint angles; the Arm controller (computed torque) makes the joints follow; the Payload is held while the grip is closed near it, and its weight acts on the arm through the Tool force input. Double-click the 3D view and press Play.", pick[0], pick[1], place[0], place[1]),
+        11.0,
+    );
+    b.m.sim.max_step = 2e-3;
+    let ts = b.blk("TaskScheduler", "Task", 20.0, 60.0, &[("steps", &steps), ("switches", "4")]);
+    let sp = b.blk("Selector", "Position", 150.0, 40.0, &[("idx", "[1 2 3]")]);
+    let sg = b.blk("Selector", "Grip", 150.0, 120.0, &[("idx", "[4]")]);
+    let ik = b.blk("ArmIKN", "Inverse kinematics", 260.0, 30.0, &[("seed", &q0s)]);
+    let dq = b.blk("Derivative", "Joint speed reference", 380.0, 30.0, &[]);
+    let z = b.blk("Constant", "No acceleration feedforward", 380.0, 110.0, &[("value", &zeros)]);
+    let ctl = b.blk("ArmControllerN", "Arm controller", 520.0, 40.0, &[("Kp", "400"), ("Kd", "40")]);
+    let arm = b.blk("RobotArm", "Robot arm", 700.0, 40.0, &[("robot", robot), ("q0", &q0s), ("b", "0.5"), ("ext", "yes")]);
+    let pl = b.blk("Payload", "Box", 700.0, 220.0, &[("p0", &format!("[{} {} 0.025]", pick[0], pick[1])), ("table", "0.025")]);
+    let v = b.blk("RobotView", "3D view", 900.0, 20.0, &[("object", "yes")]);
+    let s1 = b.blk("Scope", "Box height and grip", 900.0, 140.0, &[("n", "2")]);
+    let s2 = b.blk("Scope", "Joint torques", 900.0, 240.0, &[]);
+    b.w(ts, 0, sp, 0);
+    b.w(ts, 0, sg, 0);
+    b.w(sp, 0, ik, 0);
+    b.w(ik, 0, dq, 0);
+    b.w(ik, 0, ctl, 0);
+    b.w(dq, 0, ctl, 1);
+    b.w(z, 0, ctl, 2);
+    b.w(arm, 0, ctl, 3);
+    b.w(arm, 1, ctl, 4);
+    b.w(ctl, 0, arm, 0);
+    b.w(pl, 1, arm, 1);
+    b.w(arm, 2, pl, 0);
+    b.w(arm, 3, pl, 1);
+    b.w(sg, 0, pl, 2);
+    b.w(arm, 0, v, 0);
+    b.w(pl, 0, v, 1);
+    b.w(pl, 0, s1, 0);
+    b.w(sg, 0, s1, 1);
+    b.w(ctl, 0, s2, 0);
+    b.done()
 }
 
 fn arm6_swing() -> Model {

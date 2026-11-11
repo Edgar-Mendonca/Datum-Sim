@@ -441,7 +441,18 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
                         changed = true;
                     }
                 }
-                Err(e) => errs[i] = Some(e),
+                Err(e) => {
+                    errs[i] = Some(e);
+                    // A block whose output widths its parameters fix (a robot's joint count)
+                    // says so, so a loop through it can settle.
+                    if let Some(w) = crate::robot::width_hint(&flat[i].kind, pvs[i].as_ref().unwrap()) {
+                        let w: Vec<usize> = (0..flat[i].nout).map(|k| w.get(k).cloned().unwrap_or(1)).collect();
+                        if w != ow[i] {
+                            ow[i] = w;
+                            changed = true;
+                        }
+                    }
+                }
             }
         }
         if !changed {

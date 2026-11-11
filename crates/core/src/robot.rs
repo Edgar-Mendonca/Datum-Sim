@@ -341,6 +341,16 @@ impl Rt for Payload {
     }
 }
 
+/// Output widths fixed by a block's parameters alone, for the compiler's width inference.
+pub fn width_hint(kind: &str, p: &Pv) -> Option<Vec<usize>> {
+    match kind {
+        "RobotArm" => chain(p).ok().map(|c| vec![c.n, c.n, 3, 3]),
+        "ArmControllerN" | "ArmGravity" | "ArmInvDyn" | "ArmIKN" => chain(p).ok().map(|c| vec![c.n]),
+        "Payload" => Some(vec![3, 3, 1]),
+        _ => None,
+    }
+}
+
 /// Blocks that take their robot from a Robot arm block named in their "arm" parameter.
 pub const USES_ARM: &[&str] = &["ArmIKN", "ArmControllerN", "ArmGravity", "ArmInvDyn"];
 

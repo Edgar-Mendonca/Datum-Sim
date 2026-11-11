@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.8 — 2026-11-11
+
+Pick and place, with both arms.
+
+- **New examples: Pick and place with the 6-joint arm, and with the 7-joint arm.** Each puts the whole chain together:
+  - a **Task scheduler** gives the tool position and the grip step by step;
+  - **Inverse kinematics** turns the position into joint angles;
+  - a **computed-torque controller** makes the joints follow;
+  - the **Payload** is held while the grip is closed, and its weight acts on the arm;
+  - the **3D view** shows the arm and the green box. Double-click it and press Play.
+- The arm's start pose is solved by inverse kinematics, so the arm starts exactly on its first target.
+- The compiler now settles signal widths through loops of robot blocks (arm, controller and payload depend on each other).
+
+Checked: in both examples the box is lifted above 0.2 m, carried, and set down within 2 cm of the place point. In the real app the 7-joint arm runs the task and draws in 3D with the box.
+
+Tuning a joint loop with Loop Analysis is not in this release: an arm's loop carries all its joints at once, and analysis points take single signals.
+
 ## 0.4.7 — 2026-11-11
 
 The task scheduler.
