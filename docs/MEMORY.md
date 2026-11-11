@@ -191,9 +191,10 @@
 | 0.3.6 | Modules tab and the robot arm module (`robot.rs`, `ui/src/robot.tsx`) | ✅ |
 | 0.3.7 | Drive examples: losses and junction temperature, harmonics, saturated start | ✅ |
 | 0.4.0 | Stage B milestone: record 2026-11-10-drives, real-app check of the robot arm | ✅ |
-| 0.4.x | Stage C: physical components → 0.5.0 (after the user tests A and B) | 🔜 |
-| 0.5.x | Exchange: FMU, MAT/HDF5, building models from Python, Modelica | ⬜ |
-| 0.6.x | State machines, Python blocks, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
+| 0.4.x | Stage R: robotics (any serial arm, URDF, 3D view, IK, controllers, gripper, task scheduler; a 6-joint and a 7-joint arm) → 0.5.0. `docs/PLAN-robotics.md`, waiting for go-ahead | 🔜 |
+| 0.5.x | Stage C: physical components → 0.6.0 | ⬜ |
+| 0.6.x | Exchange: FMU, MAT/HDF5, building models from Python, Modelica | ⬜ |
+| 0.7.x | State machines, Python blocks, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
 | 1.0 | Validation suite and report, user guide, signed installer | ⬜ |
 
 ## 4. Session log
@@ -295,6 +296,11 @@
   - One 0.3.3 commit was pushed with a stale UI check, because a pipe hid the exit code. It was fixed before release. `scratchpad/release.sh` now refuses to commit unless every check passed.
 - Record: `docs/verification/2026-11-10-drives.md`.
 - Next: the user tests stages A and B on Windows; then stage C (physical components, 0.4.1 → 0.5.0) gets its own plan with questions.
+
+### 2026-11-11: Session 9 continued (robotics plan)
+- The user asked how a reference manipulator workflow (task scheduler, computed torque, 3D multibody verification with contact) compares with ours. The page could not be fetched (network); answered from search results and knowledge, and said so.
+- Recommendation agreed: robot dynamics in Rust (general rigid-body algorithms), URDF import, a 3D view with three.js, and Python for scripting only, not inside the loop. The user chose robotics **before** stage C and wants **both** a 6-joint and a 7-joint arm.
+- Wrote `docs/PLAN-robotics.md` (0.4.1 → 0.5.0, four questions). Renumbered: C 0.5.x, D 0.6.x, E 0.7.x, F 0.8.x, in ROADMAP, site.json and the planned features in the window.
 
 ## 5. Known limits and next steps
 

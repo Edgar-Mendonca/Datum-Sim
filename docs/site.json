@@ -78,15 +78,26 @@
     },
     {
       "v": "0.4.x → 0.5",
-      "title": "Physical components",
+      "title": "Robotics",
       "when": "Next",
+      "items": [
+        "Robot arms with any number of joints, and robots loaded from description files (a 6-joint and a 7-joint arm included)",
+        "A 3D view of the robot",
+        "Inverse kinematics and tool paths, controllers for any arm, motors on joints",
+        "A gripper with contact, a task scheduler, and pick-and-place examples"
+      ]
+    },
+    {
+      "v": "0.5.x → 0.6",
+      "title": "Physical components",
+      "when": "Later",
       "items": [
         "Rotational and translational mechanics, electrical, thermal and hydraulic components connected by ports",
         "Motors connected to electrical and mechanical networks"
       ]
     },
     {
-      "v": "0.5.x → 0.6",
+      "v": "0.6.x → 0.7",
       "title": "Exchange",
       "when": "Later",
       "items": [
@@ -96,7 +107,7 @@
       ]
     },
     {
-      "v": "0.6.x → 0.7",
+      "v": "0.7.x → 0.8",
       "title": "Studies and logic",
       "when": "Later",
       "items": [
@@ -106,7 +117,7 @@
       ]
     },
     {
-      "v": "0.7.x → 0.8",
+      "v": "0.8.x → 0.9",
       "title": "Reach and speed",
       "when": "Later",
       "items": [

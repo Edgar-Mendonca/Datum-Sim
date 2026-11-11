@@ -11,7 +11,7 @@ Written 2026-11-07 (session 9), after the comparison (`docs/COMPARISON.md`). Sta
 
 ## 2. How we plan
 
-1. **Small numbered steps, no jumps.** Each patch (0.2.2, 0.2.3, …) is one focused piece that works on its own, is released through the updater, and has its tests and a verification record. A minor number (0.3.0, 0.4.0, …) closes a stage. It is a milestone, not a jump.
+1. **Small numbered steps, no jumps.** Each patch (0.2.2, 0.2.3, …) is one focused piece that works on its own, is released through the updater, and has its tests and a verification record. A minor number (0.3.0, 0.5.0, …) closes a stage. It is a milestone, not a jump.
 2. **No race to 1.0.** 1.0 means "validated and documented for everyday professional use". It comes when the stages below make it true, not on a date.
 3. **Fixes take the next number.** If a bug or a user request comes in, it ships as the next patch, and the planned items move down one number. The order stays; the numbers are only labels.
 4. **One stage at a time.** Each stage gets a short plan with questions before it starts (as PLAN-0.3 does), and the user's answers decide its details.
@@ -48,48 +48,51 @@ Where we are already strong, made stronger. This is what drive engineers check d
 | 0.3.7 | **Drive examples**: losses and junction temperature, a harmonics study, a saturated start |
 | **0.4.0** | **Milestone:** verification record, docs |
 
-### Stage C: physical components (0.4.1 → 0.5.0)
+### Stage R: robotics (0.4.1 → 0.5.0)
+Added 2026-11-11 at the user's request, before stage C, for both a 6-joint and a 7-joint arm. Details in `docs/PLAN-robotics.md`: any serial arm (0.4.1), URDF import and the robot library (0.4.2), 3D view (0.4.3), inverse kinematics and tool paths (0.4.4), controllers and motors on joints (0.4.5), gripper and contact (0.4.6), task scheduler (0.4.7), pick-and-place examples (0.4.8), milestone 0.5.0.
+
+### Stage C: physical components (0.5.1 → 0.6.0)
 Draw mechanical, electrical and thermal parts as they are, connected by ports instead of signals. It is the biggest engine change, so it gets its own plan with questions first.
 
 | Release | What it adds |
 | --- | --- |
-| 0.4.1 | Engine: **equations from connected components** (DAEs), with a solver for them (BDF), and **rotational mechanics** (inertia, spring, damper, gear, friction) |
-| 0.4.2 | **Translational mechanics** (mass, spring, damper, hard stop) |
-| 0.4.3 | **Electrical circuits** (R, L, C, sources, ideal switch, diode, transformer) |
-| 0.4.4 | **Thermal** (capacity, conduction, convection) |
-| 0.4.5 | **Motors on ports**: the motor blocks connect to electrical and mechanical networks |
-| 0.4.6 | **Basic hydraulics** (pump, valve, cylinder, pipe) |
-| **0.5.0** | **Milestone:** physical examples and verification record |
+| 0.5.1 | Engine: **equations from connected components** (DAEs), with a solver for them (BDF), and **rotational mechanics** (inertia, spring, damper, gear, friction) |
+| 0.5.2 | **Translational mechanics** (mass, spring, damper, hard stop) |
+| 0.5.3 | **Electrical circuits** (R, L, C, sources, ideal switch, diode, transformer) |
+| 0.5.4 | **Thermal** (capacity, conduction, convection) |
+| 0.5.5 | **Motors on ports**: the motor blocks connect to electrical and mechanical networks |
+| 0.5.6 | **Basic hydraulics** (pump, valve, cylinder, pipe) |
+| **0.6.0** | **Milestone:** physical examples and verification record |
 
-### Stage D: exchange (0.5.1 → 0.6.0)
+### Stage D: exchange (0.6.1 → 0.7.0)
 Fit beside other tools.
 
 | Release | What it adds |
 | --- | --- |
-| 0.5.1 | **FMU export** (co-simulation): run a Datum Sim model inside other tools |
-| 0.5.2 | **FMU import**: run other tools' models as a block |
-| 0.5.3 | Results as **MAT and HDF5**; **build models from Python** (add blocks and wires) |
-| 0.5.4 | **Modelica models** through an external compiler (if one with a fitting licence is installed) |
-| **0.6.0** | **Milestone** |
-
-### Stage E: studies and logic (0.6.1 → 0.7.0)
-| Release | What it adds |
-| --- | --- |
-| 0.6.1 | **State machines** (states, transitions, actions) |
-| 0.6.2 | **Python block**: a block whose behaviour is a Python function |
-| 0.6.3 | **Monte Carlo** and **sensitivity** studies |
-| 0.6.4 | **Optimisation** and **parameter fitting** to measured data |
-| 0.6.5 | **Report builder**: a model, its runs and its plots in one printable report |
+| 0.6.1 | **FMU export** (co-simulation): run a Datum Sim model inside other tools |
+| 0.6.2 | **FMU import**: run other tools' models as a block |
+| 0.6.3 | Results as **MAT and HDF5**; **build models from Python** (add blocks and wires) |
+| 0.6.4 | **Modelica models** through an external compiler (if one with a fitting licence is installed) |
 | **0.7.0** | **Milestone** |
 
-### Stage F: reach and speed (0.7.1 → 0.8.0)
+### Stage E: studies and logic (0.7.1 → 0.8.0)
 | Release | What it adds |
 | --- | --- |
-| 0.7.1 | **Linux and macOS installers** (CI already builds and tests on both) |
-| 0.7.2 | **Faster runs** for big models (a compiled run mode) |
-| 0.7.3 | **Variants** (switchable subsystems) and **model comparison** (what changed between two files) |
-| 0.7.4 | **Tutorials** for teaching (a short course: dynamics, control, drives), and a **contributor guide** |
+| 0.7.1 | **State machines** (states, transitions, actions) |
+| 0.7.2 | **Python block**: a block whose behaviour is a Python function |
+| 0.7.3 | **Monte Carlo** and **sensitivity** studies |
+| 0.7.4 | **Optimisation** and **parameter fitting** to measured data |
+| 0.7.5 | **Report builder**: a model, its runs and its plots in one printable report |
 | **0.8.0** | **Milestone** |
+
+### Stage F: reach and speed (0.8.1 → 0.9.0)
+| Release | What it adds |
+| --- | --- |
+| 0.8.1 | **Linux and macOS installers** (CI already builds and tests on both) |
+| 0.8.2 | **Faster runs** for big models (a compiled run mode) |
+| 0.8.3 | **Variants** (switchable subsystems) and **model comparison** (what changed between two files) |
+| 0.8.4 | **Tutorials** for teaching (a short course: dynamics, control, drives), and a **contributor guide** |
+| **0.9.0** | **Milestone** |
 
 ### After that
 The way to **1.0**: a public benchmark suite against closed forms and published reference results, a complete user guide, and a signed installer. The order of stages E and F can swap. Tutorials and Linux/macOS (stage F) could also come much earlier if wanted (question 3).
