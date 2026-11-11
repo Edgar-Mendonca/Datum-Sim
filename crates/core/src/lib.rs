@@ -19,6 +19,7 @@ pub mod measure;
 pub mod model;
 pub mod motors;
 pub mod multibody;
+pub mod urdf;
 pub mod nameplate;
 pub mod robot;
 pub mod route;

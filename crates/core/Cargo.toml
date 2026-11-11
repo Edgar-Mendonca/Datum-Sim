@@ -1,10 +1,11 @@
 [package]
 name = "datum-core"
-version = "0.4.1"
+version = "0.4.2"
 license = "MIT"
 edition = "2021"
 description = "Datum Sim engine: model, edit operations, block library, compiler, solvers and results."
 
 [dependencies]
+roxmltree = "0.20"
 serde.workspace = true
 serde_json.workspace = true

@@ -14,4 +14,12 @@ The family workflow, ribbon, File page, updater and printing are taken from Datu
 Python runtime pack from Datum Plot (both MIT, same author). The engineering practices in
 docs/MEMORY.md ("How we build") draw on morluto/rea (MIT); no code from it is used.
 
+Robot descriptions (0.4.2): the engine reads URDF files with roxmltree (MIT or Apache-2.0). The
+two robots that come with the app are taken, with their collision meshes, from the open
+example-robot-data collection (BSD 2-Clause, LAAS-CNRS, University of Edinburgh, INRIA;
+assets/robots/LICENSE-collection):
+- the 6-joint industrial arm: the manufacturer's ROS description (BSD; assets/robots/arm6/SOURCE.md);
+- the 7-joint arm: the manufacturer's ROS description (Apache License 2.0; assets/robots/arm7/LICENSE).
+Their meshes are in ui/public/robots.
+
 Product and file-format names are trademarks of their owners and are used only to describe file compatibility.

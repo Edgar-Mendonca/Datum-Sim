@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn robot_arm_n_block() {
         let mut m = Mk::new(1.0, "rk45");
-        let a = m.add("RobotArm", &[("b", "0")]);
+        let a = m.add("RobotArm", &[("b", "0"), ("robot", "DH table")]);
         // The gravity torques at q0 = [0 -0.5 1 0 0 0].
         let def = crate::blocks::def("RobotArm").unwrap();
         let get = |k: &str| def.params.iter().find(|x| x.key == k).unwrap().def.to_string();

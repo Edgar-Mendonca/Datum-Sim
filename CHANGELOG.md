@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.2 — 2026-11-11
+
+Real robots: a 6-joint industrial arm, a 7-joint arm, and your own from URDF files.
+
+- **Robot arm, any joints › Robot** now offers:
+  - **6-joint industrial arm**;
+  - **7-joint arm** (its two finger joints are held still until the gripper arrives);
+  - **URDF file**: load any robot from its open description file, with an optional tool link.
+- Each robot's links, masses, centres of mass, full inertias, joint axes, joint limits and joint damping come from its description file.
+- The two arms come from open robot descriptions under BSD and Apache-2.0 licences (see NOTICE). Their light 3D parts are bundled for the 3D view in 0.4.3 (about 0.4 MB).
+
+Checked: both robots load with 6 and 7 moving joints and the limits from their files. For every joint, at a test pose, the engine's gravity torque matches an independent sum of each link's weight times its lever arm within 1e-9. Broken files give clear errors.
+
 ## 0.4.1 — 2026-11-11
 
 Robotics begins: robot arms with any number of joints.

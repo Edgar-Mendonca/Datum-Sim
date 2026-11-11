@@ -259,7 +259,26 @@ pub fn chain(p: &Pv) -> Result<crate::multibody::Chain, String> {
         _ => return Err("the tool offset takes three values (x y z) in the last link's frame".into()),
     };
     let robot = p.t.get("robot").map(|s| s.as_str()).unwrap_or("DH table");
+    let with_tool = |mut c: crate::multibody::Chain| {
+        c.tool = tool;
+        c
+    };
     match robot {
+        "6-joint industrial arm" => Ok(with_tool(crate::urdf::library("arm6", g)?.chain)),
+        "7-joint arm" => Ok(with_tool(crate::urdf::library("arm7", g)?.chain)),
+        "URDF file" => {
+            let f = p.t.get("file").map(|s| s.trim()).unwrap_or("");
+            if f.is_empty() {
+                return Err("give the URDF file".into());
+            }
+            let path = match p.base {
+                Some(b) if !std::path::Path::new(f).is_absolute() => b.join(f),
+                _ => std::path::PathBuf::from(f),
+            };
+            let text = std::fs::read_to_string(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+            let link = p.t.get("toollink").map(|s| s.trim()).unwrap_or("");
+            Ok(crate::urdf::parse(&text, &[], link, tool, g)?.chain)
+        }
         "two-link planar" => {
             let h = std::f64::consts::FRAC_PI_2;
             crate::multibody::Chain::from_dh(&[[h, 0.0, 0.0, 0.0, 1.0, 0.25, 0.0, 0.0, 0.0, 0.0208, 0.0208], [0.0, 0.5, 0.0, 0.0, 0.8, 0.2, 0.0, 0.0, 0.0, 0.0107, 0.0107]], false, g, [0.4, 0.0, 0.0], &b)
