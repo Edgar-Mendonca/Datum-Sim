@@ -554,7 +554,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(300);
   const nmr = (await p.evaluate(() => window.__calls)).filter(c => c[0] === "new_model").pop();
   check("Modules › Robot Arm Example opens the robot arm model", JSON.stringify(nmr?.[1] ?? {}).includes("robotarm"), JSON.stringify(nmr));
-  check("the library has the robot arm blocks", fix.library.blocks.filter(b => b.cat === "Robot arm").length === 9);
+  check("the library has the robot arm blocks", fix.library.blocks.filter(b => b.cat === "Robot arm").length === 13);
   await p.click('.tabs > button:text-is("Model")');
 
   // 13c. Planned features (0.2.2): dimmed on their tab with the release; a greyed dialog; a switch hides them.

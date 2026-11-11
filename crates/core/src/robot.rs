@@ -111,27 +111,28 @@ impl Rt for ArmRt {
     }
 }
 
-/// Quintic segments through way points (t, q1, q2) with zero velocity and acceleration at each.
+/// Quintic segments through way points (t, q1 … qn) with zero velocity and acceleration at each.
 #[derive(Clone)]
 struct Traj {
-    pts: Vec<(f64, [f64; 2])>,
+    pts: Vec<(f64, Vec<f64>)>,
 }
 impl Traj {
-    fn at(&self, t: f64) -> ([f64; 2], [f64; 2], [f64; 2]) {
+    fn at(&self, t: f64) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
         let n = self.pts.len();
+        let w = self.pts[0].1.len();
         if t <= self.pts[0].0 {
-            return (self.pts[0].1, [0.0; 2], [0.0; 2]);
+            return (self.pts[0].1.clone(), vec![0.0; w], vec![0.0; w]);
         }
         if t >= self.pts[n - 1].0 {
-            return (self.pts[n - 1].1, [0.0; 2], [0.0; 2]);
+            return (self.pts[n - 1].1.clone(), vec![0.0; w], vec![0.0; w]);
         }
         let k = self.pts.iter().rposition(|p| p.0 <= t).unwrap();
-        let ((t0, a), (t1, b)) = (self.pts[k], self.pts[k + 1]);
+        let ((t0, a), (t1, b)) = (&self.pts[k], &self.pts[k + 1]);
         let h = t1 - t0;
         let s = (t - t0) / h;
         let (p, dp, ddp) = (s * s * s * (10.0 - 15.0 * s + 6.0 * s * s), 30.0 * s * s * (1.0 - s) * (1.0 - s) / h, 60.0 * s * (1.0 - s) * (1.0 - 2.0 * s) / (h * h));
-        let f = |g: f64| [a[0] + (b[0] - a[0]) * g, a[1] + (b[1] - a[1]) * g];
-        let d = |g: f64| [(b[0] - a[0]) * g, (b[1] - a[1]) * g];
+        let f = |g: f64| (0..w).map(|i| a[i] + (b[i] - a[i]) * g).collect::<Vec<_>>();
+        let d = |g: f64| (0..w).map(|i| (b[i] - a[i]) * g).collect::<Vec<_>>();
         (f(p), d(dp), d(ddp))
     }
 }
@@ -144,7 +145,10 @@ impl Rt for Traj {
     }
     fn out(&self, c: &Ctx, _: &[f64], _: &[f64], y: &mut [f64]) {
         let (q, qd, qdd) = self.at(c.t);
-        y.copy_from_slice(&[q[0], q[1], qd[0], qd[1], qdd[0], qdd[1]]);
+        let w = q.len();
+        y[..w].copy_from_slice(&q);
+        y[w..2 * w].copy_from_slice(&qd);
+        y[2 * w..3 * w].copy_from_slice(&qdd);
     }
     fn next_hit(&self, t: f64) -> f64 {
         self.pts.iter().map(|p| p.0).find(|x| *x > t + 1e-12).unwrap_or(f64::INFINITY)
@@ -206,10 +210,107 @@ impl Rt for Ik {
     }
 }
 
-pub const KINDS: &[&str] = &["RobotArm2", "ArmTrajectory", "ArmController", "ArmIK", "RobotArm", "ArmIKN", "ToolPath"];
+pub const KINDS: &[&str] = &["RobotArm2", "ArmTrajectory", "ArmController", "ArmIK", "RobotArm", "ArmIKN", "ToolPath", "ArmControllerN", "ArmGravity", "ArmInvDyn", "JointDrive"];
 
 /// Blocks that take their robot from a Robot arm block named in their "arm" parameter.
-pub const USES_ARM: &[&str] = &["ArmIKN"];
+pub const USES_ARM: &[&str] = &["ArmIKN", "ArmControllerN", "ArmGravity", "ArmInvDyn"];
+
+fn per_joint(v: Vec<f64>, n: usize, what: &str) -> Result<Vec<f64>, String> {
+    match v.len() {
+        1 => Ok(vec![v[0]; n]),
+        k if k == n => Ok(v),
+        k => Err(format!("{what} takes one value or {n} (one per joint), not {k}")),
+    }
+}
+
+/// Joint control for any arm: computed torque τ = M(q)(q̈_r + Kp·e + Kd·ė) + h(q, q̇), or PD with
+/// gravity compensation τ = Kp·e + Kd·ė + g(q). Inputs q_ref, q̇_ref, q̈_ref, q, q̇.
+#[derive(Clone)]
+struct CtlN {
+    c: crate::multibody::Chain,
+    kp: Vec<f64>,
+    kd: Vec<f64>,
+    ct: bool,
+    tmax: f64,
+}
+impl Rt for CtlN {
+    fn out(&self, _: &Ctx, _: &[f64], u: &[f64], y: &mut [f64]) {
+        let n = self.c.n;
+        let (qr, qdr, qddr, q, qd) = (&u[..n], &u[n..2 * n], &u[2 * n..3 * n], &u[3 * n..4 * n], &u[4 * n..5 * n]);
+        let v: Vec<f64> = (0..n).map(|i| self.kp[i] * (qr[i] - q[i]) + self.kd[i] * (qdr[i] - qd[i])).collect();
+        let tau = if self.ct {
+            let a: Vec<f64> = (0..n).map(|i| qddr[i] + v[i]).collect();
+            self.c.rnea(q, qd, &a, true)
+        } else {
+            let g = self.c.rnea(q, &vec![0.0; n], &vec![0.0; n], true);
+            (0..n).map(|i| v[i] + g[i]).collect()
+        };
+        for i in 0..n {
+            y[i] = tau[i].clamp(-self.tmax, self.tmax);
+        }
+    }
+    fn clone_box(&self) -> Box<dyn Rt> {
+        Box::new(self.clone())
+    }
+}
+
+/// g(q) (gravity torques) or the full inverse dynamics τ(q, q̇, q̈) of a named arm.
+#[derive(Clone)]
+struct DynN {
+    c: crate::multibody::Chain,
+    full: bool,
+}
+impl Rt for DynN {
+    fn out(&self, _: &Ctx, _: &[f64], u: &[f64], y: &mut [f64]) {
+        let n = self.c.n;
+        let z = vec![0.0; n];
+        let t = if self.full { self.c.rnea(&u[..n], &u[n..2 * n], &u[2 * n..3 * n], true) } else { self.c.rnea(&u[..n], &z, &z, true) };
+        y.copy_from_slice(&t);
+    }
+    fn clone_box(&self) -> Box<dyn Rt> {
+        Box::new(self.clone())
+    }
+}
+
+/// Motors driving joints through gears: per joint L·di/dt = V − R·i − Ke·N·q̇, and the joint torque
+/// η·N·Kt·i. Inputs: motor voltages V, joint speeds q̇. Output: joint torques. The rotor inertia
+/// J_m·N² belongs on the arm (its Armature parameter).
+#[derive(Clone)]
+struct JointDrive {
+    r: Vec<f64>,
+    l: Vec<f64>,
+    kt: Vec<f64>,
+    ke: Vec<f64>,
+    gear: Vec<f64>,
+    eff: Vec<f64>,
+}
+impl Rt for JointDrive {
+    fn rate(&self) -> Rate {
+        Rate::Continuous
+    }
+    fn nx(&self) -> usize {
+        self.r.len()
+    }
+    fn feed(&self) -> bool {
+        false
+    }
+    fn out(&self, _: &Ctx, x: &[f64], _: &[f64], y: &mut [f64]) {
+        for i in 0..x.len() {
+            y[i] = self.eff[i] * self.gear[i] * self.kt[i] * x[i];
+        }
+        let n = x.len();
+        y[n..2 * n].copy_from_slice(x);
+    }
+    fn deriv(&self, _: &Ctx, x: &[f64], u: &[f64], dx: &mut [f64]) {
+        let n = x.len();
+        for i in 0..n {
+            dx[i] = (u[i] - self.r[i] * x[i] - self.ke[i] * self.gear[i] * u[n + i]) / self.l[i];
+        }
+    }
+    fn clone_box(&self) -> Box<dyn Rt> {
+        Box::new(self.clone())
+    }
+}
 
 /// Inverse kinematics for any arm: the tool position (x y z), or position and roll–pitch–yaw,
 /// to joint values. Each solution starts from the last one, so the arm moves smoothly.
@@ -440,6 +541,39 @@ pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Option<Result<(Box<dyn Rt>, Ve
                 let seed = p.v("seed")?;
                 Ok((Box::new(IkN { c, ori, last: vec![], seed }), vec![n]))
             }
+            "ArmControllerN" => {
+                let c = chain(p)?;
+                let n = c.n;
+                if iw.len() != 5 || iw.iter().any(|w| *w != n) {
+                    return Err(format!("its inputs must be q_ref, q̇_ref, q̈_ref, q and q̇ (width {n} each)"));
+                }
+                let ct = p.t.get("law").map(|s| s.as_str()) != Some("PD + gravity");
+                let tmax = s(p, "tmax")?;
+                Ok((Box::new(CtlN { kp: per_joint(p.v("Kp")?, n, "Kp")?, kd: per_joint(p.v("Kd")?, n, "Kd")?, c, ct, tmax: if tmax > 0.0 { tmax } else { f64::INFINITY } }), vec![n]))
+            }
+            "ArmGravity" | "ArmInvDyn" => {
+                let c = chain(p)?;
+                let n = c.n;
+                let full = kind == "ArmInvDyn";
+                let want = if full { 3 } else { 1 };
+                if iw.len() != want || iw.iter().any(|w| *w != n) {
+                    return Err(format!("its inputs must be {} (width {n} each)", if full { "q, q̇ and q̈" } else { "q" }));
+                }
+                Ok((Box::new(DynN { c, full }), vec![n]))
+            }
+            "JointDrive" => {
+                let n = p.m.get("R").map(|m| m.d.len()).unwrap_or(1).max(iw.first().cloned().unwrap_or(1));
+                if iw.len() != 2 || iw[0] != iw[1] {
+                    return Err("its inputs must be the motor voltages V and the joint speeds q̇ (the same width)".into());
+                }
+                let n = n.max(iw[0]);
+                let get = |k: &str| -> Result<Vec<f64>, String> { per_joint(p.v(k)?, n, k) };
+                let (r, l) = (get("R")?, get("L")?);
+                if r.iter().chain(&l).any(|v| *v <= 0.0) {
+                    return Err("R and L must be positive".into());
+                }
+                Ok((Box::new(JointDrive { r, l, kt: get("Kt")?, ke: get("Ke")?, gear: get("N")?, eff: get("eta")? }), vec![n, n]))
+            }
             "ToolPath" => {
                 let m: &Mat = p.m.get("points").ok_or("points is missing")?;
                 if m.c != 4 || m.r < 2 {
@@ -458,6 +592,10 @@ pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Option<Result<(Box<dyn Rt>, Ve
                     return Err(format!("its input must be the joint torques τ (width {n})"));
                 }
                 let q0 = p.v("q0")?;
+                let mut c = c;
+                if let Ok(a) = p.v("armature") {
+                    c.armature = per_joint(a, n, "Armature")?;
+                }
                 Ok((Box::new(ArmN { c, q0 }), vec![n, n, 3]))
             }
             "RobotArm2" => {
@@ -470,14 +608,15 @@ pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Option<Result<(Box<dyn Rt>, Ve
             }
             "ArmTrajectory" => {
                 let m: &Mat = p.m.get("points").ok_or("points is missing")?;
-                if m.c != 3 || m.r < 2 {
-                    return Err("way points are rows of (time, q1, q2), at least two".into());
+                if m.c < 2 || m.r < 2 {
+                    return Err("way points are rows of (time, q1, q2, …), at least two".into());
                 }
-                let pts: Vec<(f64, [f64; 2])> = (0..m.r).map(|i| (m.at(i, 0), [m.at(i, 1), m.at(i, 2)])).collect();
+                let w = m.c - 1;
+                let pts: Vec<(f64, Vec<f64>)> = (0..m.r).map(|i| (m.at(i, 0), (1..m.c).map(|j| m.at(i, j)).collect())).collect();
                 if pts.windows(2).any(|w| w[1].0 <= w[0].0) {
                     return Err("the way points' times must rise".into());
                 }
-                Ok((Box::new(Traj { pts }), vec![2, 2, 2]))
+                Ok((Box::new(Traj { pts }), vec![w, w, w]))
             }
             "ArmController" => {
                 need(iw, &[2, 2, 2, 2, 2], "q_ref, q̇_ref, q̈_ref, q and q̇ (width 2 each)")?;
@@ -548,9 +687,9 @@ mod tests {
             }
         }
         // The trajectory starts and ends at rest on its way points.
-        let tr = Traj { pts: vec![(0.0, [0.0, 0.0]), (2.0, [1.0, -0.5])] };
+        let tr = Traj { pts: vec![(0.0, vec![0.0, 0.0]), (2.0, vec![1.0, -0.5])] };
         let (q, qd, qdd) = tr.at(2.0);
-        assert_eq!((q, qd, qdd), ([1.0, -0.5], [0.0; 2], [0.0; 2]));
+        assert_eq!((q, qd, qdd), (vec![1.0, -0.5], vec![0.0; 2], vec![0.0; 2]));
         let (q, qd, _) = tr.at(1.0);
         assert!((q[0] - 0.5).abs() < 1e-12 && (qd[0] - 30.0 / 16.0 / 2.0).abs() < 1e-12, "{q:?} {qd:?}");
     }

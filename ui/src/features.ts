@@ -22,7 +22,6 @@ export const FEATS: Feat[] = [
 
   // ---- Stage R: robotics (0.4.x → 0.5.0), before physical components
   f("r-arc", "modules", "Robotics", "later", "Arc Tool Paths", "solver", "Tool paths along arcs and with orientation changes."),
-  f("r-ctl", "modules", "Robotics", "0.4.5", "Arm Controllers", "specs", "Computed torque and PD + gravity for any arm; mass, gravity and velocity torque blocks; motors on joints through gears."),
   f("r-grip", "modules", "Robotics", "0.4.6", "Gripper and Contact", "block", "A gripper that grasps and releases objects, with simple contact between the robot, objects and a table."),
   f("r-task", "modules", "Robotics", "0.4.7", "Task Scheduler", "sub", "A small state machine for pick and place: states, conditions and outputs."),
 

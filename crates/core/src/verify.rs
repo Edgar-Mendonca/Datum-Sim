@@ -220,6 +220,49 @@ mod tests {
         assert!((r.y[1].last().unwrap() + 0.5).abs() > 0.1, "it falls");
     }
 
+    /// The 7-joint arm under computed torque follows a joint trajectory (exact model: error below
+    /// 1e-5 rad); with PD + gravity it settles on the final way point; joint motors at stall give
+    /// η·N·Kt·V/R.
+    #[test]
+    fn arm_controllers_and_motors() {
+        for law in ["computed torque", "PD + gravity"] {
+            let mut m = Mk::new(4.0, "rk45");
+            m.d.m.sim.rtol = 1e-8;
+            let a = m.add("RobotArm", &[("robot", "7-joint arm"), ("q0", "[0 0 0 -1.5 0 1.5 0.8]"), ("b", "0.5")]);
+            m.d.apply(Op::Rename { id: a, name: "Robot arm".into() }).unwrap();
+            let tr = m.add("ArmTrajectory", &[("points", "[0 0 0 0 -1.5 0 1.5 0.8; 2 0.5 -0.3 0.2 -2 0.3 1.8 0.5]")]);
+            let c = m.add("ArmControllerN", &[("law", law), ("Kp", "400"), ("Kd", "40")]);
+            let s = m.add("Scope", &[("n", "2")]);
+            for k in 0..3 {
+                m.wire(tr, k, c, k);
+            }
+            m.wire(a, 0, c, 3);
+            m.wire(a, 1, c, 4);
+            m.wire(c, 0, a, 0);
+            m.wire(a, 0, s, 0);
+            m.wire(tr, 0, s, 1);
+            let r = m.run();
+            let err = (0..r.t.len()).map(|i| (0..7).map(|k| (r.y[k][i] - r.y[7 + k][i]).abs()).fold(0.0, f64::max)).fold(0.0, f64::max);
+            let fin = (0..7).map(|k| (r.y[k].last().unwrap() - r.y[7 + k].last().unwrap()).abs()).fold(0.0, f64::max);
+            if law == "computed torque" {
+                assert!(err < 1e-5, "{law}: {err}");
+            } else {
+                assert!(fin < 1e-3, "{law}: final error {fin}");
+            }
+        }
+        let mut m = Mk::new(0.5, "rk45");
+        let v = m.add("Constant", &[("value", "[12 6]")]);
+        let w = m.add("Constant", &[("value", "[0 0]")]);
+        let d = m.add("JointDrive", &[]);
+        let s = m.add("Scope", &[]);
+        m.wire(v, 0, d, 0);
+        m.wire(w, 0, d, 1);
+        m.wire(d, 0, s, 0);
+        let r = m.run();
+        let want = |vv: f64| 0.9 * 100.0 * 0.1 * vv / 0.5;
+        assert!((r.y[0].last().unwrap() - want(12.0)).abs() < 1e-6 && (r.y[1].last().unwrap() - want(6.0)).abs() < 1e-6);
+    }
+
     /// Tool path → inverse kinematics → the arm's own forward kinematics: the joint values put
     /// the 6-joint arm's tool on the path. (A Gain feeds the angles to a scope, unconnected to the
     /// arm's dynamics.)

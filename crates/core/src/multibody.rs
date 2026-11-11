@@ -96,6 +96,8 @@ pub struct Chain {
     /// The tool: a point in a link's frame.
     pub tool_body: usize,
     pub tool: V3,
+    /// Motor rotor inertia seen at each joint (J_m·N² through its gear), added to M's diagonal.
+    pub armature: Vec<f64>,
 }
 
 /// Where everything is for one configuration.
@@ -143,7 +145,7 @@ impl Chain {
             return Err("the robot has no moving joints".into());
         }
         let tool_body = bodies.len() - 1;
-        Ok(Chain { bodies, n, g, tool_body, tool })
+        Ok(Chain { bodies, n, g, tool_body, tool, armature: vec![0.0; n] })
     }
 
     pub fn pose(&self, q: &[f64]) -> Pose {
@@ -227,7 +229,8 @@ impl Chain {
                 tau[d] = match b.kind {
                     Kind::Prismatic => dot(ps.z[i], f[i]),
                     _ => dot(ps.z[i], nm[i]),
-                } + if full { b.b * qd[d] } else { 0.0 };
+                } + if full { b.b * qd[d] } else { 0.0 }
+                    + self.armature.get(d).cloned().unwrap_or(0.0) * qdd[d];
             }
             if let Some(k) = b.parent {
                 let r = sub(ps.jp[i], ps.jp[k]);

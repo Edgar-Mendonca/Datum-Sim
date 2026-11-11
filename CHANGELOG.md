@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.5 — 2026-11-11
+
+Controllers for any arm, and motors on the joints.
+
+- **Arm controller (any arm)**: computed torque, which cancels the arm's dynamics so each joint follows e'' + Kd·e' + Kp·e = 0, or PD with gravity compensation. Gains are per joint or one for all, with a torque limit. It takes its model from the Robot arm block you name.
+- **Gravity torques** and **Inverse dynamics** blocks for any named arm: g(q), and τ = M(q)·q̈ + h(q, q̇).
+- **Joint motors**: DC motors driving the joints through gears (resistance, inductance, Kt, Ke, gear ratio, efficiency). Inputs are the voltages and joint speeds; outputs are the joint torques and motor currents.
+- **Armature** on the Robot arm block: each motor rotor's inertia seen at its joint (J_m·N²).
+- **Joint trajectory** now takes any number of joints: rows of time, q1, q2, … qn.
+
+Checked:
+- The 7-joint arm under computed torque follows a joint trajectory within 1e-5 rad.
+- Under PD + gravity it settles within 1e-3 rad of the last way point.
+- Joint motors at stall give η·N·Kt·V/R within 1e-6.
+
 ## 0.4.4 — 2026-11-11
 
 Inverse kinematics for any arm, and tool paths.
