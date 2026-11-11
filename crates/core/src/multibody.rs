@@ -278,6 +278,105 @@ impl Chain {
         }
     }
 
+    /// The tool's orientation (its link's frame) in world coordinates.
+    pub fn tool_rot(&self, q: &[f64]) -> M3 {
+        self.pose(q).lr[self.tool_body]
+    }
+
+    /// Is body `k` the body `a` or carried by it?
+    fn carried_by(&self, k: usize, a: usize) -> bool {
+        let mut p = Some(k);
+        while let Some(x) = p {
+            if x == a {
+                return true;
+            }
+            p = self.bodies[x].parent;
+        }
+        false
+    }
+
+    /// The tool's Jacobian: 6 rows (linear velocity, then angular velocity) × n, row-major.
+    pub fn jacobian(&self, q: &[f64]) -> Vec<f64> {
+        let ps = self.pose(q);
+        let tool = add(ps.lp[self.tool_body], mv(&ps.lr[self.tool_body], self.tool));
+        let n = self.n;
+        let mut j = vec![0.0; 6 * n];
+        for (i, b) in self.bodies.iter().enumerate() {
+            let Some(d) = b.dof else { continue };
+            if !self.carried_by(self.tool_body, i) {
+                continue;
+            }
+            let z = ps.z[i];
+            let (v, w) = match b.kind {
+                Kind::Prismatic => (z, [0.0; 3]),
+                _ => (cross(z, sub(tool, ps.jp[i])), z),
+            };
+            for r in 0..3 {
+                j[r * n + d] = v[r];
+                j[(r + 3) * n + d] = w[r];
+            }
+        }
+        j
+    }
+
+    /// Inverse kinematics by damped least squares from `seed`: the joint values that put the tool
+    /// at `p` (and with orientation `r`, when given), kept within the joint limits.
+    /// Returns (q, position error, orientation error in rad).
+    pub fn ik(&self, p: V3, r: Option<&M3>, seed: &[f64], iters: usize) -> (Vec<f64>, f64, f64) {
+        let n = self.n;
+        let rows = if r.is_some() { 6 } else { 3 };
+        let mut q: Vec<f64> = (0..n).map(|i| seed.get(i).cloned().unwrap_or(0.0)).collect();
+        let lims: Vec<(f64, f64)> = self.bodies.iter().filter(|b| b.dof.is_some()).map(|b| (b.lo, b.hi)).collect();
+        let err = |q: &[f64]| -> Vec<f64> {
+            let mut e = sub(p, self.tool_pos(q)).to_vec();
+            if let Some(rt) = r {
+                let rc = self.tool_rot(q);
+                // Orientation error: ½ Σ cᵢ × tᵢ over the frames' columns.
+                let mut w = [0.0; 3];
+                for k in 0..3 {
+                    w = add(w, cross([rc[0][k], rc[1][k], rc[2][k]], [rt[0][k], rt[1][k], rt[2][k]]));
+                }
+                e.extend(scale(w, 0.5));
+            }
+            e
+        };
+        let norm = |e: &[f64]| e.iter().map(|v| v * v).sum::<f64>().sqrt();
+        let mut e = err(&q);
+        let mut lam = 1e-2;
+        for _ in 0..iters {
+            if norm(&e) < 1e-12 {
+                break;
+            }
+            let jf = self.jacobian(&q);
+            let jr: Vec<f64> = jf[..rows * n].to_vec();
+            // (J Jᵀ + λ² I) y = e, dq = Jᵀ y.
+            let mut a = vec![0.0; rows * rows];
+            for i in 0..rows {
+                for k in 0..rows {
+                    a[i * rows + k] = (0..n).map(|c| jr[i * n + c] * jr[k * n + c]).sum::<f64>() + if i == k { lam * lam } else { 0.0 };
+                }
+            }
+            let Some(lu) = crate::linalg::Lu::new(a, rows) else { break };
+            let mut y = e.clone();
+            lu.solve(&mut y);
+            let qn: Vec<f64> = (0..n).map(|c| (q[c] + (0..rows).map(|i| jr[i * n + c] * y[i]).sum::<f64>()).clamp(lims[c].0, lims[c].1)).collect();
+            let en = err(&qn);
+            if norm(&en) < norm(&e) {
+                q = qn;
+                e = en;
+                lam = (lam * 0.5).max(1e-6);
+            } else {
+                lam *= 4.0;
+                if lam > 1e3 {
+                    break;
+                }
+            }
+        }
+        let pe = norm(&e[..3]);
+        let oe = if rows == 6 { 2.0 * norm(&e[3..]) } else { 0.0 };
+        (q, pe, oe)
+    }
+
     /// Kinetic plus potential energy.
     pub fn energy(&self, q: &[f64], qd: &[f64]) -> f64 {
         let n = self.n;
@@ -393,6 +492,37 @@ mod tests {
             }
             let e1 = c.energy(&x[..6], &x[6..]);
             assert!((e1 - e0).abs() < 1e-8 * e0.abs().max(1.0), "{e0} → {e1}");
+        }
+    }
+
+    /// The Jacobian matches finite differences of the tool's position; inverse kinematics
+    /// returns poses of both library arms (position and orientation) from another start.
+    #[test]
+    fn jacobian_and_ik() {
+        for id in ["arm6", "arm7"] {
+            let c = crate::urdf::library(id, 9.81).unwrap().chain;
+            let n = c.n;
+            // A pose inside the joint limits (mid-range plus a little).
+            let q: Vec<f64> = c.bodies.iter().filter(|b| b.dof.is_some()).enumerate().map(|(i, b)| {
+                let mid = if b.lo.is_finite() && b.hi.is_finite() { 0.5 * (b.lo + b.hi) } else { 0.0 };
+                mid + 0.3 * ((i % 3) as f64 - 1.0)
+            }).collect();
+            let j = c.jacobian(&q);
+            for d in 0..n {
+                let mut qp = q.clone();
+                qp[d] += 1e-7;
+                let (a, b) = (c.tool_pos(&qp), c.tool_pos(&q));
+                for r in 0..3 {
+                    assert!(((a[r] - b[r]) / 1e-7 - j[r * n + d]).abs() < 1e-5, "{id} J[{r}][{d}]");
+                }
+            }
+            let (p, r) = (c.tool_pos(&q), c.tool_rot(&q));
+            let seed: Vec<f64> = q.iter().enumerate().map(|(i, v)| v + if i % 2 == 0 { 0.25 } else { -0.2 }).collect();
+            let (qs, pe, oe) = c.ik(p, Some(&r), &seed, 300);
+            assert!(pe < 1e-9 && oe < 1e-9, "{id}: {pe} {oe}");
+            assert!(c.bodies.iter().filter(|b| b.dof.is_some()).zip(&qs).all(|(b, v)| *v >= b.lo - 1e-12 && *v <= b.hi + 1e-12));
+            let (_, pe, _) = c.ik(p, None, &vec![0.0; n], 300);
+            assert!(pe < 1e-9, "{id} position only: {pe}");
         }
     }
 

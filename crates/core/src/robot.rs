@@ -206,7 +206,78 @@ impl Rt for Ik {
     }
 }
 
-pub const KINDS: &[&str] = &["RobotArm2", "ArmTrajectory", "ArmController", "ArmIK", "RobotArm"];
+pub const KINDS: &[&str] = &["RobotArm2", "ArmTrajectory", "ArmController", "ArmIK", "RobotArm", "ArmIKN", "ToolPath"];
+
+/// Blocks that take their robot from a Robot arm block named in their "arm" parameter.
+pub const USES_ARM: &[&str] = &["ArmIKN"];
+
+/// Inverse kinematics for any arm: the tool position (x y z), or position and roll–pitch–yaw,
+/// to joint values. Each solution starts from the last one, so the arm moves smoothly.
+#[derive(Clone)]
+struct IkN {
+    c: crate::multibody::Chain,
+    ori: bool,
+    last: Vec<f64>,
+    seed: Vec<f64>,
+}
+impl IkN {
+    fn solve(&self, u: &[f64]) -> Vec<f64> {
+        let r = if self.ori { Some(crate::multibody::rpy(u[3], u[4], u[5])) } else { None };
+        self.c.ik([u[0], u[1], u[2]], r.as_ref(), &self.last, 100).0
+    }
+}
+impl Rt for IkN {
+    fn init(&mut self, _: &mut [f64]) {
+        self.last = self.seed.clone();
+        self.last.resize(self.c.n, 0.0);
+    }
+    fn out(&self, _: &Ctx, _: &[f64], u: &[f64], y: &mut [f64]) {
+        y.copy_from_slice(&self.solve(u));
+    }
+    fn update(&mut self, _: &Ctx, _: &mut [f64], u: &[f64]) {
+        self.last = self.solve(u);
+    }
+    fn clone_box(&self) -> Box<dyn Rt> {
+        Box::new(self.clone())
+    }
+}
+
+/// Straight tool moves through way points (t, x, y, z), each starting and ending at rest.
+#[derive(Clone)]
+struct ToolPath {
+    pts: Vec<(f64, [f64; 3])>,
+}
+impl Rt for ToolPath {
+    fn rate(&self) -> Rate {
+        Rate::Continuous
+    }
+    fn feed(&self) -> bool {
+        false
+    }
+    fn out(&self, c: &Ctx, _: &[f64], _: &[f64], y: &mut [f64]) {
+        let (n, t) = (self.pts.len(), c.t);
+        let (p, v) = if t <= self.pts[0].0 {
+            (self.pts[0].1, [0.0; 3])
+        } else if t >= self.pts[n - 1].0 {
+            (self.pts[n - 1].1, [0.0; 3])
+        } else {
+            let k = self.pts.iter().rposition(|p| p.0 <= t).unwrap();
+            let ((t0, a), (t1, b)) = (self.pts[k], self.pts[k + 1]);
+            let h = t1 - t0;
+            let s = (t - t0) / h;
+            let (g, dg) = (s * s * s * (10.0 - 15.0 * s + 6.0 * s * s), 30.0 * s * s * (1.0 - s) * (1.0 - s) / h);
+            (std::array::from_fn(|i| a[i] + (b[i] - a[i]) * g), std::array::from_fn(|i| (b[i] - a[i]) * dg))
+        };
+        y[..3].copy_from_slice(&p);
+        y[3..6].copy_from_slice(&v);
+    }
+    fn next_hit(&self, t: f64) -> f64 {
+        self.pts.iter().map(|p| p.0).find(|x| *x > t + 1e-12).unwrap_or(f64::INFINITY)
+    }
+    fn clone_box(&self) -> Box<dyn Rt> {
+        Box::new(self.clone())
+    }
+}
 
 /// A robot arm with any number of joints (0.4.1): states q and q̇; outputs q, q̇ and the tool's
 /// position. One torque for every joint, or a single value for all.
@@ -358,6 +429,28 @@ fn need(iw: &[usize], w: &[usize], what: &str) -> Result<(), String> {
 pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Option<Result<(Box<dyn Rt>, Vec<usize>), String>> {
     let r = || -> Result<(Box<dyn Rt>, Vec<usize>), String> {
         match kind {
+            "ArmIKN" => {
+                let c = chain(p)?;
+                let ori = p.t.get("mode").map(|s| s.as_str()) == Some("position and orientation");
+                let w = if ori { 6 } else { 3 };
+                if iw.len() != 1 || iw[0] != w {
+                    return Err(format!("its input must be the tool's {} (width {w})", if ori { "position and roll, pitch, yaw" } else { "position x, y, z" }));
+                }
+                let n = c.n;
+                let seed = p.v("seed")?;
+                Ok((Box::new(IkN { c, ori, last: vec![], seed }), vec![n]))
+            }
+            "ToolPath" => {
+                let m: &Mat = p.m.get("points").ok_or("points is missing")?;
+                if m.c != 4 || m.r < 2 {
+                    return Err("way points are rows of (time, x, y, z), at least two".into());
+                }
+                let pts: Vec<(f64, [f64; 3])> = (0..m.r).map(|i| (m.at(i, 0), [m.at(i, 1), m.at(i, 2), m.at(i, 3)])).collect();
+                if pts.windows(2).any(|w| w[1].0 <= w[0].0) {
+                    return Err("the way points' times must rise".into());
+                }
+                Ok((Box::new(ToolPath { pts }), vec![3, 3]))
+            }
             "RobotArm" => {
                 let c = chain(p)?;
                 let n = c.n;

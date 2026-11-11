@@ -220,6 +220,40 @@ mod tests {
         assert!((r.y[1].last().unwrap() + 0.5).abs() > 0.1, "it falls");
     }
 
+    /// Tool path → inverse kinematics → the arm's own forward kinematics: the joint values put
+    /// the 6-joint arm's tool on the path. (A Gain feeds the angles to a scope, unconnected to the
+    /// arm's dynamics.)
+    #[test]
+    fn tool_path_ik() {
+        let mut m = Mk::new(6.0, "rk4");
+        m.d.m.sim.step = 0.02;
+        let a = m.add("RobotArm", &[]);
+        m.d.apply(Op::Rename { id: a, name: "Robot arm".into() }).unwrap();
+        let z = m.add("Constant", &[("value", "0")]);
+        m.wire(z, 0, a, 0);
+        let tp = m.add("ToolPath", &[]);
+        let ik = m.add("ArmIKN", &[]);
+        let s = m.add("Scope", &[("n", "2")]);
+        m.wire(tp, 0, ik, 0);
+        m.wire(ik, 0, s, 0);
+        m.wire(tp, 0, s, 1);
+        let r = m.run();
+        let c = crate::urdf::library("arm6", 9.81).unwrap().chain;
+        let mut worst = 0.0f64;
+        for i in (0..r.t.len()).step_by(10) {
+            let q: Vec<f64> = (0..6).map(|k| r.y[k][i]).collect();
+            let p = c.tool_pos(&q);
+            for k in 0..3 {
+                worst = worst.max((p[k] - r.y[6 + k][i]).abs());
+            }
+        }
+        assert!(worst < 1e-8, "{worst}");
+        // An IK block naming no arm is a model error that says so.
+        m.d.apply(Op::SetParam { id: ik, key: "arm".into(), value: "Nope".into() }).unwrap();
+        let e = simulate(&m.d.m, None, &none()).unwrap_err();
+        assert!(e.iter().any(|i| i.msg.contains("no Robot arm (any joints) block named 'Nope'")), "{e:?}");
+    }
+
     /// The 3D view's frames: the 6-joint arm falling under gravity, fed to a RobotView. Each
     /// frame's tool matches the chain's own forward kinematics at the logged angles.
     #[test]

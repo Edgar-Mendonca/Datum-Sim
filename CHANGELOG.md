@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.4 — 2026-11-11
+
+Inverse kinematics for any arm, and tool paths.
+
+- **Inverse kinematics (any arm)** gives the joint values that put a Robot arm's tool at a position, or at a position and orientation (roll, pitch, yaw).
+  - It uses damped least squares on the arm's Jacobian and stays within the joint limits.
+  - Each solution starts from the last one, so the arm moves smoothly.
+  - It takes the robot from the **Robot arm block you name**, so a robot is described only once.
+- **Tool path**: straight tool moves through way points (time, x, y, z), each starting and ending at rest. Feed its position to Inverse kinematics to get joint references.
+
+Checked:
+- The Jacobian matches finite differences for both library arms.
+- Inverse kinematics recovers a pose of the 6-joint and the 7-joint arm, position and orientation, within 1e-9 from a different start, and keeps every joint within its limits.
+- Following the default tool path, the 6-joint arm's tool stays on the path within 1e-8 m.
+- An IK block that names no arm is a model error that says so.
+
+Arcs in tool paths are not in this release.
+
 ## 0.4.3 — 2026-11-11
 
 The robot in 3D.

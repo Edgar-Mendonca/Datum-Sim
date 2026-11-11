@@ -387,6 +387,28 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
             }
         }
     }
+    // Blocks that work on a robot arm (inverse kinematics, controllers) take its description from
+    // the Robot arm block named in their "arm" parameter.
+    for i in 0..n {
+        if !crate::robot::USES_ARM.contains(&flat[i].kind.as_str()) || pvs[i].is_none() {
+            continue;
+        }
+        let want = pvs[i].as_ref().unwrap().t.get("arm").cloned().unwrap_or_default();
+        let want = want.trim();
+        let j = flat.iter().position(|x| x.kind == "RobotArm" && (x.name == format!("{}{want}", flat[i].parent) || x.name == want));
+        match j.and_then(|j| pvs[j].as_ref().map(|p| (p.m.clone(), p.t.clone()))) {
+            Some((m2, t2)) => {
+                let p = pvs[i].as_mut().unwrap();
+                for (k, v) in m2 {
+                    p.m.entry(k).or_insert(v);
+                }
+                for (k, v) in t2 {
+                    p.t.entry(k).or_insert(v);
+                }
+            }
+            None => issues.push(err(flat[i].id, format!("{}: no Robot arm (any joints) block named '{want}'", flat[i].name))),
+        }
+    }
     if issues.iter().any(|i| !i.warn) {
         return Err(issues);
     }
