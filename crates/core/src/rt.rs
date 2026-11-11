@@ -1448,7 +1448,7 @@ pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Result<(Box<dyn Rt>, Vec<usize
             }
             one(Box::new(Lookup2 { x, y, t }), 1)
         }
-        "Scope" | "XY" | "ArmView" | "Display" | "ToFile" | "ToPlot" | "Outport" | "Goto" | "Terminator" => Ok((Box::new(Sink), vec![])),
+        "Scope" | "XY" | "ArmView" | "RobotView" | "Display" | "ToFile" | "ToPlot" | "Outport" | "Goto" | "Terminator" => Ok((Box::new(Sink), vec![])),
         "RateTransition" => {
             let ts = p.pos("ts")?;
             if p.txt("mode") == "delay one sample" {

@@ -16,6 +16,11 @@ fn main() {
     let r = compile::run(sim, None, None).unwrap();
     let all: Vec<&[f64]> = r.y.iter().map(|y| y.as_slice()).collect();
     let (t, y) = compile::decimate_multi(&r.t, &all, r.t[0], *r.t.last().unwrap(), 400);
+    // The 6-joint arm swinging (the 3D view's check).
+    let m6 = examples::get("arm6swing").unwrap();
+    let r6 = compile::simulate(&m6, None, &BTreeMap::new()).unwrap();
+    let v6 = m6.root.blocks.iter().find(|b| b.kind == "RobotView").unwrap().id;
+    let frames6 = serde_json::to_value(datum_core::robot::frames(&m6, None, v6, &r6, 40).unwrap()).unwrap();
     println!("{}", serde_json::json!({
         "state": { "name": m.name, "notes": m.notes, "vars": m.vars, "sim": m.sim, "path": null, "dirty": false, "undo": false, "redo": false, "clip": false, "running": false, "rev": 1, "created": [] },
         "library": { "cats": blocks::CATS, "blocks": blocks::library(), "colours": blocks::COLOURS },
@@ -29,5 +34,6 @@ fn main() {
         "series": { "t": t, "y": y },
         "sub": sub,
         "lin": lin,
+        "frames6": frames6,
     }));
 }

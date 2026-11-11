@@ -31,7 +31,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           window.__calls.push([c, a]);
           if (c === "diagram") {
             if (window.__motor) return f.motor;
-            if (window.__xy) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.kind === "Scope" ? { ...b, kind: "XY" } : b) };
+            if (window.__xy) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.kind === "Scope" ? { ...b, kind: window.__xy } : b) };
             if (window.__dcblock) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.id === f.sub ? { ...b, kind: "DCMotor", sub: false } : b) };
             if (a.parent === f.sub) return f.subdiagram;
             // A masked DC motor subsystem (0.2.0 checks).
@@ -44,6 +44,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           if (c === "new_model") return f.state;
           if (c === "lin_analysis") return f.lin;
           if (c === "trim_info") return [["Level"], 4];
+          if (c === "robot_frames") return f.frames6;
           if (c === "nameplate") return { rs: 0.35, rr: 0.3, lls: 0.004, llr: 0.004, lm: 0.12843, pp: 2, i: 20.7, slip: 0.0267 };
           if (c === "spectrum") return { f0: 50, cycles: 4, t0: 0.12, t1: 0.2, dc: 0.3, harmonics: [2, 0, 0, 0, 0.2, 0, 0.1, 0, 0, 0], thd: 0.1118, f: [0, 12.5], mag: [0.3, 0] };
           if (c === "drive_tune") return { name: "Motor", data: { r: 1, ld: 0.5, lq: 0.5, kt: 0.01, j: 0.01, b: 0.1 }, tune: { iq: { p: a.wcI * 0.5, i: a.wcI, d: 0, n: 100 }, id: { p: a.wcI * 0.5, i: a.wcI, d: 0, n: 100 }, speed: { p: 200, i: 10000, d: 0, n: 100 }, current_margins: { wgc: a.wcI, pm: 90 }, speed_margins: { wgc: a.wcS, pm: 72 } } };
@@ -515,7 +516,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
 
   // 13b7b. An XY graph (and the Arm view, drawn the same way) opens in the dock without errors
   // (0.4.0 bug: the plot's resize observer had no plot area to watch).
-  await p.evaluate(() => { window.__xy = true; });
+  await p.evaluate(() => { window.__xy = "XY"; });
   await p.click('.side button[title="Diagram"]');
   await p.click('.tabs > button:text-is("Model")');
   const xb = await box(pid.name + " (");
@@ -529,6 +530,22 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(700);
   const xt = await p.textContent("#toast").catch(() => "") ?? "";
   check("an XY graph opens in the scopes dock without errors", errors.length === e0 && !xt.includes("Error") && (await p.$$(".dock .plot.xy")).length >= 1, errors.slice(e0).join(" | "));
+  // The 3D view (0.4.3) opens the same way, draws with WebGL and shows its play bar.
+  await p.evaluate(() => { window.__xy = "RobotView"; document.querySelectorAll(".dock .scope .x").forEach(b => b.click()); });
+  await p.click('.ribbon button:has-text("Flip")');
+  await p.waitForTimeout(300);
+  await p.keyboard.press("F5");
+  await p.waitForTimeout(1500);
+  if (process.env.DEBUG) { await p.screenshot({ path: process.env.DEBUG }); console.log("DOCK", await p.evaluate(() => document.querySelector(".dock")?.innerHTML.slice(0, 600))); }
+  const r3 = await p.$$(".dock .robot3d canvas");
+  const xt3 = await p.textContent("#toast").catch(() => "") ?? "";
+  const r3d = await p.evaluate(() => { const h = document.querySelector(".dock .robot3d"); return h ? [h.dataset.parts, h.dataset.failed, h.dataset.why] : null; });
+  // The real app's content security policy must let the window fetch its own files (the meshes);
+  // the browser here has no such policy, so check the setting itself (0.4.3 bug).
+  const csp = JSON.parse(fs.readFileSync(path.join(__dirname, "../src-tauri/tauri.conf.json"))).app.security.csp;
+  check("the app's security policy lets the window load its own robot meshes", /connect-src[^;]*'self'/.test(csp), csp);
+  check("the 3D view draws the 6-joint arm's own parts", !!r3d && +r3d[0] >= 6 && r3d[1] === "0", JSON.stringify(r3d));
+  check("the 3D view opens in the dock with a WebGL canvas and its play bar", r3.length >= 1 && (await p.$$(".dock .robot3d .armplay")).length >= 1 && !xt3.includes("Error"), xt3 + " " + String(r3.length));
   await p.evaluate(() => { window.__xy = false; });
 
   // 13b8. Modules (0.3.6): the robot arm group opens its worked example.
@@ -537,7 +554,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(300);
   const nmr = (await p.evaluate(() => window.__calls)).filter(c => c[0] === "new_model").pop();
   check("Modules › Robot Arm Example opens the robot arm model", JSON.stringify(nmr?.[1] ?? {}).includes("robotarm"), JSON.stringify(nmr));
-  check("the library has the robot arm blocks", fix.library.blocks.filter(b => b.cat === "Robot arm").length === 6);
+  check("the library has the robot arm blocks", fix.library.blocks.filter(b => b.cat === "Robot arm").length === 7);
   await p.click('.tabs > button:text-is("Model")');
 
   // 13c. Planned features (0.2.2): dimmed on their tab with the release; a greyed dialog; a switch hides them.

@@ -1,7 +1,7 @@
 Datum Sim
 Copyright (c) 2026 Edgar Mendonca. MIT licence.
 
-The window bundles SolidJS (MIT), uPlot (MIT, https://github.com/leeoniya/uPlot) and the IBM Plex
+The window bundles SolidJS (MIT), uPlot (MIT, https://github.com/leeoniya/uPlot), three.js (MIT, https://threejs.org) and the IBM Plex
 fonts (SIL Open Font Licence 1.1). The desktop shell uses Tauri (MIT or Apache-2.0) and the Rust
 crates listed in Cargo.lock, each under MIT, Apache-2.0, BSD, ISC, Zlib, MPL-2.0 or Unicode
 licences (checked by cargo deny, deny.toml).

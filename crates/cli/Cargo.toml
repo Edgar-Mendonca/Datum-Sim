@@ -1,6 +1,6 @@
 [package]
 name = "datum-sim-cli"
-version = "0.4.2"
+version = "0.4.3"
 license = "MIT"
 edition = "2021"
 description = "Datum Sim from the command line: run, check and sweep models, and a JSON session for Python."

@@ -249,6 +249,60 @@ impl Rt for ArmN {
     }
 }
 
+/// What the 3D view draws: the robot's meshes, and for each frame every link's frame (rotation
+/// row by row, then origin: 12 numbers per link), the joint origins and the tool.
+#[derive(Debug, serde::Serialize)]
+pub struct Frames {
+    /// "arm6" or "arm7" for the robots that come with the app (their meshes are in the window's
+    /// robots/ folder); "" for others (drawn as a skeleton).
+    pub lib: String,
+    pub meshes: Vec<crate::urdf::Mesh>,
+    pub parents: Vec<Option<usize>>,
+    pub t: Vec<f64>,
+    pub links: Vec<Vec<f64>>,
+    pub joints: Vec<Vec<f64>>,
+    pub tool: Vec<[f64; 3]>,
+}
+
+/// The frames for the RobotView block `view` from the last run's results: its input must come
+/// straight from a Robot arm block's q output.
+pub fn frames(m: &crate::model::Model, base: Option<&std::path::Path>, view: u32, r: &crate::compile::Results, max: usize) -> Result<Frames, String> {
+    let parent = m.parent_of(view).unwrap_or(0);
+    let d = m.diagram(parent).ok_or("The view's diagram is missing.")?;
+    let src = d.wires.iter().find(|w| w.to == (view, 0)).map(|w| w.from).ok_or("Connect the 3D view to a Robot arm's q output.")?;
+    let arm = d.block(src.0).filter(|b| b.kind == "RobotArm" && src.1 == 0).ok_or("The 3D view must be fed the q output of a Robot arm (any joints) block.")?;
+    let (c, lib, meshes) = crate::compile::with_params(m, arm.id, base, |p| {
+        let c = chain(p)?;
+        let lib = match p.t.get("robot").map(|s| s.as_str()) {
+            Some("6-joint industrial arm") => "arm6",
+            Some("7-joint arm") => "arm7",
+            _ => "",
+        };
+        let meshes = if lib.is_empty() { vec![] } else { crate::urdf::library(lib, 9.81)?.meshes };
+        Ok((c, lib.to_string(), meshes))
+    })?;
+    let cols: Vec<usize> = (0..r.chans.len()).filter(|i| r.chans[*i].sink == view && !r.chans[*i].probe).collect();
+    if cols.len() != c.n {
+        return Err(format!("Run the model first: the view needs the arm's {} joint angles.", c.n));
+    }
+    let len = r.t.len();
+    let step = len.div_ceil(max.max(2)).max(1);
+    let mut idx: Vec<usize> = (0..len).step_by(step).collect();
+    if idx.last() != Some(&(len - 1)) && len > 0 {
+        idx.push(len - 1);
+    }
+    let mut f = Frames { lib, meshes, parents: c.bodies.iter().map(|b| b.parent).collect(), t: vec![], links: vec![], joints: vec![], tool: vec![] };
+    for i in idx {
+        let q: Vec<f64> = cols.iter().map(|k| r.y[*k][i]).collect();
+        let ps = c.pose(&q);
+        f.t.push(r.t[i]);
+        f.links.push(ps.lr.iter().zip(&ps.lp).flat_map(|(rr, pp)| rr.iter().flatten().cloned().chain(pp.iter().cloned()).collect::<Vec<_>>()).collect());
+        f.joints.push(ps.jp.iter().flatten().cloned().collect());
+        f.tool.push(c.tool_pos(&q));
+    }
+    Ok(f)
+}
+
 /// The chain a RobotArm block describes: the planar two-link arm, or a DH table.
 pub fn chain(p: &Pv) -> Result<crate::multibody::Chain, String> {
     let g = s(p, "g")?;

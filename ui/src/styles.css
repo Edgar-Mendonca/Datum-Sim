@@ -920,3 +920,8 @@ ul.plain { list-style: none; padding: 0; margin: 4px 0; }
 .armbase { fill: var(--line3); }
 .armbar { display: flex; align-items: center; gap: 8px; padding: 4px 8px; }
 .armbar .armtime { flex: 1; }
+/* 0.4.3: the 3D view. */
+.robot3d { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.robot3d .r3canvas { flex: 1 1 auto; min-height: 0; position: relative; }
+.robot3d canvas { display: block; position: absolute; inset: 0; cursor: grab; }
+.robot3d .armbar { flex: none; }

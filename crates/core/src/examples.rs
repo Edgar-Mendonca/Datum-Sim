@@ -31,6 +31,7 @@ pub fn list() -> Vec<Example> {
         Example { id: "tank", name: "Pump and tank level control", what: "A pump fills a tank that drains through a valve (flow ∝ √level); a PI controller holds the level." },
         Example { id: "cruise", name: "Vehicle cruise control", what: "A car with aerodynamic drag and rolling resistance; a PI controller sets the drive force to hold the speed." },
         Example { id: "robotarm", name: "Robot arm: pick and place", what: "A two-link arm follows a smooth joint trajectory through four way points under computed-torque control; the Arm view animates the motion." },
+        Example { id: "arm6swing", name: "6-joint arm in 3D: swinging under gravity", what: "The 6-joint industrial arm, with no motor torque, swings down under its own weight and settles through joint friction; double-click the 3D view and press Play." },
         Example { id: "drivethermal", name: "PMSM drive: inverter losses and junction temperature", what: "The 15 kW field-oriented drive with the inverter's conduction and switching losses and a junction-to-ambient thermal network: watch the junction warm up as the load comes on." },
         Example { id: "harmonics", name: "Inverter harmonics: switched PWM into an induction motor", what: "A switched two-level inverter at 2 kHz feeds an 11 kW motor: run it, then Analyze › Spectrum on a stator current for its harmonics and THD; try space-vector modulation." },
         Example { id: "imsat", name: "Induction motor start with saturation and iron loss", what: "The direct-on-line start of the 11 kW motor with a saturating magnetising inductance and an iron-loss estimate: compare the magnetising current with the linear motor (set ψ_sat to 0)." },
@@ -115,6 +116,7 @@ pub fn get(id: &str) -> Option<Model> {
         "blank" => Model::new(),
         "msd" => msd(),
         "robotarm" => robot_arm(),
+        "arm6swing" => arm6_swing(),
         "drivethermal" => drive_thermal(),
         "harmonics" => harmonics(),
         "imsat" => im_saturation(),
@@ -387,6 +389,22 @@ fn im_saturation() -> Model {
     let s = add_block(&mut m, "Scope", "Iron loss", 400.0, 260.0, &[]);
     add_wire(&mut m, (mot, 4), (s, 0));
     m
+}
+
+fn arm6_swing() -> Model {
+    let mut b = B::new(
+        "6-joint arm in 3D: swinging under gravity",
+        "The 6-joint industrial arm from the robot library starts stretched out with no motor torque: it swings down under its own weight and comes to rest through joint friction. Double-click the 3D view, press Play, and drag to turn the camera. The joint angles are on the scope.",
+        4.0,
+    );
+    let z = b.blk("Constant", "No torque", 30.0, 80.0, &[("value", "0")]);
+    let a = b.blk("RobotArm", "Robot arm", 180.0, 60.0, &[("robot", "6-joint industrial arm"), ("q0", "[0 -0.3 0.3 0 0 0]"), ("b", "2")]);
+    let v = b.blk("RobotView", "3D view", 380.0, 30.0, &[]);
+    let s = b.blk("Scope", "Joint angles", 380.0, 130.0, &[]);
+    b.w(z, 0, a, 0);
+    b.w(a, 0, v, 0);
+    b.w(a, 0, s, 0);
+    b.done()
 }
 
 fn robot_arm() -> Model {

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.3 — 2026-11-11
+
+The robot in 3D.
+
+- **3D view** (Library › Robot arm, or Modules › Add 3D View): feed it the q output of a Robot arm (any joints) block. After a run it shows the robot moving in 3D.
+  - **Play**, or drag the time slider.
+  - **Turn the camera** by dragging, and zoom with the wheel.
+  - The **tool's path** is traced.
+- The 6-joint and 7-joint arms are drawn with their own parts. Robots from a DH table or your own URDF file are drawn as a skeleton through their joints.
+- The 3D drawing library loads only when a 3D view opens, so the window starts as fast as before.
+- **New example: 6-joint arm in 3D, swinging under gravity.**
+
+Checked: the view's frames match the engine's own kinematics. In the window, the 6-joint arm's seven parts all load and draw, and the view opens in the dock with its play bar. In the real app the arm draws with its parts. A UI check now guards the security setting that first stopped them loading.
+
 ## 0.4.2 — 2026-11-11
 
 Real robots: a 6-joint industrial arm, a 7-joint arm, and your own from URDF files.

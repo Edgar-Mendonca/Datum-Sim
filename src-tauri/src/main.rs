@@ -634,6 +634,14 @@ fn step_marks(st: State<St>, chan: usize) -> R<datum_core::measure::StepMarks> {
     datum_core::measure::step_marks(&r.t, y)
 }
 
+/// The 3D view's frames for a RobotView block from the last run (0.4.3).
+#[tauri::command]
+fn robot_frames(st: State<St>, id: u32) -> R<datum_core::robot::Frames> {
+    let a = st.lock();
+    let r = a.run.results.clone().ok_or("Run the model first.")?;
+    datum_core::robot::frames(&a.doc.m, base_dir(&a).as_deref(), id, &r, 600)
+}
+
 /// An induction motor's equivalent circuit from its nameplate (0.3.5).
 #[tauri::command]
 fn nameplate(plate: datum_core::nameplate::Plate) -> R<datum_core::nameplate::Circuit> {
@@ -948,6 +956,7 @@ fn main() {
             live_set,
             spectrum,
             nameplate,
+            robot_frames,
             run_pace,
             control::trim,
             state, library, diagram, apply, history, copy, paste, examples_list, new_model, check, rates, find, myblocks, save_myblock, add_myblock, delete_myblock, open, save, save_file,

@@ -372,7 +372,7 @@ export const Canvas = () => {
     // A masked subsystem is a block: double-click edits its parameters; look under the mask to go in.
     if (b.sub && b.mask) { setSel([b.id]); document.querySelector<HTMLInputElement>(".insp input, .insp select")?.focus(); }
     else if (b.sub) enter(b.id);
-    else if (b.kind === "Scope" || b.kind === "XY" || b.kind === "ArmView") { if (!scopes().includes(b.id)) setScopes([...scopes(), b.id]); }
+    else if (b.kind === "Scope" || b.kind === "XY" || b.kind === "ArmView" || b.kind === "RobotView") { if (!scopes().includes(b.id)) setScopes([...scopes(), b.id]); }
     else { setSel([b.id]); document.querySelector<HTMLInputElement>(".insp input, .insp select")?.focus(); }
   };
 
@@ -452,7 +452,7 @@ export const Canvas = () => {
     }
     const items: Item[] = b ? [
       ...(b.sub ? [{ label: b.mask ? "Look under the mask" : "Open subsystem", run: () => enter(b.id) } as Item, { label: b.mask ? "Edit the mask…" : "Add a mask…", run: () => D.maskEditor(b) } as Item, { label: "Save to My blocks…", run: () => D.saveMyBlock(b) } as Item] : []),
-      ...(b.kind === "Scope" || b.kind === "XY" || b.kind === "ArmView" ? [{ label: "Open scope", icon: "scope", run: () => setScopes([...new Set([...scopes(), b.id])]) } as Item] : []),
+      ...(b.kind === "Scope" || b.kind === "XY" || b.kind === "ArmView" || b.kind === "RobotView" ? [{ label: "Open scope", icon: "scope", run: () => setScopes([...new Set([...scopes(), b.id])]) } as Item] : []),
       { label: "Rename…", icon: "rename", run: C.rename, keys: "F2" }, { label: "Flip", icon: "flip", run: C.flip, keys: "Ctrl+R" }, { label: "Colour…", run: () => C.colourMenu({ x: e.clientX, y: e.clientY }) },
       "-", { label: "Cut", icon: "cut", run: C.cut, keys: "Ctrl+X" }, { label: "Copy", icon: "copy", run: C.copy, keys: "Ctrl+C" }, { label: "Delete", icon: "del", run: C.del, keys: "Del" },
       "-", { label: "Create subsystem", icon: "sub", run: C.group, keys: "Ctrl+G" }, ...(b.sub ? [{ label: "Ungroup", icon: "ungroup", run: () => C.ungroup(b.id) } as Item] : []),

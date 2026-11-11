@@ -220,6 +220,29 @@ mod tests {
         assert!((r.y[1].last().unwrap() + 0.5).abs() > 0.1, "it falls");
     }
 
+    /// The 3D view's frames: the 6-joint arm falling under gravity, fed to a RobotView. Each
+    /// frame's tool matches the chain's own forward kinematics at the logged angles.
+    #[test]
+    fn robot_view_frames() {
+        let mut m = Mk::new(0.5, "rk45");
+        let a = m.add("RobotArm", &[]);
+        let z = m.add("Constant", &[("value", "0")]);
+        let v = m.add("RobotView", &[]);
+        m.wire(z, 0, a, 0);
+        m.wire(a, 0, v, 0);
+        let r = m.run();
+        let f = crate::robot::frames(&m.d.m, None, v, &r, 50).unwrap();
+        assert_eq!(f.lib, "arm6");
+        assert!(f.t.len() <= 52 && !f.meshes.is_empty() && f.links[0].len() == 12 * f.parents.len());
+        let last = f.tool.last().unwrap();
+        assert!(last.iter().all(|x| x.is_finite()));
+        // Unconnected or fed from elsewhere: a clear message.
+        let mut m2 = Mk::new(0.1, "rk45");
+        let v2 = m2.add("RobotView", &[]);
+        let r2 = m2.run();
+        assert!(crate::robot::frames(&m2.d.m, None, v2, &r2, 50).unwrap_err().contains("Robot arm"));
+    }
+
     /// The robot arm example: computed torque with an exact model makes each joint follow its
     /// trajectory (the error stays below 1e-4 rad), and the joint angles reach the last way point.
     #[test]

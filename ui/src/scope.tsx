@@ -9,6 +9,9 @@ import { chans, results, live, liveTick, running, themeTick, dview, scopes, setS
 import { C } from "./cmds";
 import { Icon, Dialog } from "./ui";
 import { ArmPlot } from "./robot";
+import { lazy } from "solid-js";
+// three.js loads only when a 3D view opens.
+const Robot3DLazy = lazy(() => import("./robot3d").then(m => ({ default: m.Robot3D })));
 
 export const OKABE = ["#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7", "#56B4E9", "#F0E442", "#000000"];
 const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -50,7 +53,8 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
   const idx = createMemo(() => chans().map((c, i) => [c, i] as const).filter(([c]) => c.sink === p.id && !c.probe).map(([, i]) => i));
   const kindOf = () => dview()?.blocks.find(b => b.id === p.id)?.kind;
   const isArm = () => kindOf() === "ArmView";
-  const isXY = () => kindOf() === "XY" || isArm();
+  const is3D = () => kindOf() === "RobotView";
+  const isXY = () => kindOf() === "XY" || isArm() || is3D();
   const set = () => scopeSet(p.id);
   const [range, setRange] = createSignal<[number, number] | null>(null);
   const [cursor, setCursor] = createSignal<string>("");
@@ -370,7 +374,7 @@ export const Scope = (p: { id: number; close?: boolean; height?: number }) => {
         </tbody></table></div>
       </Show>
       <Show when={isXY()} fallback={<div class="plot" ref={host}><Show when={!idx().length}><p class="muted pempty">Run the model to see this scope.</p></Show></div>}>
-        <Show when={isArm()} fallback={<XYPlot id={p.id} />}><ArmPlot id={p.id} /></Show>
+        <Show when={is3D()} fallback={<Show when={isArm()} fallback={<XYPlot id={p.id} />}><ArmPlot id={p.id} /></Show>}><Robot3DLazy id={p.id} /></Show>
       </Show>
     </div>
   );
@@ -429,7 +433,7 @@ export const ScopesPage = () => (
   <div class="page scopespage">
     <h1>Scopes</h1>
     <Show when={sinks().length} fallback={<p class="muted">Run the model (Simulate › Run, or F5) to see its scopes. Add Scope blocks to plot signals.</p>}>
-      <div class="scopegrid"><For each={sinks().filter(s => s.kind === "Scope" || s.kind === "XY" || s.kind === "ArmView")}>{s => <Scope id={s.id} height={320} />}</For></div>
+      <div class="scopegrid"><For each={sinks().filter(s => s.kind === "Scope" || s.kind === "XY" || s.kind === "ArmView" || s.kind === "RobotView")}>{s => <Scope id={s.id} height={320} />}</For></div>
     </Show>
   </div>
 );

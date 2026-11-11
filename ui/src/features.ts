@@ -21,7 +21,6 @@ export const FEATS: Feat[] = [
   // ---- Stage B: drives and modules (0.3.x → 0.4.0)
 
   // ---- Stage R: robotics (0.4.x → 0.5.0), before physical components
-  f("r-3d", "modules", "Robotics", "0.4.3", "3D View", "scope", "The robot in 3D with its own parts: play, drag through time, the tool path and an orbit camera."),
   f("r-ik", "modules", "Robotics", "0.4.4", "Inverse Kinematics", "solver", "Joint angles for a tool pose on any arm, within joint limits; straight-line and arc paths for the tool."),
   f("r-ctl", "modules", "Robotics", "0.4.5", "Arm Controllers", "specs", "Computed torque and PD + gravity for any arm; mass, gravity and velocity torque blocks; motors on joints through gears."),
   f("r-grip", "modules", "Robotics", "0.4.6", "Gripper and Contact", "block", "A gripper that grasps and releases objects, with simple contact between the robot, objects and a table."),

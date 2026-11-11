@@ -542,7 +542,7 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
     let mut chans = vec![];
     let mut files = vec![];
     for (i, f) in flat.iter().enumerate() {
-        if !matches!(f.kind.as_str(), "Scope" | "XY" | "ArmView" | "Display" | "ToFile" | "ToPlot") {
+        if !matches!(f.kind.as_str(), "Scope" | "XY" | "ArmView" | "RobotView" | "Display" | "ToFile" | "ToPlot") {
             continue;
         }
         let first = chans.len();
@@ -954,6 +954,16 @@ impl Ode for Runner<'_> {
     fn f(&mut self, t: f64, tseg: f64, x: &[f64], dx: &mut [f64]) {
         self.sim.f(t, tseg, x, dx)
     }
+}
+
+/// Run `f` on a block's evaluated parameters (numbers and texts), where it sits.
+pub fn with_params<R>(m: &Model, id: u32, base: Option<&Path>, f: impl FnOnce(&Pv) -> Result<R, String>) -> Result<R, String> {
+    let vars = eval_vars(m, &BTreeMap::new()).map_err(|e| e.into_iter().map(|i| i.msg).collect::<Vec<_>>().join("; "))?;
+    let (flat, _, scopes) = flatten(m, &mut vec![]);
+    let svars = scope_vars(&vars, &scopes, &mut vec![]);
+    let fl = flat.iter().find(|x| x.id == id).ok_or("The block no longer exists.")?;
+    let p = params(fl, &svars[fl.scope], base)?;
+    f(&p)
 }
 
 /// A block's numeric parameters, evaluated where it sits (model variables or its mask's).
