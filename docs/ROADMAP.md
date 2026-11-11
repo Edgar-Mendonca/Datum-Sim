@@ -52,7 +52,7 @@ Where we are already strong, made stronger. This is what drive engineers check d
 Added 2026-11-11 at the user's request, before stage C, for both a 6-joint and a 7-joint arm. Details in `docs/PLAN-robotics.md`: any serial arm (0.4.1), URDF import and the robot library (0.4.2), 3D view (0.4.3), inverse kinematics and tool paths (0.4.4), controllers and motors on joints (0.4.5), gripper and contact (0.4.6), task scheduler (0.4.7), pick-and-place examples (0.4.8), milestone 0.5.0.
 
 ### Stage C: physical components (0.5.1 → 0.6.0)
-Draw mechanical, electrical and thermal parts as they are, connected by ports instead of signals. It is the biggest engine change, so it gets its own plan with questions first.
+Draw mechanical, electrical and thermal parts as they are, connected by ports instead of signals. It is the biggest engine change, so it gets its own plan with questions first: `docs/PLAN-0.6.md` (written 2026-11-11, waiting for the user's answers). The plan adds an examples release (0.5.7) before the milestone.
 
 | Release | What it adds |
 | --- | --- |

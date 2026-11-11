@@ -325,6 +325,16 @@
 - The session disk filled once with build output (25 GB); `cargo clean` freed it.
 - Record: `docs/verification/2026-11-11-robotics.md`.
 
+### 2026-11-11: Session 9 continued (plan for stage C)
+- The user: "plan stage C physical components". Wrote `docs/PLAN-0.6.md`.
+- Recommendation:
+  - Network equations per connected group (across and through variables, the circuit-simulator method in every domain).
+  - Each network becomes one block in the signal engine: energy-storage states, other unknowns by Newton at each evaluation. So the solvers, linearisation, trim and live tuning work unchanged.
+  - Ideal switches with exact switching instants.
+  - Rigid inertias merged; other higher-index networks reported with a fix.
+  - No AGPL or GPL Modelica tools.
+- Releases 0.5.1 (engine, editor, rotational) to 0.5.7 (examples), then 0.6.0. Six questions are open.
+
 ## 5. Known limits and next steps
 
 - The user ran 0.1.0 on Windows (installer, Python, printing, updater work). The 0.1.2 motor library has not yet been run on a Windows PC; CI builds and tests on Windows and macOS.
