@@ -206,7 +206,74 @@ impl Rt for Ik {
     }
 }
 
-pub const KINDS: &[&str] = &["RobotArm2", "ArmTrajectory", "ArmController", "ArmIK"];
+pub const KINDS: &[&str] = &["RobotArm2", "ArmTrajectory", "ArmController", "ArmIK", "RobotArm"];
+
+/// A robot arm with any number of joints (0.4.1): states q and q̇; outputs q, q̇ and the tool's
+/// position. One torque for every joint, or a single value for all.
+#[derive(Clone)]
+pub struct ArmN {
+    pub c: crate::multibody::Chain,
+    pub q0: Vec<f64>,
+}
+impl Rt for ArmN {
+    fn rate(&self) -> Rate {
+        Rate::Continuous
+    }
+    fn nx(&self) -> usize {
+        2 * self.c.n
+    }
+    fn init(&mut self, x: &mut [f64]) {
+        let n = self.c.n;
+        for i in 0..n {
+            x[i] = self.q0.get(i).cloned().unwrap_or(0.0);
+            x[n + i] = 0.0;
+        }
+    }
+    fn feed(&self) -> bool {
+        false
+    }
+    fn out(&self, _: &Ctx, x: &[f64], _: &[f64], y: &mut [f64]) {
+        let n = self.c.n;
+        y[..2 * n].copy_from_slice(x);
+        y[2 * n..2 * n + 3].copy_from_slice(&self.c.tool_pos(&x[..n]));
+    }
+    fn deriv(&self, _: &Ctx, x: &[f64], u: &[f64], dx: &mut [f64]) {
+        let n = self.c.n;
+        let tau: Vec<f64> = (0..n).map(|i| if u.len() == 1 { u[0] } else { u[i] }).collect();
+        let a = self.c.accel(&x[..n], &x[n..], &tau);
+        dx[..n].copy_from_slice(&x[n..]);
+        dx[n..].copy_from_slice(&a);
+    }
+    fn clone_box(&self) -> Box<dyn Rt> {
+        Box::new(self.clone())
+    }
+}
+
+/// The chain a RobotArm block describes: the planar two-link arm, or a DH table.
+pub fn chain(p: &Pv) -> Result<crate::multibody::Chain, String> {
+    let g = s(p, "g")?;
+    let b = p.v("b")?;
+    let tool = p.v("tool")?;
+    let tool: [f64; 3] = match tool.as_slice() {
+        [x, y, z] => [*x, *y, *z],
+        _ => return Err("the tool offset takes three values (x y z) in the last link's frame".into()),
+    };
+    let robot = p.t.get("robot").map(|s| s.as_str()).unwrap_or("DH table");
+    match robot {
+        "two-link planar" => {
+            let h = std::f64::consts::FRAC_PI_2;
+            crate::multibody::Chain::from_dh(&[[h, 0.0, 0.0, 0.0, 1.0, 0.25, 0.0, 0.0, 0.0, 0.0208, 0.0208], [0.0, 0.5, 0.0, 0.0, 0.8, 0.2, 0.0, 0.0, 0.0, 0.0107, 0.0107]], false, g, [0.4, 0.0, 0.0], &b)
+        }
+        _ => {
+            let m: &Mat = p.m.get("dh").ok_or("the DH table is missing")?;
+            if m.c != 11 || m.r == 0 {
+                return Err("the DH table has one row per joint of 11 values: α a d θ₀ m cx cy cz Ixx Iyy Izz".into());
+            }
+            let rows: Vec<[f64; 11]> = (0..m.r).map(|i| std::array::from_fn(|j| m.at(i, j))).collect();
+            crate::multibody::Chain::from_dh(&rows, p.t.get("conv").map(|s| s.as_str()) == Some("standard"), g, tool, &b)
+        }
+    }
+}
 
 fn need(iw: &[usize], w: &[usize], what: &str) -> Result<(), String> {
     if iw.len() != w.len() || iw.iter().zip(w).any(|(a, b)| a != b) {
@@ -218,6 +285,15 @@ fn need(iw: &[usize], w: &[usize], what: &str) -> Result<(), String> {
 pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Option<Result<(Box<dyn Rt>, Vec<usize>), String>> {
     let r = || -> Result<(Box<dyn Rt>, Vec<usize>), String> {
         match kind {
+            "RobotArm" => {
+                let c = chain(p)?;
+                let n = c.n;
+                if iw.len() != 1 || (iw[0] != n && iw[0] != 1) {
+                    return Err(format!("its input must be the joint torques τ (width {n})"));
+                }
+                let q0 = p.v("q0")?;
+                Ok((Box::new(ArmN { c, q0 }), vec![n, n, 3]))
+            }
             "RobotArm2" => {
                 // Width 1 is allowed (the same torque on both joints); it also lets a loop through a
                 // controller settle its widths.

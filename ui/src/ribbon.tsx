@@ -142,7 +142,7 @@ export const Ribbon = () => (
     </Show>
     <Show when={tab() === "modules"}>
       <G l="Robot Arm" h="robot"><B big i="motor" l="Robot Arm Example" run={() => C.newModel("robotarm")} title="A two-link arm following a trajectory under computed-torque control, with an animated view" />
-        <S><B i="block" l="Add Arm" run={() => C.addBlock("RobotArm2")} /><B i="block" l="Add Trajectory" run={() => C.addBlock("ArmTrajectory")} /><B i="block" l="Add Controller" run={() => C.addBlock("ArmController")} /></S>
+        <S><B i="block" l="Add Arm (Any Joints)" run={() => C.addBlock("RobotArm")} /><B i="block" l="Add Two-Link Arm" run={() => C.addBlock("RobotArm2")} /><B i="block" l="Add Trajectory" run={() => C.addBlock("ArmTrajectory")} /><B i="block" l="Add Controller" run={() => C.addBlock("ArmController")} /></S>
         <S><B i="block" l="Add Inverse Kinematics" run={() => C.addBlock("ArmIK")} /><B i="scope" l="Add Arm View" run={() => C.addBlock("ArmView")} /></S></G>
       <PlannedGroups tab="modules" />
     </Show>

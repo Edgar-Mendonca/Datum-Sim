@@ -187,6 +187,39 @@ mod tests {
         }
     }
 
+    /// The N-joint arm block: held by its gravity torques (computed by the engine's own inverse
+    /// dynamics at the start pose) it stays still; with no torque it falls.
+    #[test]
+    fn robot_arm_n_block() {
+        let mut m = Mk::new(1.0, "rk45");
+        let a = m.add("RobotArm", &[("b", "0")]);
+        // The gravity torques at q0 = [0 -0.5 1 0 0 0].
+        let def = crate::blocks::def("RobotArm").unwrap();
+        let get = |k: &str| def.params.iter().find(|x| x.key == k).unwrap().def.to_string();
+        let mm = |k: &str| crate::expr::eval(&get(k), &|_| None).unwrap();
+        let vars = Default::default();
+        let mut pv = crate::rt::Pv { m: Default::default(), t: Default::default(), vars: &vars, base: None };
+        for k in ["dh", "tool", "g", "b", "q0"] {
+            pv.m.insert(k.into(), mm(k));
+        }
+        pv.m.insert("b".into(), crate::expr::Mat::scalar(0.0));
+        pv.t.insert("robot".into(), "DH table".into());
+        pv.t.insert("conv".into(), "modified".into());
+        let ch = crate::robot::chain(&pv).unwrap();
+        let q0 = [0.0, -0.5, 1.0, 0.0, 0.0, 0.0];
+        let g = ch.rnea(&q0, &[0.0; 6], &[0.0; 6], true);
+        let c = m.add("Constant", &[("value", &format!("[{}]", g.iter().map(|v| format!("{v:.17e}")).collect::<Vec<_>>().join(" ")))]);
+        let s = m.add("Scope", &[]);
+        m.wire(c, 0, a, 0);
+        m.wire(a, 0, s, 0);
+        let r = m.run();
+        let drift = r.y.iter().zip(q0).map(|(y, q)| (y.last().unwrap() - q).abs()).fold(0.0, f64::max);
+        assert!(drift < 1e-6, "{drift}");
+        m.d.apply(Op::SetParam { id: c, key: "value".into(), value: "0".into() }).unwrap();
+        let r = m.run();
+        assert!((r.y[1].last().unwrap() + 0.5).abs() > 0.1, "it falls");
+    }
+
     /// The robot arm example: computed torque with an exact model makes each joint follow its
     /// trajectory (the error stays below 1e-4 rad), and the joint angles reach the last way point.
     #[test]

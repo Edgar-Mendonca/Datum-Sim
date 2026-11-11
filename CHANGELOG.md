@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.1 — 2026-11-11
+
+Robotics begins: robot arms with any number of joints.
+
+- **Robot arm, any joints** (Library › Robot arm, or Modules › Add Arm (Any Joints)) builds an arm from a DH table. Each row is one joint: α, a, d, θ₀, the link's mass, its centre of mass and its inertias. Modified (Craig) and standard DH are both supported.
+  - Input: one torque per joint, or one value for all.
+  - Outputs: the joint angles, the joint speeds and the tool's position (x, y, z).
+  - Gravity, joint friction, a tool offset and initial angles are set on the block.
+- The engine computes the dynamics of any chain of rigid links: inverse dynamics, the mass matrix and forward dynamics.
+- The default table is a six-joint arm, so you can drop the block in and run it.
+
+Checked:
+- As a DH chain, the two-link planar arm gives the closed form's accelerations within 1e-10, and its tip exactly.
+- A six-joint arm with full inertias keeps its energy within 1e-8 without torque or friction, in both DH conventions. Its forward and inverse dynamics agree within 1e-9.
+- Held by its own gravity torques, the six-joint arm stays still within 1e-6 rad.
+
+Next: robots loaded from description files (0.4.2) and a 3D view (0.4.3).
+
 ## 0.4.0 — 2026-11-10
 
 Drives in depth and the robot arm: the second stage of the roadmap is done. 0.4.0 brings together 0.3.1 to 0.3.7:
