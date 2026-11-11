@@ -210,7 +210,68 @@ impl Rt for Ik {
     }
 }
 
-pub const KINDS: &[&str] = &["RobotArm2", "ArmTrajectory", "ArmController", "ArmIK", "RobotArm", "ArmIKN", "ToolPath", "ArmControllerN", "ArmGravity", "ArmInvDyn", "JointDrive", "Payload"];
+pub const KINDS: &[&str] = &["RobotArm2", "ArmTrajectory", "ArmController", "ArmIK", "RobotArm", "ArmIKN", "ToolPath", "ArmControllerN", "ArmGravity", "ArmInvDyn", "JointDrive", "Payload", "TaskScheduler"];
+
+/// A task scheduler (0.4.7): steps in order, each a row of (duration, values…). During a step
+/// the values glide from the last step's to this step's (a quintic, starting and ending at rest),
+/// except the columns listed as switches, which jump at the step's start. A step ends when its
+/// time is up and, when the block waits, its input is ≥ 0.5. Outputs: the values, the step (1…).
+#[derive(Clone)]
+struct Tasks {
+    rows: Vec<(f64, Vec<f64>)>,
+    jump: Vec<bool>,
+    wait: bool,
+    repeat: bool,
+    /// The present step and when it started (discrete state).
+    k: usize,
+    t0: f64,
+}
+impl Tasks {
+    fn values(&self, t: f64) -> Vec<f64> {
+        let (dur, to) = (&self.rows[self.k].0, &self.rows[self.k].1);
+        let from = if self.k == 0 { to } else { &self.rows[self.k - 1].1 };
+        let s = if *dur > 0.0 { ((t - self.t0) / dur).clamp(0.0, 1.0) } else { 1.0 };
+        let g = s * s * s * (10.0 - 15.0 * s + 6.0 * s * s);
+        (0..to.len()).map(|i| if self.jump[i] { to[i] } else { from[i] + (to[i] - from[i]) * g }).collect()
+    }
+}
+impl Rt for Tasks {
+    fn rate(&self) -> Rate {
+        Rate::Continuous
+    }
+    fn init(&mut self, _: &mut [f64]) {
+        self.k = 0;
+        self.t0 = 0.0;
+    }
+    fn feed(&self) -> bool {
+        false
+    }
+    fn out(&self, c: &Ctx, _: &[f64], _: &[f64], y: &mut [f64]) {
+        let v = self.values(c.t);
+        let w = v.len();
+        y[..w].copy_from_slice(&v);
+        y[w] = (self.k + 1) as f64;
+    }
+    fn update(&mut self, c: &Ctx, _: &mut [f64], u: &[f64]) {
+        let done = c.t >= self.t0 + self.rows[self.k].0 - 1e-12 && (!self.wait || u.first().is_some_and(|v| *v >= 0.5));
+        if done {
+            if self.k + 1 < self.rows.len() {
+                self.k += 1;
+                self.t0 = c.t;
+            } else if self.repeat {
+                self.k = 0;
+                self.t0 = c.t;
+            }
+        }
+    }
+    fn next_hit(&self, t: f64) -> f64 {
+        let end = self.t0 + self.rows[self.k].0;
+        if end > t + 1e-12 { end } else { f64::INFINITY }
+    }
+    fn clone_box(&self) -> Box<dyn Rt> {
+        Box::new(self.clone())
+    }
+}
 
 /// An object the gripper can pick up, resting on a table (0.4.6). States: position and velocity.
 /// The table pushes up by spring–damper contact below its height, with sliding damping. When the
@@ -662,6 +723,32 @@ pub fn build(kind: &str, p: &Pv, iw: &[usize]) -> Option<Result<(Box<dyn Rt>, Ve
                     return Err("R and L must be positive".into());
                 }
                 Ok((Box::new(JointDrive { r, l, kt: get("Kt")?, ke: get("Ke")?, gear: get("N")?, eff: get("eta")? }), vec![n, n]))
+            }
+            "TaskScheduler" => {
+                let m: &Mat = p.m.get("steps").ok_or("steps is missing")?;
+                if m.c < 2 || m.r < 1 {
+                    return Err("steps are rows of (duration, value 1, value 2, …)".into());
+                }
+                let rows: Vec<(f64, Vec<f64>)> = (0..m.r).map(|i| (m.at(i, 0), (1..m.c).map(|j| m.at(i, j)).collect())).collect();
+                if rows.iter().any(|r| r.0 < 0.0) {
+                    return Err("durations cannot be negative".into());
+                }
+                let w = m.c - 1;
+                let mut jump = vec![false; w];
+                for v in p.v("switches")? {
+                    let k = v.round() as i64;
+                    if k >= 1 && (k as usize) <= w {
+                        jump[k as usize - 1] = true;
+                    } else if k != 0 {
+                        return Err(format!("switch column {k} is outside 1…{w}"));
+                    }
+                }
+                let wait = p.t.get("wait").map(|s| s.as_str()) == Some("yes");
+                if wait != (iw.len() == 1) {
+                    return Err("connect the condition input when the block waits for it".into());
+                }
+                let repeat = p.t.get("repeat").map(|s| s.as_str()) == Some("yes");
+                Ok((Box::new(Tasks { rows, jump, wait, repeat, k: 0, t0: 0.0 }), vec![w, 1]))
             }
             "Payload" => {
                 if iw.len() != 3 || iw[0] != 3 || iw[1] != 3 || iw[2] != 1 {

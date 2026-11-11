@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.7 — 2026-11-11
+
+The task scheduler.
+
+- **Task scheduler** (Library › Robot arm) runs a task as steps. Each row is a step's duration and its target values, such as a tool position and a grip.
+  - During a step the values glide smoothly from the last step's to this one's.
+  - **Switch columns**, such as the grip, jump at the step's start instead.
+  - **Wait for condition**: a step also needs its input ≥ 0.5 to end, for example "the payload is held".
+  - **Repeat** starts again after the last step.
+  - Outputs: the values and the step number.
+- Its default steps are a pick and place: approach, go down, close, lift, carry, go down, open, back away.
+
+Checked:
+- Steps change at their times.
+- Gliding values are exactly half-way at a step's middle, and switch columns jump.
+- A step that waits for its condition ends only once the condition rises.
+
+This is a small sequencer for robot tasks. Full state machines (branches, parallel states) stay on the roadmap for 0.7.1.
+
 ## 0.4.6 — 2026-11-11
 
 Gripper and contact: pick things up.

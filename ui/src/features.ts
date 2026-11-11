@@ -22,7 +22,6 @@ export const FEATS: Feat[] = [
 
   // ---- Stage R: robotics (0.4.x → 0.5.0), before physical components
   f("r-arc", "modules", "Robotics", "later", "Arc Tool Paths", "solver", "Tool paths along arcs and with orientation changes."),
-  f("r-task", "modules", "Robotics", "0.4.7", "Task Scheduler", "sub", "A small state machine for pick and place: states, conditions and outputs."),
 
   // ---- Stage C: physical components (0.4.x → 0.5.0)
   f("phys-rot", "modules", "Physical", "0.5.1", "Rotational", "block", "Inertia, spring, damper, gear and friction, connected by ports (the equations come from the connections)."),

@@ -220,6 +220,32 @@ mod tests {
         assert!((r.y[1].last().unwrap() + 0.5).abs() > 0.1, "it falls");
     }
 
+    /// The task scheduler: steps at their times, values gliding (half-way at a step's middle) or
+    /// jumping (switch columns), and a step that waits for its condition.
+    #[test]
+    fn task_scheduler() {
+        let mut m = Mk::new(4.0, "rk4");
+        m.d.m.sim.step = 0.01;
+        let ts = m.add("TaskScheduler", &[("steps", "[1 0 0; 1 2 1; 1 4 0]"), ("switches", "2")]);
+        let s = m.add("Scope", &[("n", "2")]);
+        m.wire(ts, 0, s, 0);
+        m.wire(ts, 1, s, 1);
+        let r = m.run();
+        assert!((at(&r, 0, 1.5) - 1.0).abs() < 1e-9 && at(&r, 1, 1.5) == 1.0 && at(&r, 2, 1.5) == 2.0, "{} {} {}", at(&r, 0, 1.5), at(&r, 1, 1.5), at(&r, 2, 1.5));
+        assert!((at(&r, 0, 2.5) - 3.0).abs() < 1e-9 && at(&r, 1, 2.5) == 0.0 && at(&r, 2, 2.5) == 3.0);
+        assert!((r.y[0].last().unwrap() - 4.0).abs() < 1e-12);
+        // Waiting: step 1 cannot end before the condition rises at 2.5 s.
+        let mut m = Mk::new(4.0, "rk4");
+        m.d.m.sim.step = 0.01;
+        let ts = m.add("TaskScheduler", &[("steps", "[1 0; 1 1]"), ("switches", "0"), ("wait", "yes")]);
+        let go = m.add("Step", &[("time", "2.5"), ("final", "1")]);
+        let s = m.add("Scope", &[]);
+        m.wire(go, 0, ts, 0);
+        m.wire(ts, 1, s, 0);
+        let r = m.run();
+        assert!(at(&r, 0, 2.4) == 1.0 && at(&r, 0, 2.6) == 2.0, "{} {}", at(&r, 0, 2.4), at(&r, 0, 2.6));
+    }
+
     /// A payload on the table rests at its height less m·g/k; a tool that closes on it and lifts
     /// carries it (sagging m·g/k_grip below the tool); opening drops it back to the table. The
     /// force on the tool while held, at rest, is the object's weight.
