@@ -24,7 +24,6 @@ export const FEATS: Feat[] = [
   f("r-arc", "modules", "Robotics", "later", "Arc Tool Paths", "solver", "Tool paths along arcs and with orientation changes."),
 
   // ---- Stage C: physical components (0.4.x → 0.5.0)
-  f("phys-rot", "modules", "Physical", "0.5.1", "Rotational", "block", "Inertia, spring, damper, gear and friction, connected by ports (the equations come from the connections)."),
   f("phys-trans", "modules", "Physical", "0.5.2", "Translational", "block", "Mass, spring, damper and hard stop, connected by ports."),
   f("phys-elec", "modules", "Physical", "0.5.3", "Electrical", "block", "Resistor, inductor, capacitor, sources, switch, diode and transformer."),
   f("phys-therm", "modules", "Physical", "0.5.4", "Thermal", "block", "Heat capacity, conduction and convection."),

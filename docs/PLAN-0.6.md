@@ -1,6 +1,6 @@
 # Plan 0.6: physical components (stage C, 0.5.1 → 0.6.0)
 
-Written 2026-11-11 (session 9), after robotics (0.5.0). Status: **waiting for the user's answers (§8)**. Nothing is built from it until then.
+Written 2026-11-11 (session 9), after robotics (0.5.0). Status: **agreed (the defaults in §8), being built**. 0.5.1 is done.
 
 ## 1. What changes for the user
 

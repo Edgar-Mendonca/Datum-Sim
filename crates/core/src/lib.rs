@@ -18,6 +18,7 @@ pub mod lti;
 pub mod measure;
 pub mod model;
 pub mod motors;
+pub mod physical;
 pub mod multibody;
 pub mod urdf;
 pub mod nameplate;

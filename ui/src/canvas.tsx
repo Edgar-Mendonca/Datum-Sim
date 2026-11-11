@@ -2,6 +2,7 @@
 // Geometry (ports, routed wires) comes from the engine; the window only draws and sends edits.
 import { For, Show, JSX, createSignal, createMemo, createEffect, onMount, onCleanup, batch, on } from "solid-js";
 import { BlockView, WireView, Pt, num } from "./api";
+import { toast } from "./store";
 import { dview, sel, setSel, act, parent, enter, out, opts, issues, results, chans, openMenu, defOf, lib, openDialog, closeDialog, setScopes, scopes, Item, running, setView, setBackstage, showRates, rateColours, probeT } from "./store";
 import { invoke } from "./api";
 import { C } from "./cmds";
@@ -236,6 +237,7 @@ export const findDialog = () => openDialog(() => {
 type Drag =
   | { k: "move"; ids: number[]; x0: number; y0: number; dx: number; dy: number }
   | { k: "wire"; from: [number, number] | null; to: [number, number] | null; a: Pt; b: Pt }
+  | { k: "pwire"; from: [number, number]; dom: string; a: Pt; b: Pt }
   | { k: "box"; a: Pt; b: Pt; add: boolean }
   | { k: "pan"; cx: number; cy: number; p0: Pt }
   | { k: "size"; id: number; x0: number; y0: number; b: BlockView; w: number; h: number }
@@ -259,6 +261,15 @@ export const Canvas = () => {
     }
     return best;
   };
+  /** The physical port (0.5.1) under the pointer: [block, port, domain]. */
+  const physAt = (p: Pt): [number, number, string] | null => {
+    let best: [number, number, string] | null = null, bd = 12 / zoom();
+    for (const b of v()?.blocks ?? []) for (const [i, q] of (b.phys ?? []).entries()) {
+      const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (d < bd) { bd = d; best = [b.id, i, b.phys_dom?.[i] ?? ""]; }
+    }
+    return best;
+  };
   const blockAt = (p: Pt) => [...(v()?.blocks ?? [])].reverse().find(b => p[0] >= b.x - 2 && p[0] <= b.x + b.w + 2 && p[1] >= b.y - 2 && p[1] <= b.y + b.h + 2);
 
   let lastWire: { id: number; t: number } | null = null;
@@ -279,6 +290,9 @@ export const Canvas = () => {
     // Resize handle
     const hid = t.getAttribute("data-size");
     if (hid) { const b = blockMap().get(+hid)!; setDrag({ k: "size", id: b.id, x0: p[0], y0: p[1], b, w: b.w, h: b.h }); return; }
+    // Physical ports start physical connections (no direction).
+    const pp = physAt(p);
+    if (pp) { const b = blockMap().get(pp[0])!; setDrag({ k: "pwire", from: [pp[0], pp[1]], dom: pp[2], a: b.phys![pp[1]], b: p }); return; }
     // Ports start wires.
     const po = portAt(p, "out");
     if (po) { const b = blockMap().get(po[0])!; setDrag({ k: "wire", from: po, to: null, a: b.outs[po[1]], b: p }); return; }
@@ -327,7 +341,7 @@ export const Canvas = () => {
       const first = blockMap().get(d.ids[0])!;
       const dx = snap(first.x + p[0] - d.x0) - first.x, dy = snap(first.y + p[1] - d.y0) - first.y;
       setDrag({ ...d, dx, dy });
-    } else if (d.k === "wire" || d.k === "box" || d.k === "bend") setDrag({ ...d, b: p });
+    } else if (d.k === "wire" || d.k === "pwire" || d.k === "box" || d.k === "bend") setDrag({ ...d, b: p });
     else if (d.k === "size") setDrag({ ...d, w: Math.max(20, snap(d.b.w + p[0] - d.x0)), h: Math.max(16, snap(d.b.h + p[1] - d.y0)) });
   };
 
@@ -350,6 +364,12 @@ export const Canvas = () => {
       const inBox = (v()?.blocks ?? []).filter(b => b.x >= x0 && b.x + b.w <= x1 && b.y >= y0 && b.y + b.h <= y1).map(b => b.id);
       const ws = (v()?.wires ?? []).filter(w => inBox.includes(w.from[0]) && inBox.includes(w.to[0])).map(w => w.id);
       setSel(d.add ? [...new Set([...sel(), ...inBox, ...ws])] : [...inBox, ...ws]);
+    } else if (d.k === "pwire") {
+      const to = physAt(p);
+      if (to && !(to[0] === d.from[0] && to[1] === d.from[1])) {
+        if (to[2] !== d.dom) toast(`A ${d.dom} port cannot connect to a ${to[2]} port.`);
+        else act({ Connect: { from: d.from, to: [to[0], to[1]], pts: [], phys: true } });
+      }
     } else if (d.k === "wire") {
       if (d.from) {
         let to = portAt(p, "in");
@@ -483,7 +503,7 @@ export const Canvas = () => {
   const [probe, setProbe] = createSignal<{ x: number; y: number; text: string[] } | null>(null);
   let probeSeq = 0;
   const probeWire = async (w: WireView, e: MouseEvent) => {
-    const r = results(); if (!r || running() || drag()) return setProbe(null);
+    const r = results(); if (!r || running() || drag() || w.phys) return setProbe(null);
     const ix = chans().map((c, i) => [c, i] as const).filter(([c]) => c.probe && c.sink === w.from[0] && c.port === w.from[1]);
     const box = (e.currentTarget as Element).closest(".canvas")!.getBoundingClientRect();
     const at = { x: e.clientX - box.left + 14, y: e.clientY - box.top + 12 };
@@ -508,7 +528,7 @@ export const Canvas = () => {
             const s = () => selSet().has(w.id), pv = () => preview(w);
             return <g data-wire={w.id} class="wire" classList={{ sel: s() }} onMouseEnter={e => probeWire(w, e)} onMouseMove={e => probe() && probeWire(w, e)} onMouseLeave={() => { probeSeq++; setProbe(null); }}>
               <path d={pv() ?? pathD(w.path)} class="whit" />
-              <path d={pv() ?? pathD(w.path)} class="wline" marker-end={s() ? "url(#arrs)" : "url(#arr)"} />
+              <path d={pv() ?? pathD(w.path)} class={w.phys ? `wline pline dom-${blockMap().get(w.from[0])?.phys_dom?.[w.from[1]] ?? ""}` : "wline"} marker-end={w.phys ? undefined : s() ? "url(#arrs)" : "url(#arr)"} />
               <Show when={w.name ? labelAt(w) : null}>{lp => <text x={lp()[0]} y={lp()[1] - 4} class="wname" text-anchor="middle">{w.name}</text>}</Show>
               <Show when={w.point && w.path.length > 1}><PointGlyph kind={w.point!} at={(() => { const [a, b] = w.path; const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, d = Math.min(14, L / 2); return [a[0] + (b[0] - a[0]) / L * d, a[1] + (b[1] - a[1]) / L * d] as [number, number]; })()} /></Show>
             </g>;
@@ -532,11 +552,13 @@ export const Canvas = () => {
             return <g transform={`translate(${o()[0]} ${o()[1]})`}>
               <For each={b.ins}>{(p, i) => <path d={b.flip ? `M${p[0] + 1} ${p[1] - 4}l-6 4l6 4z` : `M${p[0] - 1} ${p[1] - 4}l6 4l-6 4z`} class="port in" classList={{ open: !connected().has(i()) }} />}</For>
               <For each={b.outs}>{p => <path d={b.flip ? `M${p[0]} ${p[1] - 4}l-6 4l6 4z` : `M${p[0]} ${p[1] - 4}l6 4l-6 4z`} class="port out" />}</For>
+              <For each={b.phys ?? []}>{(p, i) => <rect data-pb={b.id} x={p[0] - 4} y={p[1] - 4} width={8} height={8} class={`pport dom-${b.phys_dom?.[i()] ?? ""}`}><title>{`${b.phys_names?.[i()] ?? ""} (${b.phys_dom?.[i()] ?? ""})`}</title></rect>}</For>
             </g>;
           }}</For>
           <Show when={drag()}>{d => {
             const x = d();
             if (x.k === "wire") return <path d={`M${x.a[0]} ${x.a[1]}H${(x.a[0] + x.b[0]) / 2}V${x.b[1]}H${x.b[0]}`} class="wline temp" />;
+            if (x.k === "pwire") return <path d={`M${x.a[0]} ${x.a[1]}H${(x.a[0] + x.b[0]) / 2}V${x.b[1]}H${x.b[0]}`} class={`pline temp dom-${x.dom}`} />;
             if (x.k === "box") return <rect x={Math.min(x.a[0], x.b[0])} y={Math.min(x.a[1], x.b[1])} width={Math.abs(x.b[0] - x.a[0])} height={Math.abs(x.b[1] - x.a[1])} class="marquee" />;
             if (x.k === "size") return <rect x={x.b.x} y={x.b.y} width={x.w} height={x.h} class="marquee" />;
             if (x.k === "bend") return <circle cx={x.b[0]} cy={x.b[1]} r={4} class="bendpt" />;

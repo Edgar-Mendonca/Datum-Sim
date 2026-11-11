@@ -35,5 +35,6 @@ fn main() {
         "sub": sub,
         "lin": lin,
         "frames6": frames6,
+        "physview": view::view(&examples::get("gearbox").unwrap(), 0).unwrap(),
     }));
 }

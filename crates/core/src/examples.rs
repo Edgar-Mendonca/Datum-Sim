@@ -31,6 +31,7 @@ pub fn list() -> Vec<Example> {
         Example { id: "tank", name: "Pump and tank level control", what: "A pump fills a tank that drains through a valve (flow ∝ √level); a PI controller holds the level." },
         Example { id: "cruise", name: "Vehicle cruise control", what: "A car with aerodynamic drag and rolling resistance; a PI controller sets the drive force to hold the speed." },
         Example { id: "robotarm", name: "Robot arm: pick and place", what: "A two-link arm follows a smooth joint trajectory through four way points under computed-torque control; the Arm view animates the motion." },
+        Example { id: "gearbox", name: "Physical parts: motor, gearbox and flexible shaft", what: "Drawn as it is built: a motor's inertia, a 5:1 gearbox, a flexible shaft (spring and damper) and a load with friction, connected by physical ports. A PID holds the motor speed through a torque source." },
         Example { id: "pick6", name: "Pick and place: 6-joint arm", what: "The 6-joint industrial arm picks a box off the table and puts it down elsewhere: a task scheduler, inverse kinematics, computed-torque control, a gripper, and the box's weight felt by the arm. Watch it in the 3D view." },
         Example { id: "pick7", name: "Pick and place: 7-joint arm", what: "The same task with the 7-joint arm: scheduler, inverse kinematics, computed-torque control, gripper and 3D view." },
         Example { id: "arm6swing", name: "6-joint arm in 3D: swinging under gravity", what: "The 6-joint industrial arm, with no motor torque, swings down under its own weight and settles through joint friction; double-click the 3D view and press Play." },
@@ -119,6 +120,7 @@ pub fn get(id: &str) -> Option<Model> {
         "msd" => msd(),
         "robotarm" => robot_arm(),
         "arm6swing" => arm6_swing(),
+        "gearbox" => gearbox(),
         "pick6" => pick_place("arm6", "6-joint industrial arm", [0.45, 0.15], [0.25, -0.4]),
         "pick7" => pick_place("arm7", "7-joint arm", [0.5, 0.15], [0.35, -0.35]),
         "drivethermal" => drive_thermal(),
@@ -447,6 +449,56 @@ fn pick_place(lib: &str, robot: &str, pick: [f64; 2], place: [f64; 2]) -> Model 
     b.w(pl, 0, s1, 0);
     b.w(sg, 0, s1, 1);
     b.w(ctl, 0, s2, 0);
+    b.done()
+}
+
+/// A physical connection in a finished example's top diagram.
+fn plink(b: &mut B, a: (u32, usize), c: (u32, usize)) {
+    let id = b.m.id();
+    b.d().wires.push(Wire { id, from: a, to: c, phys: true, ..Default::default() });
+}
+
+fn gearbox() -> Model {
+    let mut b = B::new(
+        "Physical parts: motor, gearbox and flexible shaft",
+        "The mechanics are drawn as they are built and joined by physical ports (grey squares): the motor's inertia, a 5:1 gearbox, a flexible shaft (a torsion spring and a damper side by side) and the load's inertia with friction. The app writes the equations. A PID holds the motor at 50 rad/s through a torque source; at 2 s a load torque comes on. Watch the shaft twist and the load speed ring.",
+        4.0,
+    );
+    b.m.sim.solver = "stiff".into();
+    let r = b.blk("Step", "Speed reference", 20.0, 40.0, &[("time", "0.1"), ("final", "50")]);
+    let e = b.blk("Sum", "", 120.0, 42.0, &[("signs", "+-")]);
+    let c = b.blk("PID", "PI", 180.0, 38.0, &[("P", "0.05"), ("I", "0.5"), ("upper", "2"), ("lower", "-2")]);
+    let ts = b.blk("TorqueSource", "Motor torque", 300.0, 36.0, &[]);
+    let j1 = b.blk("RotInertia", "Motor inertia", 300.0, 140.0, &[("J", "0.001")]);
+    let g = b.blk("Gear", "Gearbox 5:1", 420.0, 140.0, &[("N", "5"), ("eta", "0.95")]);
+    let k = b.blk("RotSpring", "Shaft stiffness", 540.0, 110.0, &[("k", "20")]);
+    let d = b.blk("RotDamper", "Shaft damping", 540.0, 180.0, &[("d", "0.05")]);
+    let j2 = b.blk("RotInertia", "Load inertia", 660.0, 140.0, &[("J", "0.02")]);
+    let f = b.blk("RotFriction", "Load friction", 660.0, 230.0, &[("Tc", "0.05"), ("Ts", "0.08")]);
+    let tl = b.blk("Step", "Load torque", 520.0, 300.0, &[("time", "2"), ("final", "0.5")]);
+    let lt = b.blk("TorqueSource", "Load", 760.0, 300.0, &[]);
+    let s1 = b.blk("RotSensor", "Motor speed", 300.0, 240.0, &[]);
+    let s2 = b.blk("RotSensor", "Load speed", 780.0, 140.0, &[]);
+    let sc = b.blk("Scope", "Speeds", 900.0, 120.0, &[("n", "2")]);
+    let gl = b.blk("Gain", "Load torque (sign)", 640.0, 300.0, &[("k", "-1")]);
+    b.w(r, 0, e, 0);
+    b.w(e, 0, c, 0);
+    b.w(c, 0, ts, 0);
+    b.w(s1, 0, e, 1);
+    b.w(s1, 0, sc, 0);
+    b.w(s2, 0, sc, 1);
+    b.w(tl, 0, gl, 0);
+    b.w(gl, 0, lt, 0);
+    plink(&mut b, (ts, 0), (j1, 0));
+    plink(&mut b, (j1, 0), (g, 0));
+    plink(&mut b, (s1, 0), (j1, 0));
+    plink(&mut b, (g, 1), (k, 0));
+    plink(&mut b, (g, 1), (d, 0));
+    plink(&mut b, (k, 1), (j2, 0));
+    plink(&mut b, (d, 1), (j2, 0));
+    plink(&mut b, (f, 0), (j2, 0));
+    plink(&mut b, (lt, 0), (j2, 0));
+    plink(&mut b, (s2, 0), (j2, 0));
     b.done()
 }
 

@@ -59,7 +59,7 @@ pub const COLOURS: &[(&str, &str)] = &[("red", "#FDE2E1"), ("orange", "#FDE8D7")
 
 pub const CATS: &[&str] = &[
     "Sources", "Math", "Continuous", "Discontinuities", "Discrete", "Routing", "Lookup tables", "Sinks", "Subsystems",
-    "Motors", "Drives", "Robot arm", "Annotations", "Physical (0.4)",
+    "Motors", "Drives", "Robot arm", "Rotational", "Annotations", "Physical (coming)",
 ];
 
 fn d(kind: &'static str, name: &'static str, cat: &'static str, what: &'static str, how: &'static str, params: Vec<P>) -> Def {
@@ -78,6 +78,9 @@ pub fn size(kind: &str) -> (f64, f64) {
         "Product" | "Divide" => (40.0, 40.0),
         "Inport" | "Outport" => (36.0, 24.0),
         "Scope" | "XY" => (50.0, 50.0),
+        "RotInertia" | "RotSpring" | "RotDamper" | "RotFriction" | "Backlash" | "Gear" | "TorqueSensor" => (60.0, 40.0),
+        "RotFixed" => (30.0, 30.0),
+        "TorqueSource" | "SpeedSource" | "RotSensor" => (60.0, 44.0),
         "RobotArm2" | "ArmController" | "RobotArm" | "ArmControllerN" => (100.0, 90.0),
         "ArmGravity" | "ArmInvDyn" | "JointDrive" | "Payload" | "TaskScheduler" => (90.0, 60.0),
         "ArmTrajectory" | "ArmIK" | "ArmView" | "RobotView" | "ArmIKN" | "ToolPath" => (80.0, 60.0),
@@ -369,10 +372,28 @@ pub fn library() -> Vec<Def> {
         d("Note", "Note", "Annotations", "A text note on the diagram, for explanations, reviews and teaching. It takes no part in the run.", "Type the text in the Inspector; a blank line starts a new paragraph. Drag the corner to resize it.",
             vec![t("text", "Text", "A note", "")]),
         // Physical (planned)
-        planned("Mass", "Mass, spring, damper", "Physical (0.4)", "Mechanical components you connect by ports.", "0.4"),
-        planned("Resistor", "R, L, C and sources", "Physical (0.4)", "Electrical components you connect by ports.", "0.4"),
-        planned("Pipe", "Pipe, pump, valve, tank", "Physical (0.4)", "Hydraulic components you connect by ports.", "0.4"),
-        planned("HeatCap", "Heat capacity, conduction", "Physical (0.4)", "Thermal components you connect by ports.", "0.4"),
+        // Rotational parts (0.5.1): physical ports; the app writes the equations.
+        d("RotInertia", "Inertia", "Rotational", "A rotating mass on a shaft. Port: its flange. Inertias joined rigidly (directly or through a gear) move as one.", "J·ω̇ = sum of the torques at its flange. Connect physical ports by dragging between the squares; a connection carries the speed and the torque.",
+            vec![n("J", "Inertia J", "0.01", "kg·m²", ""), n("w0", "Initial speed", "0", "rad/s", "")]),
+        d("RotSpring", "Torsion spring", "Rotational", "A torsional spring between two flanges (an unconnected second flange is held by the frame).", "τ = k·(φa − φb + initial twist); it passes τ from one flange to the other.",
+            vec![n("k", "Stiffness k", "100", "N·m/rad", ""), n("phi0", "Initial twist", "0", "rad", "")]),
+        d("RotDamper", "Rotational damper", "Rotational", "Viscous damping between two flanges (or to the frame).", "τ = d·(ωa − ωb).", vec![n("d", "Damping d", "0.1", "N·m·s/rad", "")]),
+        d("RotFriction", "Rotational friction", "Rotational", "Friction between two flanges (or to the frame), with a break-away torque above the sliding torque and viscous friction.",
+            "τ = (Tc + (Ts − Tc)·e^(−(Δω/ωs)²))·tanh(10·Δω/ωs) + d·Δω: smooth stick–slip. A smaller ωs is closer to true sticking (and stiffer to solve).",
+            vec![n("Tc", "Sliding torque Tc", "0.1", "N·m", ""), n("Ts", "Break-away torque Ts", "0.15", "N·m", ""), n("ws", "Stribeck speed ωs", "0.05", "rad/s", ""), n("d", "Viscous d", "0.01", "N·m·s/rad", "")]),
+        d("Backlash", "Backlash", "Rotational", "Play between two flanges: no torque inside the gap, a stiff contact at its ends.", "τ = k·(φ − gap/2) + d·Δω beyond the gap, 0 inside.",
+            vec![n("gap", "Total gap", "0.02", "rad", ""), n("k", "Contact stiffness", "1e4", "N·m/rad", ""), n("d", "Contact damping", "10", "N·m·s/rad", "")]),
+        d("Gear", "Gear", "Rotational", "An ideal gear between an input and an output flange: ω_in = N·ω_out, the output torque N·η times the input's.", "N is the ratio (input turns per output turn). The efficiency η applies to power flowing from input to output. Inertias on both sides move as one, with the output's inertia seen at the input divided by N².",
+            vec![n("N", "Ratio N", "10", "", "Input turns per output turn; negative reverses"), n("eta", "Efficiency η", "1", "", "0 < η ≤ 1")]),
+        d("RotFixed", "Fixed flange", "Rotational", "Holds a flange still (speed 0): the frame.", "", vec![]),
+        d("TorqueSource", "Torque source", "Rotational", "Applies a torque from a signal between two flanges (an unconnected second flange is the frame). Signal input: τ.", "", vec![]),
+        d("SpeedSource", "Speed source", "Rotational", "Drives a flange at a speed from a signal (relative to the second flange, or the frame). Signal input: ω.", "Do not drive an inertia directly with it: put a spring or damper between them.", vec![]),
+        d("RotSensor", "Speed and angle sensor", "Rotational", "Measures a flange's speed and angle. Signal outputs: ω, φ.", "", vec![n("phi0", "Initial angle", "0", "rad", "")]),
+        d("TorqueSensor", "Torque sensor", "Rotational", "Measures the torque passed through it, between two flanges. Signal output: τ.", "", vec![]),
+        planned("Mass", "Mass, spring, damper", "Physical (coming)", "Translational components you connect by ports.", "0.5.2"),
+        planned("Resistor", "R, L, C and sources", "Physical (coming)", "Electrical components you connect by ports.", "0.5.3"),
+        planned("HeatCap", "Heat capacity, conduction", "Physical (coming)", "Thermal components you connect by ports.", "0.5.4"),
+        planned("Pipe", "Pipe, pump, valve, tank", "Physical (coming)", "Hydraulic components you connect by ports.", "0.5.6"),
         planned("FMU", "FMU", "Subsystems", "Run a model exported by another tool (FMI standard).", "0.5"),
         planned("PyBlock", "Python block", "Math", "A block written in Python.", "0.6"),
     ]
@@ -447,6 +468,9 @@ pub fn sub_ports(d: &Diagram) -> (Vec<u32>, Vec<u32>) {
 
 /// Number of (input, output) ports.
 pub fn ports(b: &Block) -> (usize, usize) {
+    if crate::physical::is_part(&b.kind) {
+        return crate::physical::signals_of(&b.kind);
+    }
     match b.kind.as_str() {
         "Constant" | "Step" | "Ramp" | "Sine" | "Pulse" | "Clock" | "Table" | "FromFile" | "Noise" | "Inport" => (0, 1),
         "Sum" => (param(b, "signs").chars().filter(|c| *c == '+' || *c == '-').count().clamp(1, 32), 1),
@@ -505,6 +529,10 @@ pub fn ports(b: &Block) -> (usize, usize) {
 pub fn port_names(b: &Block) -> (Vec<String>, Vec<String>) {
     let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
     match b.kind.as_str() {
+        "TorqueSource" => (s(&["τ"]), vec![]),
+        "SpeedSource" => (s(&["ω"]), vec![]),
+        "RotSensor" => (vec![], s(&["ω", "φ"])),
+        "TorqueSensor" => (vec![], s(&["τ"])),
         "DCMotor" => (s(&["V", "T_L"]), s(&["ω", "i", "θ"])),
         "PMSM" => (s(&["v_d", "v_q", "T_L"]), s(&["ω", "i_d", "i_q", "T_e", "θ"])),
         "DCSepEx" => (s(&["V_a", "V_f", "T_L"]), s(&["ω", "i_a", "i_f", "T_e", "θ"])),
@@ -553,6 +581,21 @@ pub fn port_names(b: &Block) -> (Vec<String>, Vec<String>) {
 }
 
 /// Where the ports sit on the canvas: inputs on the left (right when flipped), outputs opposite.
+/// Where a part's physical ports are: on the left and right edges of a part without signal
+/// ports (flipped: swapped), along the bottom edge of one with signal ports.
+pub fn phys_xy(b: &Block) -> Vec<(f64, f64)> {
+    let Some(spec) = crate::physical::ports_of(&b.kind) else { return vec![] };
+    let n = spec.len();
+    let (ni, no) = ports(b);
+    if ni + no > 0 {
+        return (0..n).map(|i| ((b.x + b.w * (i as f64 + 0.5) / n as f64).round(), b.y + b.h)).collect();
+    }
+    let (l, r) = if b.flip { (b.x + b.w, b.x) } else { (b.x, b.x + b.w) };
+    let left = n.div_ceil(2);
+    let col = |k: usize, i: usize| (b.y + b.h * (i as f64 + 0.5) / k as f64).round();
+    (0..n).map(|i| if i < left { (l, col(left, i)) } else { (r, col(n - left, i - left)) }).collect()
+}
+
 pub fn port_xy(b: &Block) -> (Vec<(f64, f64)>, Vec<(f64, f64)>) {
     let (ni, no) = ports(b);
     let col = |k: usize, x: f64| -> Vec<(f64, f64)> {

@@ -19,8 +19,9 @@ export interface OpPoint { name: string; t: number; x: number[]; vars: [string, 
 export interface BlockView {
   id: number; kind: string; name: string; x: number; y: number; w: number; h: number; flip: boolean; label: string;
   ins: Pt[]; outs: Pt[]; in_names: string[]; out_names: string[]; params: Record<string, string>; sub: boolean; color?: string; mask?: Mask;
+  phys?: Pt[]; phys_dom?: string[]; phys_names?: string[];
 }
-export interface WireView { id: number; from: [number, number]; to: [number, number]; pts: Pt[]; path: Pt[]; name?: string; point?: string }
+export interface WireView { id: number; from: [number, number]; to: [number, number]; pts: Pt[]; path: Pt[]; name?: string; point?: string; phys?: boolean }
 export interface DView { parent: number; path: [number, string][]; blocks: BlockView[]; wires: WireView[] }
 export interface ParamDef { key: string; label: string; def: string; unit: string; hint: string; kind: "num" | "text" | "choice"; choices: string[] }
 export interface Preset { name: string; values: [string, string][] }

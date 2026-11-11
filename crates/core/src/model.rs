@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// 2 (0.2.0): masks on subsystems. Format 1 files open unchanged.
-pub const FORMAT: u32 = 2;
+/// The newest file format this version reads. Files are saved as format 3 only when they hold
+/// physical connections (0.5.1), so older versions still open everything else.
+pub const FORMAT: u32 = 3;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -168,6 +170,10 @@ pub struct Wire {
     /// or "open" (the loop is cut here for open-loop analysis); "" = none. Runs ignore it.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub point: String,
+    /// A physical connection (0.5.1): between physical ports (`from` and `to` are (block,
+    /// physical port)), with no direction.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub phys: bool,
 }
 
 impl Diagram {
@@ -294,7 +300,12 @@ pub fn from_json(text: &str) -> Result<Model, String> {
 }
 
 pub fn to_json(m: &Model) -> String {
-    serde_json::to_string_pretty(m).unwrap_or_default()
+    fn phys(d: &Diagram) -> bool {
+        d.wires.iter().any(|w| w.phys) || d.blocks.iter().filter_map(|b| b.sub.as_ref()).any(phys)
+    }
+    let mut m2 = m.clone();
+    m2.format = if phys(&m.root) { 3 } else { 2 };
+    serde_json::to_string_pretty(&m2).unwrap_or_default()
 }
 
 /// Bring older formats up to date. Format 1 is the first; format 2 only adds masks, which
@@ -345,7 +356,7 @@ fn repair(m: &mut Model) -> Result<(), String> {
         }
         let ids: Vec<u32> = d.blocks.iter().map(|b| b.id).collect();
         let mut taken = std::collections::HashSet::new();
-        d.wires.retain(|w| ids.contains(&w.from.0) && ids.contains(&w.to.0) && w.from.1 < 64 && w.to.1 < 64 && taken.insert(w.to));
+        d.wires.retain(|w| ids.contains(&w.from.0) && ids.contains(&w.to.0) && w.from.1 < 64 && w.to.1 < 64 && (w.phys || taken.insert(w.to)));
         d.wires.retain(|w| w.pts.iter().all(|p| p.0.is_finite() && p.1.is_finite()));
         for w in &mut d.wires {
             if w.id == 0 || !seen.insert(w.id) {

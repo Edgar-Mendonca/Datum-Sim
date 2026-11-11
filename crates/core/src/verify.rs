@@ -37,7 +37,10 @@ mod tests {
             id
         }
         fn wire(&mut self, a: u32, ap: usize, b: u32, bp: usize) {
-            self.d.apply(Op::Connect { from: (a, ap), to: (b, bp), pts: vec![] }).unwrap();
+            self.d.apply(Op::Connect { from: (a, ap), to: (b, bp), pts: vec![], phys: false }).unwrap();
+        }
+        fn link(&mut self, a: u32, ap: usize, b: u32, bp: usize) {
+            self.d.apply(Op::Connect { from: (a, ap), to: (b, bp), pts: vec![], phys: true }).unwrap();
         }
         fn run(&self) -> Results {
             simulate(&self.d.m, None, &none()).unwrap_or_else(|e| panic!("{e:?}"))
@@ -218,6 +221,103 @@ mod tests {
         m.d.apply(Op::SetParam { id: c, key: "value".into(), value: "0".into() }).unwrap();
         let r = m.run();
         assert!((r.y[1].last().unwrap() + 0.5).abs() > 0.1, "it falls");
+    }
+
+    /// Rotational parts (0.5.1). Two inertias and a spring oscillate at √(k(J₁+J₂)/(J₁J₂)) and
+    /// keep their energy; a gear's output turns at ω/N and passes N·η times the torque; an
+    /// inertia joined to another through a gear is one state (J₁ + J₂/N² seen at the input).
+    #[test]
+    fn rotational_parts() {
+        // Two inertias, a spring between them; J1 starts at 1 rad/s.
+        let mut m = Mk::new(2.0, "rk45");
+        m.d.m.sim.rtol = 1e-10;
+        m.d.m.sim.atol = 1e-12;
+        let j1 = m.add("RotInertia", &[("J", "0.02"), ("w0", "1")]);
+        let j2 = m.add("RotInertia", &[("J", "0.05")]);
+        let k = m.add("RotSpring", &[("k", "50")]);
+        let s1 = m.add("RotSensor", &[]);
+        let s2 = m.add("RotSensor", &[]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.link(j1, 0, k, 0);
+        m.link(k, 1, j2, 0);
+        m.link(s1, 0, j1, 0);
+        m.link(s2, 0, j2, 0);
+        m.wire(s1, 0, sc, 0);
+        m.wire(s2, 0, sc, 1);
+        let r = m.run();
+        // Momentum is shared: ω1 = ωc + (1 − ωc)·cos(Ωt), ωc = J1/(J1+J2).
+        let (a, b, kk) = (0.02f64, 0.05f64, 50.0f64);
+        let wc = a / (a + b);
+        let om = (kk * (a + b) / (a * b)).sqrt();
+        let e = max_err(&r, 0, |t| wc + (1.0 - wc) * (om * t).cos());
+        assert!(e < 1e-6, "{e}");
+        // Momentum conserved: J1 ω1 + J2 ω2 = J1.
+        let mom = (0..r.t.len()).map(|i| (a * r.y[0][i] + b * r.y[1][i] - a).abs()).fold(0.0, f64::max);
+        assert!(mom < 1e-9, "{mom}");
+        // A torque source on a motor inertia, a gear N = 4 (η = 0.9) to a load inertia, fixed
+        // nothing: ω̇_in = τ / (J1 + η·... ) — with the input side as root: (J1 + J2/(η N²)).
+        let mut m = Mk::new(1.0, "rk45");
+        m.d.m.sim.rtol = 1e-10;
+        let src = m.add("Constant", &[("value", "2")]);
+        let ts = m.add("TorqueSource", &[]);
+        let j1 = m.add("RotInertia", &[("J", "0.01")]);
+        let g = m.add("Gear", &[("N", "4"), ("eta", "0.9")]);
+        let j2 = m.add("RotInertia", &[("J", "0.32")]);
+        let s1 = m.add("RotSensor", &[]);
+        let s2 = m.add("RotSensor", &[]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.wire(src, 0, ts, 0);
+        m.link(ts, 0, j1, 0);
+        m.link(j1, 0, g, 0);
+        m.link(g, 1, j2, 0);
+        m.link(s1, 0, j1, 0);
+        m.link(s2, 0, j2, 0);
+        m.wire(s1, 0, sc, 0);
+        m.wire(s2, 0, sc, 1);
+        let r = m.run();
+        let acc = 2.0 / (0.01 + 0.32 / (0.9 * 16.0));
+        assert!((r.y[0].last().unwrap() - acc).abs() < 1e-6 * acc, "{} vs {acc}", r.y[0].last().unwrap());
+        assert!((r.y[1].last().unwrap() - acc / 4.0).abs() < 1e-6 * acc, "output turns N times slower");
+        // Friction: a torque below break-away barely moves it; above, it accelerates.
+        for (tau, moves) in [("0.12", false), ("0.3", true)] {
+            let mut m = Mk::new(1.0, "stiff");
+            let c = m.add("Constant", &[("value", tau)]);
+            let ts = m.add("TorqueSource", &[]);
+            let j = m.add("RotInertia", &[("J", "0.01")]);
+            let f = m.add("RotFriction", &[]);
+            let s = m.add("RotSensor", &[]);
+            let sc = m.add("Scope", &[]);
+            m.wire(c, 0, ts, 0);
+            m.link(ts, 0, j, 0);
+            m.link(f, 0, j, 0);
+            m.link(s, 0, j, 0);
+            m.wire(s, 0, sc, 0);
+            let r = m.run();
+            let w = *r.y[0].last().unwrap();
+            assert!(if moves { w > 5.0 } else { w.abs() < 0.05 }, "τ {tau}: ω {w}");
+        }
+    }
+
+    /// A network with no reference for a node, or fighting sources, is a clear model error.
+    #[test]
+    fn physical_errors() {
+        let mut m = Mk::new(1.0, "rk45");
+        let a = m.add("SpeedSource", &[]);
+        let b = m.add("SpeedSource", &[]);
+        let c1 = m.add("Constant", &[("value", "1")]);
+        let c2 = m.add("Constant", &[("value", "2")]);
+        m.wire(c1, 0, a, 0);
+        m.wire(c2, 0, b, 0);
+        m.link(a, 0, b, 0);
+        let e = compile(&m.d.m, None, &none()).err().unwrap();
+        assert!(e.iter().any(|i| i.msg.contains("cannot be solved")), "{e:?}");
+        // A speed sensor on an inertia reads a state: a controller closing the loop through it
+        // makes no algebraic loop.
+        let g = crate::examples::get("gearbox").unwrap();
+        let sim = compile(&g, None, &none()).unwrap();
+        assert!(sim.warnings.is_empty(), "{:?}", sim.warnings);
+        // Ports of different domains do not connect (checked by the edit itself).
+        assert!(m.d.apply(Op::Connect { from: (a, 0), to: (c1, 0), pts: vec![], phys: true }).is_err());
     }
 
     /// The task scheduler: steps at their times, values gliding (half-way at a step's middle) or
@@ -682,6 +782,8 @@ mod tests {
                 // Induction motors run just below synchronous speed (157 rad/s) and carry their load.
                 "imdol" => assert!((152.0..156.0).contains(&last(0)) && (last(1) - last(2)).abs() < 0.5, "imdol {} {} {}", last(0), last(1), last(2)),
                 // The junction warms above the 40 °C ambient once the load is on.
+                // The motor holds 50 rad/s; the load turns 5 times slower.
+                "gearbox" => assert!((last(0) - 50.0).abs() < 0.5 && (last(1) - 10.0).abs() < 0.3, "gearbox {} {}", last(0), last(1)),
                 "harmonics" => {
                     let s = crate::measure::spectrum(&r.t, &r.y[0], 50.0, 4, 60).unwrap();
                     assert!(s.thd > 0.005 && s.thd < 0.5 && s.harmonics[0] > 5.0, "harmonics THD {} I1 {}", s.thd, s.harmonics[0]);
@@ -1430,12 +1532,13 @@ mod tests {
         m.d.apply(Op::SetMask { id: sub, mask: None }).unwrap();
         assert!(m.d.m.block(sub).unwrap().params.is_empty());
         assert_eq!(last(&m.run(), 0), 100.0);
-        // A format 1 file opens (and is saved as format 2).
+        // A format 1 file opens (and is saved as format 2: format 3 only when it has physical connections).
         let mut old: serde_json::Value = serde_json::from_str(&crate::model::to_json(&m.d.m)).unwrap();
         old["format"] = serde_json::json!(1);
         let o = crate::model::from_json(&old.to_string()).unwrap();
         assert_eq!(o.format, crate::model::FORMAT);
-        assert_eq!(crate::model::FORMAT, 2);
+        assert_eq!(crate::model::FORMAT, 3);
+        assert!(crate::model::to_json(&o).contains("\"format\": 2"));
     }
 
     /// My blocks: a masked subsystem saved as a library clip pastes back as an independent copy

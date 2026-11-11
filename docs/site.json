@@ -91,9 +91,10 @@
     {
       "v": "0.5.x → 0.6",
       "title": "Physical components",
-      "when": "Next",
+      "when": "Now (0.5.1)",
       "items": [
-        "Rotational and translational mechanics, electrical, thermal and hydraulic components connected by ports",
+        "Rotational parts connected by ports: inertia, spring, damper, gear, friction, backlash, sources and sensors (0.5.1)",
+        "Translational, electrical, thermal and hydraulic components",
         "Motors connected to electrical and mechanical networks"
       ]
     },

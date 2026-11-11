@@ -265,7 +265,7 @@ fn flatten(m: &Model, issues: &mut Vec<Issue>) -> (Vec<Flat>, Subs, Scopes) {
     nodes(&m.root, "", &mut flat, &mut at, &mut subs, false, &mut scopes, 0);
 
     fn wires(d: &Diagram, flat: &mut [Flat], at: &BTreeMap<u32, usize>, subs: &BTreeMap<u32, (Vec<usize>, Vec<usize>)>, issues: &mut Vec<Issue>) {
-        for w in &d.wires {
+        for w in d.wires.iter().filter(|w| !w.phys) {
             let src = match subs.get(&w.from.0) {
                 Some((_, outs)) => outs.get(w.from.1).map(|i| (*i, 0)),
                 None => at.get(&w.from.0).map(|i| (*i, w.from.1)),
@@ -349,7 +349,7 @@ fn goto_from(flat: &mut [Flat], issues: &mut Vec<Issue>) {
 }
 
 fn params<'a>(f: &Flat, vars: &'a BTreeMap<String, Mat>, base: Option<&'a Path>) -> Result<Pv<'a>, String> {
-    let def_kind = if f.kind == "Pass" { "Outport" } else { f.kind.as_str() };
+    let def_kind = if f.kind == "Pass" { "Outport" } else if f.kind == "PhysTap" || f.kind == "PhysNet" { f.block.kind.as_str() } else { f.kind.as_str() };
     let mut pv = Pv { m: BTreeMap::new(), t: BTreeMap::new(), vars, base };
     let Some(def) = blocks::def(def_kind).or_else(|| blocks::def(&f.block.kind)) else {
         return Err(format!("unknown block type '{}'", f.block.kind));
@@ -373,7 +373,8 @@ fn params<'a>(f: &Flat, vars: &'a BTreeMap<String, Mat>, base: Option<&'a Path>)
 pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> Result<Sim, Vec<Issue>> {
     let vars = eval_vars(m, over)?;
     let mut issues = vec![];
-    let (flat, subs, scopes) = flatten(m, &mut issues);
+    let (mut flat, subs, scopes) = flatten(m, &mut issues);
+    let nets = lift_physical(m, &mut flat);
     let svars = scope_vars(&vars, &scopes, &mut issues);
     let n = flat.len();
     // Parameters
@@ -426,7 +427,22 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
                 continue;
             }
             last_iw[i] = Some(iw.clone());
-            let built_rt = if flat[i].kind == "BusSelector" {
+            let built_rt = if flat[i].kind == "PhysNet" {
+                let plan = &nets[&i];
+                let kinds: Vec<&str> = plan.members.iter().map(|(k, _)| flat[*k].block.kind.as_str()).collect();
+                let names: Vec<&str> = plan.members.iter().map(|(k, _)| flat[*k].name.as_str()).collect();
+                let ps: Option<Vec<&Pv>> = plan.members.iter().map(|(k, _)| pvs[*k].as_ref()).collect();
+                match ps {
+                    None => Err("a part's parameters are wrong".into()),
+                    Some(ps) => crate::physical::build(plan, &kinds, &names, &ps).map(|(r, w)| (Box::new(r) as Box<dyn Rt>, w)).map_err(|(k, e)| {
+                        let who = &flat[plan.members[k.min(plan.members.len() - 1)].0].name;
+                        if k == 0 && plan.members.len() > 1 { format!("the network with {who}: {e}") } else { format!("{who}: {e}") }
+                    }),
+                }
+            } else if flat[i].kind == "PhysTap" {
+                let w = flat[i].nout;
+                Ok((Box::new(rt::Route((0..w).collect())) as Box<dyn Rt>, vec![1; w]))
+            } else if flat[i].kind == "BusSelector" {
                 bus_pick(&flat, &ow, i).map(|(idx, ws)| (Box::new(rt::Route(idx)) as Box<dyn Rt>, ws))
             } else {
                 rt::build(&flat[i].kind, pvs[i].as_ref().unwrap(), &iw)
@@ -633,6 +649,54 @@ pub fn compile(m: &Model, base: Option<&Path>, over: &BTreeMap<String, f64>) -> 
         files,
         tseg: m.sim.start,
     })
+}
+
+/// Physical parts become networks (0.5.1): each connected group of parts is one "PhysNet" flat
+/// that takes the parts' signal inputs and gives their signal outputs; each part stays as a
+/// "PhysTap" that passes its outputs on (so wires to it keep working). Returns the plans by the
+/// network flat's index.
+fn lift_physical(m: &Model, flat: &mut Vec<Flat>) -> BTreeMap<usize, crate::physical::Plan> {
+    let parts: Vec<(usize, u32, String)> = flat.iter().enumerate().filter(|(_, f)| crate::physical::is_part(&f.kind)).map(|(i, f)| (i, f.id, f.kind.clone())).collect();
+    let mut out = BTreeMap::new();
+    if parts.is_empty() {
+        return out;
+    }
+    let mut conns = vec![];
+    fn walk(d: &Diagram, conns: &mut Vec<((u32, usize), (u32, usize))>) {
+        for w in d.wires.iter().filter(|w| w.phys) {
+            conns.push((w.from, w.to));
+        }
+        for b in &d.blocks {
+            if let Some(s) = &b.sub {
+                walk(s, conns);
+            }
+        }
+    }
+    walk(&m.root, &mut conns);
+    let refs: Vec<(usize, u32, &str)> = parts.iter().map(|(i, id, k)| (*i, *id, k.as_str())).collect();
+    for plan in crate::physical::plan(&refs, &conns) {
+        let net = flat.len();
+        let first = plan.members[0].0;
+        let mut inputs = vec![];
+        let mut out_names = vec![];
+        for (k, _) in &plan.members {
+            inputs.extend(flat[*k].inputs.iter().cloned());
+            out_names.extend(flat[*k].out_names.iter().cloned());
+        }
+        let nout = out_names.len();
+        let f = Flat { id: flat[first].id, name: format!("the physical network at {}", flat[first].name), kind: "PhysNet".into(), block: flat[first].block.clone(), inputs, nout, out_names, parent: flat[first].parent.clone(), scope: flat[first].scope };
+        let mut off = 0;
+        let members: Vec<usize> = plan.members.iter().map(|(k, _)| *k).collect();
+        flat.push(f);
+        for k in members {
+            let no = flat[k].nout;
+            flat[k].kind = "PhysTap".into();
+            flat[k].inputs = (0..no).map(|q| Some((net, off + q))).collect();
+            off += no;
+        }
+        out.insert(net, plan);
+    }
+    out
 }
 
 /// The signals a Bus Creator groups, by name: its names, or else its inputs' signal names.

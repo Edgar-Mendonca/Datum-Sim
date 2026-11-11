@@ -68,7 +68,7 @@ mod tests {
             Op::SetParam { id: some, key: "nope".into(), value: "1".into() },
             Op::Rename { id: some, name: "".into() },
             Op::Rename { id: some, name: "a/b".into() },
-            Op::Connect { from: (some, 7), to: (some, 0), pts: vec![] },
+            Op::Connect { from: (some, 7), to: (some, 0), pts: vec![], phys: false },
             Op::Paste { parent: 0, clip: "{garbage".into(), dx: 0.0, dy: 0.0 },
             Op::Group { ids: vec![99999] },
             Op::Ungroup { id: some },
@@ -89,7 +89,7 @@ mod tests {
         let mut d = Doc::new(Model::new());
         let a = d.apply(Op::Add { parent: 0, kind: "Step".into(), x: 0.0, y: 0.0 }).unwrap()[0];
         let b = d.apply(Op::Add { parent: 0, kind: "Scope".into(), x: 100.0, y: 0.0 }).unwrap()[0];
-        d.apply(Op::Connect { from: (a, 0), to: (b, 0), pts: vec![] }).unwrap();
+        d.apply(Op::Connect { from: (a, 0), to: (b, 0), pts: vec![], phys: false }).unwrap();
         let full = d.m.clone();
         d.apply(Op::Group { ids: vec![a] }).unwrap();
         invariants(&d.m);
@@ -124,7 +124,7 @@ mod tests {
                     0..=2 => Op::Add { parent: 0, kind: r.pick(&kinds).unwrap().to_string(), x: r.below(800) as f64, y: r.below(600) as f64 },
                     3..=5 if ids.len() >= 2 => {
                         let (a, b) = (*r.pick(&ids).unwrap(), *r.pick(&ids).unwrap());
-                        Op::Connect { from: (a, r.below(3)), to: (b, r.below(3)), pts: vec![] }
+                        Op::Connect { from: (a, r.below(3)), to: (b, r.below(3)), pts: vec![], phys: false }
                     }
                     6 if !ids.is_empty() => {
                         let id = *r.pick(&ids).unwrap();
@@ -209,7 +209,7 @@ mod tests {
                 d.apply(Op::SetParam { id, key: "upper".into(), value: "10".into() }).unwrap();
                 d.apply(Op::SetParam { id, key: "lower".into(), value: "-10".into() }).unwrap();
             }
-            d.apply(Op::Connect { from: (prev, 0), to: (id, 0), pts: vec![] }).unwrap();
+            d.apply(Op::Connect { from: (prev, 0), to: (id, 0), pts: vec![], phys: false }).unwrap();
             prev = id;
         }
         let t = std::time::Instant::now();

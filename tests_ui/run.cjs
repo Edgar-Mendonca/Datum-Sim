@@ -31,6 +31,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           window.__calls.push([c, a]);
           if (c === "diagram") {
             if (window.__motor) return f.motor;
+            if (window.__physv) return f.physview;
             if (window.__xy) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.kind === "Scope" ? { ...b, kind: window.__xy } : b) };
             if (window.__dcblock) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.id === f.sub ? { ...b, kind: "DCMotor", sub: false } : b) };
             if (a.parent === f.sub) return f.subdiagram;
@@ -556,6 +557,33 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   check("Modules › Robot Arm Example opens the robot arm model", JSON.stringify(nmr?.[1] ?? {}).includes("robotarm"), JSON.stringify(nmr));
   check("the library has the robot arm blocks", fix.library.blocks.filter(b => b.cat === "Robot arm").length === 15);
   await p.click('.tabs > button:text-is("Model")');
+
+  // 13b9. Physical ports (0.5.1): drawn as squares in their domain's colour; connections have no
+  // arrow; dragging from one physical port to another sends a physical Connect.
+  {
+  await p.evaluate(() => { window.__physv = true; window.__motor = false; });
+  await p.click('.tabs > button:text-is("Model")');
+  await p.evaluate(() => document.querySelector(".tabs .file").click());
+  await p.click(".bs aside .back");
+  const pv0 = fix.physview;
+  const g0 = pv0.blocks.find(b => b.kind === "Gear");
+  await p.mouse.click(5, 5);
+  // Any edit refetches the diagram (now the physical one).
+  const xb2 = await box(pid.name + " (");
+  await p.mouse.click(xb2.x, xb2.y);
+  await p.click('.ribbon button:has-text("Flip")');
+  await p.waitForTimeout(400);
+  check("physical ports are drawn as squares in their domain's colour", (await p.$$(".pport.dom-rotational")).length === pv0.blocks.reduce((a, b) => a + (b.phys?.length ?? 0), 0), String((await p.$$(".pport")).length));
+  check("physical connections have no arrow", (await p.$$(".wline.pline")).length === pv0.wires.filter(w => w.phys).length && (await p.$$eval(".wline.pline", ls => ls.filter(l => l.getAttribute("marker-end")).length)) === 0);
+  const pport = async (bid, k) => p.evaluate(([b, k]) => { const r = document.querySelectorAll(`.pport[data-pb="${b}"]`)[k].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, [bid, k]);
+  const jl = pv0.blocks.find(b => b.name === "Load inertia");
+  const ppa = await pport(g0.id, 0), ppb = await pport(jl.id, 0);
+  await p.mouse.move(ppa.x, ppa.y); await p.mouse.down(); await p.mouse.move(ppb.x, ppb.y, { steps: 5 }); await p.mouse.up();
+  await p.waitForTimeout(200);
+  const pc = (await p.evaluate(() => window.__calls)).filter(c => c[0] === "apply").pop();
+  check("dragging between physical ports sends a physical connection", JSON.stringify(pc?.[1] ?? {}).includes('"phys":true'), JSON.stringify(pc));
+  await p.evaluate(() => { window.__physv = false; });
+  }
 
   // 13c. Planned features (0.2.2): dimmed on their tab with the release; a greyed dialog; a switch hides them.
   await p.click('.tabs > button:text-is("Model")');

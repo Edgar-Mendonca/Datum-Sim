@@ -20,6 +20,10 @@ pub struct BlockView {
     pub label: String,
     pub ins: Vec<(f64, f64)>,
     pub outs: Vec<(f64, f64)>,
+    /// Physical ports (0.5.1): positions, domains and names.
+    pub phys: Vec<(f64, f64)>,
+    pub phys_dom: Vec<String>,
+    pub phys_names: Vec<String>,
     pub in_names: Vec<String>,
     pub out_names: Vec<String>,
     /// Every parameter's text (the block's own or the default).
@@ -40,6 +44,7 @@ pub struct WireView {
     pub path: Vec<(f64, f64)>,
     pub name: String,
     pub point: String,
+    pub phys: bool,
 }
 
 #[derive(Serialize)]
@@ -110,6 +115,9 @@ pub fn view(m: &Model, parent: u32) -> Option<View> {
             label: blocks::label(b),
             ins,
             outs,
+            phys: blocks::phys_xy(b),
+            phys_dom: crate::physical::ports_of(&b.kind).map(|s| s.iter().map(|p| p.1.name().to_string()).collect()).unwrap_or_default(),
+            phys_names: crate::physical::ports_of(&b.kind).map(|s| s.iter().map(|p| p.0.to_string()).collect()).unwrap_or_default(),
             in_names,
             out_names,
             params,
@@ -123,7 +131,7 @@ pub fn view(m: &Model, parent: u32) -> Option<View> {
     let by_id: BTreeMap<u32, &BlockView> = blocks_v.iter().map(|b| (b.id, b)).collect();
     let mut reqs = Vec::new();
     let mut ok = Vec::new();
-    for w in &d.wires {
+    for w in d.wires.iter().filter(|w| !w.phys) {
         let (Some(a), Some(b)) = (by_id.get(&w.from.0), by_id.get(&w.to.0)) else { continue };
         let (Some(pa), Some(pb)) = (a.outs.get(w.from.1), b.ins.get(w.to.1)) else { continue };
         reqs.push(Req {
@@ -137,6 +145,32 @@ pub fn view(m: &Model, parent: u32) -> Option<View> {
         ok.push(w);
     }
     let paths = route::route(&rects, &reqs);
-    let wires = ok.into_iter().zip(paths).map(|(w, path)| WireView { id: w.id, from: w.from, to: w.to, pts: w.pts.clone(), path, name: w.name.clone(), point: w.point.clone() }).collect();
+    let mut wires: Vec<WireView> = ok.into_iter().zip(paths).map(|(w, path)| WireView { id: w.id, from: w.from, to: w.to, pts: w.pts.clone(), path, name: w.name.clone(), point: w.point.clone(), phys: false }).collect();
+    // Physical connections: straight square paths between their ports (no direction).
+    for w in d.wires.iter().filter(|w| w.phys) {
+        let (Some(a), Some(b)) = (by_id.get(&w.from.0), by_id.get(&w.to.0)) else { continue };
+        let (Some(&pa), Some(&pb)) = (a.phys.get(w.from.1), b.phys.get(w.to.1)) else { continue };
+        let mut path = vec![pa];
+        if w.pts.is_empty() {
+            let bottom = |bv: &BlockView, p: (f64, f64)| (p.1 - (bv.y + bv.h)).abs() < 0.5;
+            if bottom(a, pa) || bottom(b, pb) {
+                let y = pa.1.max(pb.1) + 14.0;
+                path.extend([(pa.0, y), (pb.0, y)]);
+            } else {
+                let mx = ((pa.0 + pb.0) / 2.0).round();
+                path.extend([(mx, pa.1), (mx, pb.1)]);
+            }
+        } else {
+            for p in &w.pts {
+                let last = *path.last().unwrap();
+                path.extend([(p.0, last.1), *p]);
+            }
+            let last = *path.last().unwrap();
+            path.push((pb.0, last.1));
+        }
+        path.push(pb);
+        path.dedup();
+        wires.push(WireView { id: w.id, from: w.from, to: w.to, pts: w.pts.clone(), path, name: String::new(), point: String::new(), phys: true });
+    }
     Some(View { parent, path: m.path_of(parent), blocks: blocks_v, wires })
 }

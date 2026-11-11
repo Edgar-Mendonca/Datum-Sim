@@ -925,3 +925,12 @@ ul.plain { list-style: none; padding: 0; margin: 4px 0; }
 .robot3d .r3canvas { flex: 1 1 auto; min-height: 0; position: relative; }
 .robot3d canvas { display: block; position: absolute; inset: 0; cursor: grab; }
 .robot3d .armbar { flex: none; }
+/* 0.5.1: physical ports and connections, coloured by domain. */
+.pport { fill: var(--bg2); stroke-width: 1.6; stroke: var(--dom, #64748b); }
+.pline { stroke: var(--dom, #64748b) !important; stroke-width: 2.2; }
+.dom-rotational { --dom: #64748b; }
+.dom-translational { --dom: #16a34a; }
+.dom-electrical { --dom: #2563eb; }
+.dom-thermal { --dom: #dc2626; }
+.dom-hydraulic { --dom: #0d9488; }
+.pline.temp { stroke-dasharray: 4 3; fill: none; }

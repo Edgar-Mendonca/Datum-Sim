@@ -18,7 +18,15 @@ pub enum Op {
     Flip { ids: Vec<u32> },
     /// Delete blocks and wires (with the wires attached to deleted blocks).
     Delete { ids: Vec<u32> },
-    Connect { from: (u32, usize), to: (u32, usize), pts: Vec<(f64, f64)> },
+    /// A signal wire from an output to an input, or (phys) a physical connection between two
+    /// physical ports of the same domain.
+    Connect {
+        from: (u32, usize),
+        to: (u32, usize),
+        pts: Vec<(f64, f64)>,
+        #[serde(default)]
+        phys: bool,
+    },
     SetPts { id: u32, pts: Vec<(f64, f64)> },
     /// Name the signal a wire carries ("" removes the name). Every wire from the same output
     /// carries the same signal, so they all take the name.
@@ -326,7 +334,30 @@ fn exec(m: &mut Model, op: Op, created: &mut Vec<u32>) -> Result<(), String> {
             }
             del(&mut m.root, &set);
         }
-        Op::Connect { from, to, pts } => {
+        Op::Connect { from, to, pts, phys: true } => {
+            finite(&pts.iter().flat_map(|p| [p.0, p.1]).collect::<Vec<_>>())?;
+            let pf = m.parent_of(from.0).ok_or("The first block no longer exists.")?;
+            let pt = m.parent_of(to.0).ok_or("The second block no longer exists.")?;
+            if pf != pt {
+                return Err("Connections join blocks in the same diagram.".into());
+            }
+            let (bf, bt) = (m.block(from.0).unwrap(), m.block(to.0).unwrap());
+            let pa = crate::physical::ports_of(&bf.kind).and_then(|p| p.get(from.1)).ok_or(format!("{} has no physical port {}.", bf.name, from.1 + 1))?;
+            let pb = crate::physical::ports_of(&bt.kind).and_then(|p| p.get(to.1)).ok_or(format!("{} has no physical port {}.", bt.name, to.1 + 1))?;
+            if pa.1 != pb.1 {
+                return Err(format!("A {} port cannot connect to a {} port.", pa.1.name(), pb.1.name()));
+            }
+            if from == to {
+                return Err("A port cannot connect to itself.".into());
+            }
+            let id = m.id();
+            let d = diagram(m, pf)?;
+            if !d.wires.iter().any(|w| w.phys && ((w.from == from && w.to == to) || (w.from == to && w.to == from))) {
+                d.wires.push(Wire { id, from, to, pts, phys: true, ..Default::default() });
+                created.push(id);
+            }
+        }
+        Op::Connect { from, to, pts, .. } => {
             finite(&pts.iter().flat_map(|p| [p.0, p.1]).collect::<Vec<_>>())?;
             let pf = m.parent_of(from.0).ok_or("The source block no longer exists.")?;
             let pt = m.parent_of(to.0).ok_or("The target block no longer exists.")?;
@@ -513,11 +544,11 @@ fn group(m: &mut Model, ids: &[u32], created: &mut Vec<u32>) -> Result<(), Strin
                     let mut b = Block { id, kind: "Inport".into(), name: format!("In{port}"), x: 30.0, y, w: 36.0, h: 24.0, ..Default::default() };
                     b.params.insert("port".into(), port.to_string());
                     sub.blocks.push(b);
-                    outer.push(Wire { id: m.id(), from: w.from, to: (sid, port - 1), pts: vec![], name: w.name.clone(), point: w.point.clone() });
+                    outer.push(Wire { id: m.id(), from: w.from, to: (sid, port - 1), pts: vec![], name: w.name.clone(), point: w.point.clone(), phys: false });
                     id
                 }
             };
-            sub.wires.push(Wire { id: m.id(), from: (pid, 0), to: w.to, pts: vec![], name: w.name.clone(), point: w.point.clone() });
+            sub.wires.push(Wire { id: m.id(), from: (pid, 0), to: w.to, pts: vec![], name: w.name.clone(), point: w.point.clone(), phys: false });
         } else if a {
             let port = *outs.entry(w.from).or_insert_with(|| {
                 nout += 1;
@@ -529,9 +560,9 @@ fn group(m: &mut Model, ids: &[u32], created: &mut Vec<u32>) -> Result<(), Strin
                 let mut b = Block { id, kind: "Outport".into(), name: format!("Out{port}"), x: 160.0 + x1 - x0, y, w: 36.0, h: 24.0, ..Default::default() };
                 b.params.insert("port".into(), port.to_string());
                 sub.blocks.push(b);
-                sub.wires.push(Wire { id: m.id(), from: w.from, to: (id, 0), pts: vec![], name: w.name.clone(), point: w.point.clone() });
+                sub.wires.push(Wire { id: m.id(), from: w.from, to: (id, 0), pts: vec![], name: w.name.clone(), point: w.point.clone(), phys: false });
             }
-            outer.push(Wire { id: m.id(), from: (sid, port - 1), to: w.to, pts: vec![], name: w.name.clone(), point: w.point.clone() });
+            outer.push(Wire { id: m.id(), from: (sid, port - 1), to: w.to, pts: vec![], name: w.name.clone(), point: w.point.clone(), phys: false });
         }
     }
     let name = m.unique_name(parent, "Subsystem");
@@ -576,18 +607,18 @@ fn ungroup(m: &mut Model, id: u32) -> Result<(), String> {
             (None, None) => nd.wires.push(w.clone()),
             (Some(k), None) => {
                 if let Some(o) = d.wires.iter().find(|x| x.to == (id, k)) {
-                    nd.wires.push(Wire { id: m.id(), from: o.from, to: w.to, pts: vec![], name: o.name.clone(), point: o.point.clone() });
+                    nd.wires.push(Wire { id: m.id(), from: o.from, to: w.to, pts: vec![], name: o.name.clone(), point: o.point.clone(), phys: false });
                 }
             }
             (None, Some(k)) => {
                 for o in d.wires.iter().filter(|x| x.from == (id, k)) {
-                    nd.wires.push(Wire { id: m.id(), from: w.from, to: o.to, pts: vec![], name: w.name.clone(), point: w.point.clone() });
+                    nd.wires.push(Wire { id: m.id(), from: w.from, to: o.to, pts: vec![], name: w.name.clone(), point: w.point.clone(), phys: false });
                 }
             }
             (Some(a), Some(k)) => {
                 if let Some(src) = d.wires.iter().find(|x| x.to == (id, a)) {
                     for o in d.wires.iter().filter(|x| x.from == (id, k)) {
-                        nd.wires.push(Wire { id: m.id(), from: src.from, to: o.to, pts: vec![], name: src.name.clone(), point: src.point.clone() });
+                        nd.wires.push(Wire { id: m.id(), from: src.from, to: o.to, pts: vec![], name: src.name.clone(), point: src.point.clone(), phys: false });
                     }
                 }
             }
@@ -603,8 +634,14 @@ pub fn prune(m: &mut Model) {
     fn walk(d: &mut Diagram) {
         let counts: HashMap<u32, (usize, usize)> = d.blocks.iter().map(|b| (b.id, blocks::ports(b))).collect();
         let mut taken = HashSet::new();
+        let kinds: HashMap<u32, String> = d.blocks.iter().map(|b| (b.id, b.kind.clone())).collect();
         d.wires.retain(|w| {
             let (Some(a), Some(b)) = (counts.get(&w.from.0), counts.get(&w.to.0)) else { return false };
+            if w.phys {
+                // A physical connection: both ports must still be physical ports.
+                let n = |id: &u32| kinds.get(id).and_then(|k| crate::physical::ports_of(k)).map_or(0, |p| p.len());
+                return w.from.1 < n(&w.from.0) && w.to.1 < n(&w.to.0);
+            }
             w.from.1 < a.1 && w.to.1 < b.0 && taken.insert(w.to)
         });
         for b in &mut d.blocks {

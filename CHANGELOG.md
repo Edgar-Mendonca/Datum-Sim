@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.1 — 2026-11-11
+
+Physical parts begin: draw a machine as it is built, and the app writes the equations.
+
+- **Physical ports and connections.** Parts have small square ports in their domain's colour; drag from one to another to connect them. A connection has no arrow: it shares a speed, and the torques at a node add to zero.
+- **Rotational parts** (Library › Rotational): inertia, torsion spring, damper, friction with break-away (stick–slip), backlash, gear with efficiency, fixed frame, torque and speed sources driven by a signal, and speed and torque sensors.
+- Inertias joined rigidly, directly or through a gear, move as one. A network that cannot be solved is reported with a plain reason and a fix.
+- Every solver, linearisation, trim, live tuning and sweeps work with physical parts.
+- New example: **motor, gearbox and flexible shaft**, held at speed by a PID.
+- Files with physical connections are saved as format 3; other files are unchanged.
+
+Not yet: physical connections cannot cross a subsystem's edge. Next: translational parts (0.5.2).
+
 ## 0.5.0 — 2026-11-11
 
 Robotics: the third stage of the roadmap is done. 0.5.0 brings together 0.4.1 to 0.4.8:

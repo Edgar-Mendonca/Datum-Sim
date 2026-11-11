@@ -149,6 +149,7 @@
 | 0.1.4 | Zero-crossings count only strict sign changes (with the last non-zero sign kept) | A signal resting at zero made endless tiny steps |
 | 0.1.4 | Release order for the bigger build: 0.1.4 discrete + motor extras, 0.1.5 scopes + probe, 0.1.6 wires, 0.2.0 masks + My blocks; buses and algebraic loops move to 0.3 | The user: "as you please" (PLAN-0.2 §7) |
 | 0.1.3 | **Publisher "Datum"** in `tauri.conf.json` (`bundle.publisher`); copyright stays "© 2026 Edgar Mendonca". Discrete control, wires and scopes move to 0.1.4, 0.1.5 and 0.1.6 | The user's family-wide change (hub FAMILY §9); a patch release takes the next number |
+| 0.5.1 | Physical parts form networks solved inside one signal block (not a general equation compiler); rigid links merged; feedthrough found by probing | Keeps every solver, linearisation, trim and live tuning working unchanged (PLAN-0.6 §3) |
 | 0.1.2 | Zero-crossing functions keep their last non-zero sign in the solver | A crossing landing exactly on 0 was lost (switched inverter test) |
 | 0.1.1 | `site.json` has `about` and `steps` for the family site's app page (`/apps/sim`), kept true with every release (CLAUDE.md release step 6); README links to that page | The user's request; FAMILY §10. Checking found three overclaims, corrected: sweeps run in Rust (not Python), only the variable-step solvers locate switching exactly, and not every block has its own test yet |
 
@@ -200,7 +201,9 @@
 | 0.4.7 | Task scheduler (step sequencer) | ✅ |
 | 0.4.8 | Pick-and-place examples with both arms; compiler width hints | ✅ |
 | 0.5.0 | Stage R milestone: record 2026-11-11-robotics | ✅ |
-| 0.5.x | Stage C: physical components → 0.6.0 (its own plan and questions first) | 🔜 |
+| 0.5.1 | Physical networks (`physical.rs`: across/through nodes, rigid links merged, Newton for the rest; one block per network) and the editor's physical ports and connections; rotational parts; gearbox example | ✅ |
+| 0.5.2–0.5.7 | Translational, electrical, thermal, motors on ports, hydraulics, examples (`docs/PLAN-0.6.md`) | 🔜 |
+| 0.6.0 | Stage C milestone | ⬜ |
 | 0.6.x | Exchange: FMU, MAT/HDF5, building models from Python, Modelica | ⬜ |
 | 0.7.x | State machines, Python blocks, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
 | 1.0 | Validation suite and report, user guide, signed installer | ⬜ |
@@ -334,6 +337,25 @@
   - Rigid inertias merged; other higher-index networks reported with a fix.
   - No AGPL or GPL Modelica tools.
 - Releases 0.5.1 (engine, editor, rotational) to 0.5.7 (examples), then 0.6.0. Six questions are open.
+
+### 2026-11-11: Session 9 continued (stage C, 0.5.1)
+- The user: "go ahead, your defaults" (PLAN-0.6 §8: the order as written; incompressible oil with a bulk modulus; ideal switches and diodes with exact switching, smooth diode optional; DC motor and PMSM first, robot joints with rotational ports; coloured squares and lines without arrows; one release per step).
+- 0.5.1 built:
+  - `crates/core/src/physical.rs`: the network engine and the rotational parts.
+    - Prims: capacitive, inductive, resistive, sources, transducers, measurements.
+    - Rigid links merged by weighted union-find.
+    - Capacitive groups are states; the rest is solved by Newton.
+    - Feedthrough is found by probing the inputs: a speed sensor on an inertia makes no algebraic loop.
+  - `compile.rs` `lift_physical`: each network becomes one `PhysNet` flat; its parts become `PhysTap`s passing its outputs.
+  - Physical wires: `Wire.phys`, `Op::Connect{phys}`. Files are saved as format 3 only when they contain one.
+  - The canvas: `.pport` squares by domain and `.pline` connections; drag to connect.
+  - Example `gearbox`; help topic `physical`.
+- Checks:
+  - `verify::rotational_parts` (two-inertia spring closed form, momentum, gear with efficiency, friction break-away);
+  - `physical_errors`;
+  - UI 13b9 (ports, no arrows, drag sends `phys:true`);
+  - the real app ran the gearbox example (motor 50 rad/s, load 10 rad/s).
+- Limit: physical connections stay inside one diagram (no physical port across a subsystem edge yet).
 
 ## 5. Known limits and next steps
 
