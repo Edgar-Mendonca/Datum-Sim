@@ -32,6 +32,11 @@ pub fn list() -> Vec<Example> {
         Example { id: "cruise", name: "Vehicle cruise control", what: "A car with aerodynamic drag and rolling resistance; a PI controller sets the drive force to hold the speed." },
         Example { id: "robotarm", name: "Robot arm: pick and place", what: "A two-link arm follows a smooth joint trajectory through four way points under computed-torque control; the Arm view animates the motion." },
         Example { id: "gearbox", name: "Physical parts: motor, gearbox and flexible shaft", what: "Drawn as it is built: a motor's inertia, a 5:1 gearbox, a flexible shaft (spring and damper) and a load with friction, connected by physical ports. A PID holds the motor speed through a torque source." },
+        Example { id: "hbridge", name: "Physical parts: DC motor from an H-bridge, with a gearbox", what: "Four switches driven by PWM make an H-bridge that drives a physical DC motor; a 10:1 gearbox turns a load with friction. A PI holds the load speed." },
+        Example { id: "buck", name: "Physical parts: buck converter", what: "A switch, a diode, an inductor and a capacitor turn 24 V into 12 V; at 15 ms the load doubles. The diode switches at its exact instants." },
+        Example { id: "motorheat", name: "Physical parts: a motor heating up", what: "A DC motor's copper loss heats its winding, which heats the housing, which cools in the air. Over an hour the winding settles at its working temperature." },
+        Example { id: "press", name: "Physical parts: hydraulic press", what: "A pump, a relief valve, a valve and a cylinder: the valve opens, the ram runs down, meets the workpiece and presses until the relief valve opens." },
+        Example { id: "robotjoint", name: "Physical parts: a robot joint with its motor and gearbox", what: "Joint 1 of a two-link arm is driven by a physical DC motor through a 50:1 gearbox and a joint flange; a PID on the motor voltage moves the joint to 0.5 rad." },
         Example { id: "pick6", name: "Pick and place: 6-joint arm", what: "The 6-joint industrial arm picks a box off the table and puts it down elsewhere: a task scheduler, inverse kinematics, computed-torque control, a gripper, and the box's weight felt by the arm. Watch it in the 3D view." },
         Example { id: "pick7", name: "Pick and place: 7-joint arm", what: "The same task with the 7-joint arm: scheduler, inverse kinematics, computed-torque control, gripper and 3D view." },
         Example { id: "arm6swing", name: "6-joint arm in 3D: swinging under gravity", what: "The 6-joint industrial arm, with no motor torque, swings down under its own weight and settles through joint friction; double-click the 3D view and press Play." },
@@ -121,6 +126,11 @@ pub fn get(id: &str) -> Option<Model> {
         "robotarm" => robot_arm(),
         "arm6swing" => arm6_swing(),
         "gearbox" => gearbox(),
+        "hbridge" => hbridge(),
+        "buck" => buck(),
+        "motorheat" => motor_heat(),
+        "press" => press(),
+        "robotjoint" => robot_joint(),
         "pick6" => pick_place("arm6", "6-joint industrial arm", [0.45, 0.15], [0.25, -0.4]),
         "pick7" => pick_place("arm7", "7-joint arm", [0.5, 0.15], [0.35, -0.35]),
         "drivethermal" => drive_thermal(),
@@ -499,6 +509,236 @@ fn gearbox() -> Model {
     plink(&mut b, (f, 0), (j2, 0));
     plink(&mut b, (lt, 0), (j2, 0));
     plink(&mut b, (s2, 0), (j2, 0));
+    b.done()
+}
+
+fn hbridge() -> Model {
+    let mut b = B::new(
+        "Physical parts: DC motor from an H-bridge, with a gearbox",
+        "An H-bridge of four switches drives a DC motor drawn with physical ports. The PWM block (2 kHz, 0/1) closes switches 1 and 4 while its output is 1, and 2 and 3 while it is 0, so the motor sees +24 V or −24 V and, on average, the PI's reference times 24 V. The motor turns a 10:1 gearbox and a load with friction. The PI holds the load at 20 rad/s; at 0.5 s a load torque comes on. Watch the motor current ripple at the switching frequency (zoom in).",
+        0.8,
+    );
+    b.m.sim.solver = "stiff".into();
+    b.m.sim.rtol = 1e-4;
+    let r = b.blk("Step", "Speed reference", 20.0, 40.0, &[("time", "0.05"), ("final", "20")]);
+    let e = b.blk("Sum", "", 120.0, 42.0, &[("signs", "+-")]);
+    let c = b.blk("PID", "PI", 180.0, 38.0, &[("P", "0.05"), ("I", "0.6"), ("upper", "1"), ("lower", "-1")]);
+    let pw = b.blk("PWM", "PWM", 300.0, 36.0, &[("fc", "2000"), ("levels", "0 / 1")]);
+    let inv = b.blk("Fcn", "Complement", 300.0, 120.0, &[("expr", "1 - u")]);
+    let vdc = b.blk("DCVoltage", "24 V supply", 330.0, 220.0, &[("V", "24")]);
+    let g = b.blk("Ground", "Ground", 340.0, 340.0, &[]);
+    let s1 = b.blk("IdealSwitch", "S1", 470.0, 150.0, &[]);
+    let s2 = b.blk("IdealSwitch", "S2", 470.0, 270.0, &[]);
+    let s3 = b.blk("IdealSwitch", "S3", 650.0, 150.0, &[]);
+    let s4 = b.blk("IdealSwitch", "S4", 650.0, 270.0, &[]);
+    let am = b.blk("CurrentSensor", "Motor current", 560.0, 60.0, &[]);
+    let m = b.blk("DCMachine", "Motor", 740.0, 90.0, &[("R", "1"), ("L", "0.005"), ("K", "0.05"), ("J", "1e-4"), ("b", "1e-5")]);
+    let gr = b.blk("Gear", "Gearbox 10:1", 870.0, 100.0, &[("N", "10"), ("eta", "0.95")]);
+    let jl = b.blk("RotInertia", "Load", 980.0, 100.0, &[("J", "0.01")]);
+    let fr = b.blk("RotFriction", "Load friction", 980.0, 190.0, &[("Tc", "0.05"), ("Ts", "0.08"), ("ws", "0.5")]);
+    let tl = b.blk("Step", "Load torque", 860.0, 280.0, &[("time", "0.5"), ("final", "-0.5")]);
+    let ts = b.blk("TorqueSource", "Load torque source", 980.0, 270.0, &[]);
+    let sp = b.blk("RotSensor", "Load speed", 1090.0, 100.0, &[]);
+    let sc = b.blk("Scope", "Speed and current", 1200.0, 60.0, &[("n", "2")]);
+    b.w(r, 0, e, 0);
+    b.w(e, 0, c, 0);
+    b.w(c, 0, pw, 0);
+    b.w(pw, 0, s1, 0);
+    b.w(pw, 0, s4, 0);
+    b.w(pw, 0, inv, 0);
+    b.w(inv, 0, s2, 0);
+    b.w(inv, 0, s3, 0);
+    b.w(sp, 0, e, 1);
+    b.w(sp, 0, sc, 0);
+    b.w(am, 0, sc, 1);
+    b.w(tl, 0, ts, 0);
+    // Upper switches from +24 V to each motor terminal; lower ones from each terminal to 0 V.
+    plink(&mut b, (vdc, 0), (s1, 0));
+    plink(&mut b, (vdc, 0), (s3, 0));
+    plink(&mut b, (vdc, 1), (g, 0));
+    plink(&mut b, (s2, 1), (g, 0));
+    plink(&mut b, (s4, 1), (g, 0));
+    plink(&mut b, (s1, 1), (s2, 0));
+    plink(&mut b, (s3, 1), (s4, 0));
+    plink(&mut b, (s1, 1), (am, 0));
+    plink(&mut b, (am, 1), (m, 0));
+    plink(&mut b, (m, 1), (s3, 1));
+    plink(&mut b, (m, 2), (gr, 0));
+    plink(&mut b, (gr, 1), (jl, 0));
+    plink(&mut b, (fr, 0), (jl, 0));
+    plink(&mut b, (ts, 0), (jl, 0));
+    plink(&mut b, (sp, 0), (jl, 0));
+    b.done()
+}
+
+fn buck() -> Model {
+    let mut b = B::new(
+        "Physical parts: buck converter",
+        "A buck converter drawn as a circuit: the switch (10 kHz, 50 %) chops 24 V; when it opens, the diode carries the inductor's current. The LC filter smooths the output to D·V_in = 12 V. At 15 ms a second 10 Ω load is switched in: the output dips and recovers. The diode is ideal and switches at its exact instants (zoom into the inductor current).",
+        0.03,
+    );
+    b.m.sim.solver = "stiff".into();
+    b.m.sim.rtol = 1e-6;
+    b.m.sim.atol = 1e-9;
+    let pu = b.blk("Pulse", "Gate 10 kHz, 50 %", 20.0, 40.0, &[("period", "1e-4"), ("width", "50")]);
+    let vin = b.blk("DCVoltage", "24 V", 120.0, 160.0, &[("V", "24")]);
+    let sw = b.blk("IdealSwitch", "Switch", 220.0, 60.0, &[]);
+    let dd = b.blk("Diode", "Diode", 330.0, 160.0, &[("Vf", "0.5")]);
+    let am = b.blk("CurrentSensor", "Inductor current", 330.0, 70.0, &[]);
+    let l = b.blk("Inductor", "L 1 mH", 440.0, 70.0, &[("L", "1e-3")]);
+    let c = b.blk("Capacitor", "C 100 µF", 550.0, 160.0, &[("C", "1e-4")]);
+    let r1 = b.blk("Resistor", "Load 10 Ω", 650.0, 160.0, &[("R", "10")]);
+    let lp = b.blk("Step", "Load step", 620.0, 260.0, &[("time", "0.015"), ("final", "1")]);
+    let s2 = b.blk("IdealSwitch", "Load switch", 740.0, 70.0, &[]);
+    let r2 = b.blk("Resistor", "Extra load 10 Ω", 760.0, 160.0, &[("R", "10")]);
+    let g = b.blk("Ground", "Ground", 440.0, 300.0, &[]);
+    let vs = b.blk("VoltageSensor", "Output voltage", 870.0, 60.0, &[]);
+    let sc = b.blk("Scope", "Output and inductor current", 990.0, 40.0, &[("n", "2")]);
+    b.w(pu, 0, sw, 0);
+    b.w(lp, 0, s2, 0);
+    b.w(vs, 0, sc, 0);
+    b.w(am, 0, sc, 1);
+    plink(&mut b, (vin, 0), (sw, 0));
+    plink(&mut b, (vin, 1), (g, 0));
+    plink(&mut b, (sw, 1), (am, 0));
+    plink(&mut b, (dd, 1), (am, 0));
+    plink(&mut b, (dd, 0), (g, 0));
+    plink(&mut b, (am, 1), (l, 0));
+    plink(&mut b, (l, 1), (c, 0));
+    plink(&mut b, (c, 1), (g, 0));
+    plink(&mut b, (r1, 0), (c, 0));
+    plink(&mut b, (r1, 1), (g, 0));
+    plink(&mut b, (s2, 0), (c, 0));
+    plink(&mut b, (s2, 1), (r2, 0));
+    plink(&mut b, (r2, 1), (g, 0));
+    plink(&mut b, (vs, 0), (c, 0));
+    plink(&mut b, (vs, 1), (g, 0));
+    b.done()
+}
+
+fn motor_heat() -> Model {
+    let mut b = B::new(
+        "Physical parts: a motor heating up",
+        "A DC motor on 24 V drives a fan-like load (a damper). Its heat port passes the copper loss R·i² to the winding's heat capacity; the winding conducts to the housing, which loses heat to 25 °C air by convection. The winding settles at about 25 + P·(R_cond + R_conv) °C. The stiff solver takes the fast electrical start and the slow heating in one run (an hour).",
+        3600.0,
+    );
+    b.m.sim.solver = "stiff".into();
+    let v = b.blk("DCVoltage", "24 V", 20.0, 160.0, &[("V", "24")]);
+    let g = b.blk("Ground", "Ground", 20.0, 260.0, &[]);
+    let am = b.blk("CurrentSensor", "Current", 140.0, 80.0, &[]);
+    let m = b.blk("DCMachine", "Motor", 260.0, 80.0, &[("R", "2"), ("L", "0.002"), ("K", "0.05"), ("J", "2e-4"), ("b", "1e-5")]);
+    let ld = b.blk("RotDamper", "Load (fan)", 400.0, 60.0, &[("d", "2e-4")]);
+    let cw = b.blk("HeatCapacity", "Winding", 280.0, 240.0, &[("C", "50"), ("T0", "25")]);
+    let k = b.blk("Conduction", "Winding to housing", 380.0, 240.0, &[("G", "0.5")]);
+    let ch = b.blk("HeatCapacity", "Housing", 480.0, 240.0, &[("C", "400"), ("T0", "25")]);
+    let cv = b.blk("Convection", "Housing to air", 580.0, 240.0, &[("h", "15"), ("A", "0.1")]);
+    let air = b.blk("FixedTemp", "Air 25 °C", 690.0, 240.0, &[("T", "25")]);
+    let t1 = b.blk("TempSensor", "Winding temperature", 280.0, 340.0, &[]);
+    let t2 = b.blk("TempSensor", "Housing temperature", 480.0, 340.0, &[]);
+    let sc = b.blk("Scope", "Temperatures and current", 640.0, 340.0, &[("n", "3")]);
+    b.w(t1, 0, sc, 0);
+    b.w(t2, 0, sc, 1);
+    b.w(am, 0, sc, 2);
+    plink(&mut b, (v, 0), (am, 0));
+    plink(&mut b, (am, 1), (m, 0));
+    plink(&mut b, (m, 1), (g, 0));
+    plink(&mut b, (v, 1), (g, 0));
+    plink(&mut b, (m, 2), (ld, 0));
+    plink(&mut b, (m, 4), (cw, 0));
+    plink(&mut b, (cw, 0), (k, 0));
+    plink(&mut b, (k, 1), (ch, 0));
+    plink(&mut b, (ch, 0), (cv, 0));
+    plink(&mut b, (cv, 1), (air, 0));
+    plink(&mut b, (t1, 0), (cw, 0));
+    plink(&mut b, (t2, 0), (ch, 0));
+    b.done()
+}
+
+fn press() -> Model {
+    let mut b = B::new(
+        "Physical parts: hydraulic press",
+        "A motor turns a pump (10 cm³/rev at 300 rad/s) into a line with a relief valve set at 100 bar. At 0.2 s the valve opens: the ram (a 20 kg platen) runs down, meets the workpiece at 0.3 m (a stiff stop) and presses. The line pressure rises until the relief valve opens; the press force is then the relief pressure times the piston area. Pressures are in Pa (1 bar = 10⁵ Pa).",
+        2.5,
+    );
+    b.m.sim.solver = "stiff".into();
+    b.m.sim.rtol = 1e-5;
+    let w = b.blk("Constant", "Pump speed", 20.0, 40.0, &[("value", "300")]);
+    let ss = b.blk("SpeedSource", "Motor", 120.0, 40.0, &[]);
+    let pu = b.blk("Pump", "Pump", 240.0, 120.0, &[("D", "1e-5")]);
+    let tk = b.blk("Tank", "Tank", 240.0, 260.0, &[]);
+    let ln = b.blk("FluidVolume", "Line", 380.0, 220.0, &[("V", "5e-4")]);
+    let rv = b.blk("ReliefValve", "Relief 100 bar", 380.0, 300.0, &[("pset", "1e7"), ("g", "1e-9")]);
+    let op = b.blk("Step", "Valve command", 380.0, 30.0, &[("time", "0.2"), ("final", "1")]);
+    let vv = b.blk("Valve", "Valve", 500.0, 110.0, &[("Amax", "2e-5")]);
+    let cy = b.blk("Cylinder", "Cylinder", 640.0, 120.0, &[("Aa", "2e-3"), ("Ab", "1e-3"), ("stroke", "0.5"), ("x0", "0.05")]);
+    let ms = b.blk("Mass", "Platen 20 kg", 800.0, 60.0, &[("m", "20")]);
+    let wp = b.blk("HardStop", "Workpiece", 800.0, 160.0, &[("lo", "-1"), ("hi", "0.3"), ("k", "1e8"), ("d", "1e5"), ("x0", "0.05")]);
+    let dm = b.blk("TransDamper", "Guide friction", 800.0, 240.0, &[("d", "5000")]);
+    let ps = b.blk("PressureSensor", "Line pressure", 500.0, 260.0, &[]);
+    let bar = b.blk("Gain", "Pa to bar", 620.0, 262.0, &[("k", "1e-5")]);
+    let sc = b.blk("Scope", "Line pressure (bar)", 760.0, 330.0, &[]);
+    let sx = b.blk("Scope", "Ram position (m)", 980.0, 110.0, &[]);
+    b.w(w, 0, ss, 0);
+    b.w(op, 0, vv, 0);
+    b.w(ps, 0, bar, 0);
+    b.w(bar, 0, sc, 0);
+    b.w(cy, 0, sx, 0);
+    plink(&mut b, (ss, 0), (pu, 2));
+    plink(&mut b, (pu, 0), (tk, 0));
+    plink(&mut b, (pu, 1), (ln, 0));
+    plink(&mut b, (rv, 0), (ln, 0));
+    plink(&mut b, (rv, 1), (tk, 0));
+    plink(&mut b, (vv, 0), (ln, 0));
+    plink(&mut b, (vv, 1), (cy, 0));
+    plink(&mut b, (cy, 1), (tk, 0));
+    plink(&mut b, (cy, 2), (ms, 0));
+    plink(&mut b, (wp, 0), (ms, 0));
+    plink(&mut b, (dm, 0), (ms, 0));
+    plink(&mut b, (ps, 0), (ln, 0));
+    b.done()
+}
+
+fn robot_joint() -> Model {
+    let mut b = B::new(
+        "Physical parts: a robot joint with its motor and gearbox",
+        "Joint 1 of a two-link arm is driven the way it is built: a DC motor (drawn with ports) turns a 50:1 gearbox, and a joint flange passes the gearbox's torque to the arm and the arm's speed back. A PID sets the motor voltage (±24 V) to move joint 1 to 0.5 rad against gravity; joint 2 is held at 0 by a PD torque. The motor's back-EMF through the gearbox damps the joint strongly.",
+        2.0,
+    );
+    b.m.sim.solver = "stiff".into();
+    b.m.sim.rtol = 1e-5;
+    let arm = b.blk("RobotArm2", "Arm", 700.0, 200.0, &[]);
+    let qs = b.blk("Selector", "q1", 860.0, 160.0, &[("idx", "[1]")]);
+    let ws = b.blk("Selector", "q̇1", 860.0, 240.0, &[("idx", "[1]")]);
+    let q2 = b.blk("Selector", "q2", 860.0, 320.0, &[("idx", "[2]")]);
+    let r = b.blk("Step", "Target 0.5 rad", 20.0, 40.0, &[("time", "0.1"), ("final", "0.5")]);
+    let e = b.blk("Sum", "", 120.0, 42.0, &[("signs", "+-")]);
+    let c = b.blk("PID", "Position PID", 180.0, 38.0, &[("P", "300"), ("I", "300"), ("D", "5"), ("upper", "24"), ("lower", "-24")]);
+    let vs = b.blk("VoltageSource", "Drive", 320.0, 36.0, &[]);
+    let g = b.blk("Ground", "Ground", 320.0, 160.0, &[]);
+    let m = b.blk("DCMachine", "Joint motor", 420.0, 60.0, &[("R", "0.5"), ("L", "0.001"), ("K", "0.1"), ("J", "1e-4"), ("b", "1e-5")]);
+    let gr = b.blk("Gear", "Gearbox 50:1", 540.0, 70.0, &[("N", "50"), ("eta", "0.9")]);
+    let jf = b.blk("JointFlange", "Joint 1 flange", 640.0, 60.0, &[]);
+    let pd = b.blk("Gain", "Joint 2 PD", 960.0, 320.0, &[("k", "-50")]);
+    let mx = b.blk("Mux", "", 640.0, 200.0, &[("n", "2")]);
+    let sc = b.blk("Scope", "Joint 1 angle", 1000.0, 140.0, &[]);
+    b.w(r, 0, e, 0);
+    b.w(e, 0, c, 0);
+    b.w(c, 0, vs, 0);
+    b.w(arm, 0, qs, 0);
+    b.w(arm, 0, q2, 0);
+    b.w(arm, 1, ws, 0);
+    b.w(qs, 0, e, 1);
+    b.w(qs, 0, sc, 0);
+    b.w(ws, 0, jf, 0);
+    b.w(jf, 0, mx, 0);
+    b.w(q2, 0, pd, 0);
+    b.w(pd, 0, mx, 1);
+    b.w(mx, 0, arm, 0);
+    plink(&mut b, (vs, 0), (m, 0));
+    plink(&mut b, (vs, 1), (g, 0));
+    plink(&mut b, (m, 1), (g, 0));
+    plink(&mut b, (m, 2), (gr, 0));
+    plink(&mut b, (gr, 1), (jf, 0));
     b.done()
 }
 

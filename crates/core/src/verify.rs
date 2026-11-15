@@ -1319,6 +1319,21 @@ mod tests {
                 "imdol" => assert!((152.0..156.0).contains(&last(0)) && (last(1) - last(2)).abs() < 0.5, "imdol {} {} {}", last(0), last(1), last(2)),
                 // The junction warms above the 40 °C ambient once the load is on.
                 // The motor holds 50 rad/s; the load turns 5 times slower.
+                // Physical-part examples (0.5.7).
+                "hbridge" => assert!((last(0) - 20.0).abs() < 0.2, "H-bridge load speed {}", last(0)),
+                // D·V_in − (1 − D)·Vf with the 0.5 V diode, within the output ripple.
+                "buck" => assert!((last(0) - 11.75).abs() < 0.1, "buck {}", last(0)),
+                // The winding settles at the air + R·i²·(1/G + 1/(h·A)).
+                "motorheat" => {
+                    let want = 25.0 + 2.0 * last(2) * last(2) * (1.0 / 0.5 + 1.0 / 1.5);
+                    assert!((last(0) - want).abs() < 0.05, "winding {} vs {want}", last(0));
+                }
+                // On the workpiece; the line at the relief pressure plus q/g.
+                "press" => {
+                    let want = (1e7 + 1e-5 * 300.0 / std::f64::consts::TAU / 1e-9) * 1e-5;
+                    assert!((last(0) - want).abs() < 1e-3 * want && (last(1) - 0.3).abs() < 1e-3, "press {} at {}", last(0), last(1));
+                }
+                "robotjoint" => assert!((last(0) - 0.5).abs() < 0.005, "joint {}", last(0)),
                 "gearbox" => assert!((last(0) - 50.0).abs() < 0.5 && (last(1) - 10.0).abs() < 0.3, "gearbox {} {}", last(0), last(1)),
                 "harmonics" => {
                     let s = crate::measure::spectrum(&r.t, &r.y[0], 50.0, 4, 60).unwrap();

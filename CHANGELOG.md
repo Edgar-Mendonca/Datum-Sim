@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.7 — 2026-11-15
+
+Physical parts, step 7: **five worked examples** (Model › Examples). Each one runs and meets its target in the checks:
+
+- **DC motor from an H-bridge, with a gearbox:** four switches driven by PWM, a physical DC motor, a 10:1 gearbox and a load with friction, under a speed PI. The load holds 20 rad/s through a load step.
+- **Buck converter:** 24 V to 12 V with a switch, a diode, an inductor and a capacitor, then a load step. The output settles at D·V_in minus the diode's drop.
+- **A motor heating up:** the motor's copper loss heats the winding, then the housing, then the air. Over an hour the winding settles at the temperature its thermal resistances predict.
+- **Hydraulic press:** pump, relief valve, valve and cylinder. The ram runs down, meets the workpiece and presses at the relief pressure.
+- **A robot joint with its motor and gearbox:** joint 1 of a two-link arm is driven by a physical motor through a 50:1 gearbox and a joint flange, and reaches 0.5 rad against gravity.
+
+Next: the milestone 0.6.0.
+
 ## 0.5.6 — 2026-11-15
 
 Physical parts, step 6: **hydraulics**.
