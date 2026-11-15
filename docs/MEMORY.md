@@ -149,6 +149,8 @@
 | 0.1.4 | Zero-crossings count only strict sign changes (with the last non-zero sign kept) | A signal resting at zero made endless tiny steps |
 | 0.1.4 | Release order for the bigger build: 0.1.4 discrete + motor extras, 0.1.5 scopes + probe, 0.1.6 wires, 0.2.0 masks + My blocks; buses and algebraic loops move to 0.3 | The user: "as you please" (PLAN-0.2 §7) |
 | 0.1.3 | **Publisher "Datum"** in `tauri.conf.json` (`bundle.publisher`); copyright stays "© 2026 Edgar Mendonca". Discrete control, wires and scopes move to 0.1.4, 0.1.5 and 0.1.6 | The user's family-wide change (hub FAMILY §9); a patch release takes the next number |
+| 0.5.1+ | Motto: "Draw a dynamic system, run it and trust the result: free, open, and no coding needed." Order C → S (scripting) → U (ease of use) → D → E → F | The user, 2026-11-15 (ROADMAP §2.6, §6) |
+| 0.5.1+ | Scripting uses the bundled Python unchanged (no matplotlib; plots go to Datum scopes), in its own process; `.m` files are read for assignments only, never run, and never named by product in public words | Keeps the installer small and the window safe; FAMILY §13 |
 | 0.5.1 | Physical parts form networks solved inside one signal block (not a general equation compiler); rigid links merged; feedthrough found by probing | Keeps every solver, linearisation, trim and live tuning working unchanged (PLAN-0.6 §3) |
 | 0.1.2 | Zero-crossing functions keep their last non-zero sign in the solver | A crossing landing exactly on 0 was lost (switched inverter test) |
 | 0.1.1 | `site.json` has `about` and `steps` for the family site's app page (`/apps/sim`), kept true with every release (CLAUDE.md release step 6); README links to that page | The user's request; FAMILY §10. Checking found three overclaims, corrected: sweeps run in Rust (not Python), only the variable-step solvers locate switching exactly, and not every block has its own test yet |
@@ -204,8 +206,11 @@
 | 0.5.1 | Physical networks (`physical.rs`: across/through nodes, rigid links merged, Newton for the rest; one block per network) and the editor's physical ports and connections; rotational parts; gearbox example | ✅ |
 | 0.5.2–0.5.7 | Translational, electrical, thermal, motors on ports, hydraulics, examples (`docs/PLAN-0.6.md`) | 🔜 |
 | 0.6.0 | Stage C milestone | ⬜ |
-| 0.6.x | Exchange: FMU, MAT/HDF5, building models from Python, Modelica | ⬜ |
-| 0.7.x | State machines, Python blocks, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
+| 0.6.1–0.7.0 | Stage S, scripting (`docs/PLAN-script.md`): console, scripts and setup scripts, build from code, Python block, `.m` parameter import | ⬜ |
+| 0.7.1–0.8.0 | Stage U, easy to find your way (`docs/PLAN-ease.md`, to be written) | ⬜ |
+| 0.8.x | Exchange: FMU, MAT/HDF5, Modelica | ⬜ |
+| 0.9.x | State machines, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
+| 0.10.x | Linux and macOS, fast mode, variants | ⬜ |
 | 1.0 | Validation suite and report, user guide, signed installer | ⬜ |
 
 ## 4. Session log
@@ -356,6 +361,22 @@
   - UI 13b9 (ports, no arrows, drag sends `phys:true`);
   - the real app ran the gearbox example (motor 50 rad/s, load 10 rad/s).
 - Limit: physical connections stay inside one diagram (no physical port across a subsystem edge yet).
+
+### 2026-11-15: Session 9 continued (position and roadmap)
+- The user asked:
+  - where we stand against the commercial and the free tools;
+  - what the motto is;
+  - whether we have a coding panel (no: Python only from outside);
+  - about `.m` files and Scilab.
+- Researched the field (Xcos GPL, OpenModelica AGPL/OSMC-PL, PathSim/PathView MIT, bdsim MIT, Hopsan Apache, ModelingToolkit core MIT with AGPL parts since v11) and answered in chat with tables.
+- Checked Datum Plot's Python bundling (the same `runtime.zip` method; Plot also carries matplotlib, statsmodels, openpyxl and lmfit). Sim 0.5.1's installer is 86 MB.
+- The user agreed:
+  - the motto (ROADMAP §2.6);
+  - stage S, scripting the Datum way;
+  - `.m` parameter import as its last, optional item;
+  - the order C → S → U (ease of use, added because "navigating between the tools … is very difficult");
+  - Linux and macOS later.
+- Rewrote `docs/ROADMAP.md`; wrote `docs/PLAN-script.md`; renumbered the planned features (D 0.8.x, E 0.9.x, F 0.10.x; the Python block moved into S as 0.6.4).
 
 ## 5. Known limits and next steps
 

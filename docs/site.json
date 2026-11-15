@@ -94,39 +94,60 @@
       "when": "Now (0.5.1)",
       "items": [
         "Rotational parts connected by ports: inertia, spring, damper, gear, friction, backlash, sources and sensors (0.5.1)",
-        "Translational, electrical, thermal and hydraulic components",
-        "Motors connected to electrical and mechanical networks"
+        "Translational, electrical, thermal and hydraulic parts",
+        "Motors connected to electrical and mechanical networks",
+        "Examples: a motor and gearbox from an H-bridge, a buck converter, a hydraulic press"
       ]
     },
     {
       "v": "0.6.x → 0.7",
-      "title": "Exchange",
-      "when": "Later",
+      "title": "Scripting",
+      "when": "Next",
       "items": [
-        "FMU export and import",
-        "Results as MAT and HDF5; building models from Python",
-        "Modelica through an external compiler"
+        "A Python console in the window, with the open model ready to use",
+        "Scripts kept with the model, and a setup script run before every simulation",
+        "Building models from code, and a Python block",
+        "Importing plain parameter files (.m) into model variables"
       ]
     },
     {
       "v": "0.7.x → 0.8",
+      "title": "Easy to find your way",
+      "when": "Then",
+      "items": [
+        "A start page organised by task",
+        "A map of the tools and guided first steps",
+        "Tutorials for teaching"
+      ]
+    },
+    {
+      "v": "0.8.x → 0.9",
+      "title": "Exchange",
+      "when": "Later",
+      "items": [
+        "FMU export and import",
+        "Results as MAT and HDF5",
+        "Modelica through an external compiler"
+      ]
+    },
+    {
+      "v": "0.9.x → 0.10",
       "title": "Studies and logic",
       "when": "Later",
       "items": [
-        "State machines and Python blocks",
+        "State machines",
         "Monte Carlo, sensitivity, optimisation and fitting",
         "Report builder"
       ]
     },
     {
-      "v": "0.8.x → 0.9",
+      "v": "0.10.x → 0.11",
       "title": "Reach and speed",
       "when": "Later",
       "items": [
         "Linux and macOS installers",
-        "A fast compiled run mode",
-        "Variants and model comparison",
-        "Tutorials for teaching"
+        "A fast run mode for big models",
+        "Variants and model comparison"
       ]
     }
   ]

@@ -30,24 +30,32 @@ export const FEATS: Feat[] = [
   f("phys-motor", "modules", "Physical", "0.5.5", "Motors on Ports", "motor", "The motor blocks connected to electrical and mechanical networks."),
   f("phys-hyd", "modules", "Physical", "0.5.6", "Hydraulics", "block", "Pump, valve, cylinder and pipe."),
 
-  // ---- Stage D: exchange (0.5.x)
-  f("fmuexp", "analyze", "Exchange", "0.6.1", "FMU Export", "export", "Export the model as an FMU (co-simulation) to run inside other tools."),
-  f("fmuimp", "model", "Exchange", "0.6.2", "FMU Import", "import", "Run another tool's FMU as a block."),
-  f("hdf5", "analyze", "Results", "0.6.3", "MAT and HDF5", "export", "Save results as MAT or HDF5 files."),
-  f("modelica", "model", "Exchange", "0.6.4", "Modelica", "import", "Modelica models through an external compiler."),
+  // ---- Stage S: scripting, the Datum way (0.6.x → 0.7.0)
+  f("console", "analyze", "Scripting", "0.6.1", "Python Console", "py", "Type Python beside the diagram: the open model is ready as `model` (variables, run, results as arrays), with the control commands tf, step, bode and lqr.", [{ k: "text", l: ">>>", v: "model.vars['Kp'] = 3; r = model.run()" }]),
+  f("scripts", "analyze", "Scripting", "0.6.2", "Scripts", "report", "Python scripts kept with the model; a setup script runs before every simulation, so variables can come from a calculation.", [{ k: "pick", l: "Setup script", what: "script" }, { k: "check", l: "Run before every simulation", on: true }]),
+  f("buildcode", "analyze", "Scripting", "0.6.3", "Build from Code", "sub", "Add blocks and wires from Python, with undo like any edit."),
+  f("pyblock", "model", "Logic", "0.6.4", "Python Block", "py", "A block whose behaviour is a Python function."),
+  f("mimport", "model", "Exchange", "0.6.5", "Import Parameters (.m)", "import", "Read plain assignments (J = 0.01; wn = 2*pi*50;) from a parameter file into model variables. The file is read, never run.", [{ k: "pick", l: "Parameter file", what: "file" }]),
 
-  // ---- Stage E: studies and logic (0.6.x)
-  f("chart", "model", "Logic", "0.7.1", "State Machine", "sub", "States, transitions and actions drawn as a chart."),
-  f("pyblock", "model", "Logic", "0.7.2", "Python Block", "py", "A block whose behaviour is a Python function."),
-  f("mc", "simulate", "Studies", "0.7.3", "Monte Carlo", "sweep", "Run many times with parameters drawn from distributions; spread of the results."),
-  f("sensi", "simulate", "Studies", "0.7.3", "Sensitivity", "specs", "Which parameters change a result most."),
-  f("optim", "simulate", "Studies", "0.7.4", "Optimise and Fit", "plot", "Find parameters that meet goals, or that make the model match measured data."),
-  f("report", "analyze", "Results", "0.7.5", "Report", "report", "The model, its runs and its plots in one printable report."),
+  // ---- Stage U: easy to find your way (0.7.x → 0.8.0), its own plan first
+
+  // ---- Stage D: exchange (0.8.x → 0.9.0)
+  f("fmuexp", "analyze", "Exchange", "0.8.1", "FMU Export", "export", "Export the model as an FMU (co-simulation) to run inside other tools."),
+  f("fmuimp", "model", "Exchange", "0.8.2", "FMU Import", "import", "Run another tool's FMU as a block."),
+  f("hdf5", "analyze", "Results", "0.8.3", "MAT and HDF5", "export", "Save results as MAT or HDF5 files."),
+  f("modelica", "model", "Exchange", "0.8.4", "Modelica", "import", "Modelica models through an external compiler."),
+
+  // ---- Stage E: studies and logic (0.9.x → 0.10.0)
+  f("chart", "model", "Logic", "0.9.1", "State Machine", "sub", "States, transitions and actions drawn as a chart."),
+  f("mc", "simulate", "Studies", "0.9.2", "Monte Carlo", "sweep", "Run many times with parameters drawn from distributions; spread of the results."),
+  f("sensi", "simulate", "Studies", "0.9.2", "Sensitivity", "specs", "Which parameters change a result most."),
+  f("optim", "simulate", "Studies", "0.9.3", "Optimise and Fit", "plot", "Find parameters that meet goals, or that make the model match measured data."),
+  f("report", "analyze", "Results", "0.9.4", "Report", "report", "The model, its runs and its plots in one printable report."),
 
   // ---- Stage F and modules later
-  f("os", "view", "Reach", "0.8.1", "Linux and macOS", "info", "Installers for Linux and macOS."),
-  f("fast", "simulate", "Solver", "0.8.2", "Fast Mode", "run", "A compiled run mode for big models."),
-  f("variants", "model", "Signals", "0.8.3", "Variants", "sub", "Switchable subsystems, and a comparison of two model files."),
+  f("os", "view", "Reach", "0.10.1", "Linux and macOS", "info", "Installers for Linux and macOS."),
+  f("fast", "simulate", "Solver", "0.10.2", "Fast Mode", "run", "A compiled run mode for big models."),
+  f("variants", "model", "Signals", "0.10.3", "Variants", "sub", "Switchable subsystems, and a comparison of two model files."),
   f("flight", "modules", "Modules", "later", "Flight", "motor", "A module for aircraft and drones: rigid-body dynamics, aerodynamics, autopilot loops."),
   f("vehicle", "modules", "Modules", "later", "Vehicle", "motor", "A module for electric vehicles: drive cycle, battery, motor and driveline."),
   f("bench", "modules", "Hardware", "later", "Hardware Bench", "run", "Connect the model to real controllers and sensors, with the planned Datum bench app."),

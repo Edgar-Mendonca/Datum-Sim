@@ -394,8 +394,8 @@ pub fn library() -> Vec<Def> {
         planned("Resistor", "R, L, C and sources", "Physical (coming)", "Electrical components you connect by ports.", "0.5.3"),
         planned("HeatCap", "Heat capacity, conduction", "Physical (coming)", "Thermal components you connect by ports.", "0.5.4"),
         planned("Pipe", "Pipe, pump, valve, tank", "Physical (coming)", "Hydraulic components you connect by ports.", "0.5.6"),
-        planned("FMU", "FMU", "Subsystems", "Run a model exported by another tool (FMI standard).", "0.5"),
-        planned("PyBlock", "Python block", "Math", "A block written in Python.", "0.6"),
+        planned("FMU", "FMU", "Subsystems", "Run a model exported by another tool (FMI standard).", "0.8"),
+        planned("PyBlock", "Python block", "Math", "A block written in Python.", "0.6.4"),
     ]
 }
 
