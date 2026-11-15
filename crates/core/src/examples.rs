@@ -5,45 +5,66 @@ use serde::Serialize;
 
 #[derive(Serialize)]
 pub struct Example {
+    /// The topic it is listed under: "Getting started", "Motors and drives", "Robotics" or
+    /// "Physical parts" (0.6.1).
+    pub topic: &'static str,
     pub id: &'static str,
     pub name: &'static str,
     pub what: &'static str,
 }
 
+/// The topic each example is listed under.
+pub fn topic(id: &str) -> &'static str {
+    match id {
+        "blank" | "msd" | "tank" | "cruise" | "thermostat" | "masked" => "Getting started",
+        "robotarm" | "pick6" | "pick7" | "arm6swing" => "Robotics",
+        "gearbox" | "hbridge" | "buck" | "motorheat" | "press" | "robotjoint" => "Physical parts",
+        _ => "Motors and drives",
+    }
+}
+
 pub fn list() -> Vec<Example> {
+    let mut v = all();
+    for e in &mut v {
+        e.topic = topic(e.id);
+    }
+    v
+}
+
+fn all() -> Vec<Example> {
     vec![
-        Example { id: "blank", name: "Blank model", what: "An empty diagram." },
-        Example { id: "msd", name: "Mass–spring–damper", what: "A mass on a spring and damper pushed by a step force: the classic second-order response." },
-        Example { id: "dcmotor", name: "DC motor speed control (PID)", what: "A DC motor built from blocks inside a subsystem, held at speed by a PID controller while a load torque is applied." },
-        Example { id: "dcpos", name: "DC motor position control", what: "The DC motor block with a PID position loop and voltage limits." },
-        Example { id: "pmsm", name: "PMSM speed control (field-oriented)", what: "A permanent-magnet synchronous motor in the d–q frame with a speed loop and two current loops." },
-        Example { id: "imdol", name: "Induction motor: direct-on-line start", what: "A 400 V, 11 kW squirrel-cage motor switched straight onto the mains, starting a fan: the inrush current, the torque and the run-up." },
-        Example { id: "imvf", name: "Induction motor: V/f speed control", what: "A variable-frequency supply built from blocks (angle integrator and inverse transforms) ramps the motor up with constant volts per hertz." },
-        Example { id: "pmsmfoc", name: "PMSM: field-oriented control with an inverter", what: "A 15 kW interior-magnet motor fed by a three-phase inverter: currents measured in abc, Clarke and Park transforms, current and speed loops." },
-        Example { id: "bldc", name: "BLDC motor speed control", what: "A 48 V brushless DC motor held at speed by a PI controller through a load step." },
-        Example { id: "syncmotor", name: "Synchronous motor on the grid (3.3 kV)", what: "A 1 MVA wound-field salient-pole motor on a 3.3 kV supply takes a load step: the rotor swings and the dampers settle it back to synchronous speed." },
-        Example { id: "dcseries", name: "DC series motor: traction start", what: "A 600 V series motor starts a heavy load as its voltage is ramped up: high torque at low speed." },
-        Example { id: "stepper", name: "Stepper motor: full steps", what: "A hybrid stepper driven with two-phase-on full steps at 200 steps per second." },
-        Example { id: "pmsmdigital", name: "PMSM: digital drive with a DC link", what: "Field-oriented control as a microcontroller runs it: a 10 kHz current loop and a 1 kHz speed loop, Goto/From tags, and a DC link fed by a diode rectifier that rises while the motor brakes." },
-        Example { id: "dcdigital", name: "DC motor: digital and continuous PID", what: "The same DC motor speed loop twice, with a continuous PID and a discrete PID at 5 ms: compare the responses and the staircase of the digital controller." },
-        Example { id: "srm", name: "Switched reluctance motor speed control", what: "A 6/4 switched reluctance motor with angle-based phase switching from an asymmetric bridge and a PI speed loop." },
-        Example { id: "masked", name: "A masked motor block, used twice", what: "The DC motor built from blocks, masked as a block of its own with parameters and typical ratings, and used for two different motors in one model." },
-        Example { id: "tank", name: "Pump and tank level control", what: "A pump fills a tank that drains through a valve (flow ∝ √level); a PI controller holds the level." },
-        Example { id: "cruise", name: "Vehicle cruise control", what: "A car with aerodynamic drag and rolling resistance; a PI controller sets the drive force to hold the speed." },
-        Example { id: "robotarm", name: "Robot arm: pick and place", what: "A two-link arm follows a smooth joint trajectory through four way points under computed-torque control; the Arm view animates the motion." },
-        Example { id: "gearbox", name: "Physical parts: motor, gearbox and flexible shaft", what: "Drawn as it is built: a motor's inertia, a 5:1 gearbox, a flexible shaft (spring and damper) and a load with friction, connected by physical ports. A PID holds the motor speed through a torque source." },
-        Example { id: "hbridge", name: "Physical parts: DC motor from an H-bridge, with a gearbox", what: "Four switches driven by PWM make an H-bridge that drives a physical DC motor; a 10:1 gearbox turns a load with friction. A PI holds the load speed." },
-        Example { id: "buck", name: "Physical parts: buck converter", what: "A switch, a diode, an inductor and a capacitor turn 24 V into 12 V; at 15 ms the load doubles. The diode switches at its exact instants." },
-        Example { id: "motorheat", name: "Physical parts: a motor heating up", what: "A DC motor's copper loss heats its winding, which heats the housing, which cools in the air. Over an hour the winding settles at its working temperature." },
-        Example { id: "press", name: "Physical parts: hydraulic press", what: "A pump, a relief valve, a valve and a cylinder: the valve opens, the ram runs down, meets the workpiece and presses until the relief valve opens." },
-        Example { id: "robotjoint", name: "Physical parts: a robot joint with its motor and gearbox", what: "Joint 1 of a two-link arm is driven by a physical DC motor through a 50:1 gearbox and a joint flange; a PID on the motor voltage moves the joint to 0.5 rad." },
-        Example { id: "pick6", name: "Pick and place: 6-joint arm", what: "The 6-joint industrial arm picks a box off the table and puts it down elsewhere: a task scheduler, inverse kinematics, computed-torque control, a gripper, and the box's weight felt by the arm. Watch it in the 3D view." },
-        Example { id: "pick7", name: "Pick and place: 7-joint arm", what: "The same task with the 7-joint arm: scheduler, inverse kinematics, computed-torque control, gripper and 3D view." },
-        Example { id: "arm6swing", name: "6-joint arm in 3D: swinging under gravity", what: "The 6-joint industrial arm, with no motor torque, swings down under its own weight and settles through joint friction; double-click the 3D view and press Play." },
-        Example { id: "drivethermal", name: "PMSM drive: inverter losses and junction temperature", what: "The 15 kW field-oriented drive with the inverter's conduction and switching losses and a junction-to-ambient thermal network: watch the junction warm up as the load comes on." },
-        Example { id: "harmonics", name: "Inverter harmonics: switched PWM into an induction motor", what: "A switched two-level inverter at 2 kHz feeds an 11 kW motor: run it, then Analyze › Spectrum on a stator current for its harmonics and THD; try space-vector modulation." },
-        Example { id: "imsat", name: "Induction motor start with saturation and iron loss", what: "The direct-on-line start of the 11 kW motor with a saturating magnetising inductance and an iron-loss estimate: compare the magnetising current with the linear motor (set ψ_sat to 0)." },
-        Example { id: "thermostat", name: "Room thermostat (relay)", what: "A heater switched by a relay with hysteresis keeps a room warm; switching times are located exactly." },
+        Example { topic: "", id: "blank", name: "Blank model", what: "An empty diagram." },
+        Example { topic: "", id: "msd", name: "Mass–spring–damper", what: "A mass on a spring and damper pushed by a step force: the classic second-order response." },
+        Example { topic: "", id: "dcmotor", name: "DC motor speed control (PID)", what: "A DC motor built from blocks inside a subsystem, held at speed by a PID controller while a load torque is applied." },
+        Example { topic: "", id: "dcpos", name: "DC motor position control", what: "The DC motor block with a PID position loop and voltage limits." },
+        Example { topic: "", id: "pmsm", name: "PMSM speed control (field-oriented)", what: "A permanent-magnet synchronous motor in the d–q frame with a speed loop and two current loops." },
+        Example { topic: "", id: "imdol", name: "Induction motor: direct-on-line start", what: "A 400 V, 11 kW squirrel-cage motor switched straight onto the mains, starting a fan: the inrush current, the torque and the run-up." },
+        Example { topic: "", id: "imvf", name: "Induction motor: V/f speed control", what: "A variable-frequency supply built from blocks (angle integrator and inverse transforms) ramps the motor up with constant volts per hertz." },
+        Example { topic: "", id: "pmsmfoc", name: "PMSM: field-oriented control with an inverter", what: "A 15 kW interior-magnet motor fed by a three-phase inverter: currents measured in abc, Clarke and Park transforms, current and speed loops." },
+        Example { topic: "", id: "bldc", name: "BLDC motor speed control", what: "A 48 V brushless DC motor held at speed by a PI controller through a load step." },
+        Example { topic: "", id: "syncmotor", name: "Synchronous motor on the grid (3.3 kV)", what: "A 1 MVA wound-field salient-pole motor on a 3.3 kV supply takes a load step: the rotor swings and the dampers settle it back to synchronous speed." },
+        Example { topic: "", id: "dcseries", name: "DC series motor: traction start", what: "A 600 V series motor starts a heavy load as its voltage is ramped up: high torque at low speed." },
+        Example { topic: "", id: "stepper", name: "Stepper motor: full steps", what: "A hybrid stepper driven with two-phase-on full steps at 200 steps per second." },
+        Example { topic: "", id: "pmsmdigital", name: "PMSM: digital drive with a DC link", what: "Field-oriented control as a microcontroller runs it: a 10 kHz current loop and a 1 kHz speed loop, Goto/From tags, and a DC link fed by a diode rectifier that rises while the motor brakes." },
+        Example { topic: "", id: "dcdigital", name: "DC motor: digital and continuous PID", what: "The same DC motor speed loop twice, with a continuous PID and a discrete PID at 5 ms: compare the responses and the staircase of the digital controller." },
+        Example { topic: "", id: "srm", name: "Switched reluctance motor speed control", what: "A 6/4 switched reluctance motor with angle-based phase switching from an asymmetric bridge and a PI speed loop." },
+        Example { topic: "", id: "masked", name: "A masked motor block, used twice", what: "The DC motor built from blocks, masked as a block of its own with parameters and typical ratings, and used for two different motors in one model." },
+        Example { topic: "", id: "tank", name: "Pump and tank level control", what: "A pump fills a tank that drains through a valve (flow ∝ √level); a PI controller holds the level." },
+        Example { topic: "", id: "cruise", name: "Vehicle cruise control", what: "A car with aerodynamic drag and rolling resistance; a PI controller sets the drive force to hold the speed." },
+        Example { topic: "", id: "robotarm", name: "Robot arm: pick and place", what: "A two-link arm follows a smooth joint trajectory through four way points under computed-torque control; the Arm view animates the motion." },
+        Example { topic: "", id: "gearbox", name: "Physical parts: motor, gearbox and flexible shaft", what: "Drawn as it is built: a motor's inertia, a 5:1 gearbox, a flexible shaft (spring and damper) and a load with friction, connected by physical ports. A PID holds the motor speed through a torque source." },
+        Example { topic: "", id: "hbridge", name: "Physical parts: DC motor from an H-bridge, with a gearbox", what: "Four switches driven by PWM make an H-bridge that drives a physical DC motor; a 10:1 gearbox turns a load with friction. A PI holds the load speed." },
+        Example { topic: "", id: "buck", name: "Physical parts: buck converter", what: "A switch, a diode, an inductor and a capacitor turn 24 V into 12 V; at 15 ms the load doubles. The diode switches at its exact instants." },
+        Example { topic: "", id: "motorheat", name: "Physical parts: a motor heating up", what: "A DC motor's copper loss heats its winding, which heats the housing, which cools in the air. Over an hour the winding settles at its working temperature." },
+        Example { topic: "", id: "press", name: "Physical parts: hydraulic press", what: "A pump, a relief valve, a valve and a cylinder: the valve opens, the ram runs down, meets the workpiece and presses until the relief valve opens." },
+        Example { topic: "", id: "robotjoint", name: "Physical parts: a robot joint with its motor and gearbox", what: "Joint 1 of a two-link arm is driven by a physical DC motor through a 50:1 gearbox and a joint flange; a PID on the motor voltage moves the joint to 0.5 rad." },
+        Example { topic: "", id: "pick6", name: "Pick and place: 6-joint arm", what: "The 6-joint industrial arm picks a box off the table and puts it down elsewhere: a task scheduler, inverse kinematics, computed-torque control, a gripper, and the box's weight felt by the arm. Watch it in the 3D view." },
+        Example { topic: "", id: "pick7", name: "Pick and place: 7-joint arm", what: "The same task with the 7-joint arm: scheduler, inverse kinematics, computed-torque control, gripper and 3D view." },
+        Example { topic: "", id: "arm6swing", name: "6-joint arm in 3D: swinging under gravity", what: "The 6-joint industrial arm, with no motor torque, swings down under its own weight and settles through joint friction; double-click the 3D view and press Play." },
+        Example { topic: "", id: "drivethermal", name: "PMSM drive: inverter losses and junction temperature", what: "The 15 kW field-oriented drive with the inverter's conduction and switching losses and a junction-to-ambient thermal network: watch the junction warm up as the load comes on." },
+        Example { topic: "", id: "harmonics", name: "Inverter harmonics: switched PWM into an induction motor", what: "A switched two-level inverter at 2 kHz feeds an 11 kW motor: run it, then Analyze › Spectrum on a stator current for its harmonics and THD; try space-vector modulation." },
+        Example { topic: "", id: "imsat", name: "Induction motor start with saturation and iron loss", what: "The direct-on-line start of the 11 kW motor with a saturating magnetising inductance and an iron-loss estimate: compare the magnetising current with the linear motor (set ψ_sat to 0)." },
+        Example { topic: "", id: "thermostat", name: "Room thermostat (relay)", what: "A heater switched by a relay with hysteresis keeps a room warm; switching times are located exactly." },
     ]
 }
 
@@ -98,7 +119,7 @@ impl B {
         let id = self.m.id();
         self.d().wires.push(Wire { id, from: (from, fp), to: (to, tp), ..Default::default() });
     }
-    /// An analysis point on every wire from a block's output (Control › Loop Analysis).
+    /// An analysis point on every wire from a block's output (Analyze › Loop Analysis).
     fn point(&mut self, from: u32, kind: &str) {
         for w in self.d().wires.iter_mut().filter(|w| w.from.0 == from) {
             w.point = kind.into();

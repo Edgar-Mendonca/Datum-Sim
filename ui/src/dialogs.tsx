@@ -8,6 +8,7 @@ import { C } from "./cmds";
 import { Dialog, Icon } from "./ui";
 import { Help } from "./help";
 import { OKABE } from "./scope";
+import { TASKS, TAB_NAMES, goTo } from "./where";
 
 export const rename = (id: number, name: string) => openDialog(() => {
   const [v, setV] = createSignal(name);
@@ -249,6 +250,29 @@ export const shortcuts = () => openDialog(() => (
     ]}>{([a, b]) => <tr><td>{a}</td><td><kbd>{b}</kbd></td></tr>}</For></tbody></table>
   </Dialog>
 ));
+
+/** Help › Where Is…? (0.6.1): everyday tasks by tab; a click opens the tab and highlights the tool. */
+export const whereIs = () => openDialog(() => {
+  const [q, setQ] = createSignal("");
+  const hit = (s: string) => TASKS.filter(w => !s || `${w.task} ${w.words} ${w.group}`.toLowerCase().includes(s.toLowerCase()));
+  return (
+    <Dialog title="Where is…?" wide help="where">
+      <input class="whereq" placeholder="What do you want to do? (e.g. tune a PID, export, circuit)" value={q()} onInput={e => setQ(e.currentTarget.value)} />
+      <div class="where">
+        <For each={Object.keys(TAB_NAMES)}>{tb => (
+          <Show when={hit(q()).some(w => w.tab === tb)}>
+            <section><h4>{TAB_NAMES[tb]}</h4>
+              <For each={hit(q()).filter(w => w.tab === tb)}>{w => (
+                <button class="wrow" onClick={() => { closeDialog(); goTo(w); }}><span>{w.task}</span><small>{w.tabName} › {w.group}</small></button>
+              )}</For>
+            </section>
+          </Show>
+        )}</For>
+        <Show when={!hit(q()).length}><p class="muted">Nothing matches. Try other words, or Tell Me (Ctrl+K), which also searches every block.</p></Show>
+      </div>
+    </Dialog>
+  );
+});
 
 export const gettingStarted = () => openDialog(() => (
   <Dialog title="Getting started" wide>

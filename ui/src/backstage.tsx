@@ -65,6 +65,9 @@ const ExampleArt = (p: { id: string }) => {
 };
 
 
+const TOPICS = ["Getting started", "Motors and drives", "Robotics", "Physical parts"];
+const [topic, setTopic] = createSignal("All");
+
 const Home = () => {
   const [ex] = createResource(() => call<Example[]>("examples_list"));
   const [recent] = createResource(() => call<{ path: string; name: string; modified: string }[]>("recent"));
@@ -72,8 +75,19 @@ const Home = () => {
     <div class="home">
       <div>
         <h1>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}</h1>
+        {/* Examples by topic (0.6.1): chips filter, headings group. */}
+        <div class="exchips">
+          <For each={["All", ...TOPICS]}>{c => <button class="exchip" classList={{ on: topic() === c }} onClick={() => setTopic(c)}>{c}<small>{c === "All" ? (ex() ?? []).length : (ex() ?? []).filter(x => x.topic === c).length}</small></button>}</For>
+        </div>
+        <For each={TOPICS.filter(tp => topic() === "All" || topic() === tp)}>{tp => (
+          <Show when={(ex() ?? []).some(x => x.topic === tp)}>
+            <h3 class="topic">{tp}</h3>
+            <div class="tiles">
+              <For each={(ex() ?? []).filter(x => x.topic === tp)}>{t => <button class="tile" onClick={() => C.newModel(t.id === "blank" ? null : t.id)}><div class="pic"><ExampleArt id={t.id} /></div><b>{t.name}</b><span>{t.what}</span></button>}</For>
+            </div>
+          </Show>
+        )}</For>
         <div class="tiles">
-          <For each={ex() ?? []}>{t => <button class="tile" onClick={() => C.newModel(t.id === "blank" ? null : t.id)}><div class="pic"><ExampleArt id={t.id} /></div><b>{t.name}</b><span>{t.what}</span></button>}</For>
           <button class="tile" onClick={() => setBackstage("roadmap")}><div class="pic"><svg class="ic"><use href="#i-list" /></svg></div><b>Roadmap</b><span>Everything Datum Sim will do, and when.</span></button>
         </div>
         <h2>Recent</h2>

@@ -2,7 +2,7 @@
 // model's settings when nothing is selected).
 import { For, Show, createSignal, createMemo, createEffect, on, onMount } from "solid-js";
 import { Def, BlockView, Issue, num, invoke, MyBlock } from "./api";
-import { lib, selBlocks, selWires, act, out, defOf, issues, results, chans, setView, sel, enter, setIssues, myBlocks, refreshMyBlocks, openMenu, toast, call } from "./store";
+import { lib, selBlocks, selWires, act, out, defOf, issues, results, chans, setView, sel, enter, setIssues, myBlocks, refreshMyBlocks, openMenu, toast, call, libGoto } from "./store";
 import * as D from "./dialogs";
 import { C } from "./cmds";
 import { dropBlock } from "./canvas";
@@ -46,9 +46,39 @@ export const maskDef = (b: BlockView): Def => ({
 /** My blocks are dragged like library blocks: their kind is "my:" and the file. */
 const myDef = (m: MyBlock): Def => ({ kind: `my:${m.file}`, name: m.name, cat: "My blocks", what: m.what || "Your saved block.", how: "", params: [], w: 100, h: 70, planned: "", presets: [] });
 
+/** The library in four families (0.6.1), each with its groups. A group not listed is a signal block. */
+export const FAMILIES: [string, string[]][] = [
+  ["Signal blocks", ["Sources", "Math", "Continuous", "Discontinuities", "Discrete", "Routing", "Lookup tables", "Sinks", "Subsystems", "Annotations"]],
+  ["Motors and drives", ["Motors", "Drives"]],
+  ["Robotics", ["Robot arm"]],
+  ["Physical parts", ["Rotational", "Translational", "Electrical", "Thermal", "Hydraulic"]],
+];
+const familyOf = (cat: string) => FAMILIES.find(f => f[1].includes(cat))?.[0] ?? "Signal blocks";
+// What is folded is remembered per viewer. At first the signal blocks are open, and the other
+// families show their group names only, as an index.
+const SHUT_KEY = "datumsim.lib.shut.v1";
+const firstShut = () => FAMILIES.slice(1).flatMap(f => f[1]);
+const loadShut = (): string[] => { try { const s = localStorage.getItem(SHUT_KEY); return s ? JSON.parse(s) : firstShut(); } catch { return firstShut(); } };
+
 export const LibraryPanel = () => {
   const [q, setQ] = createSignal("");
-  const [shut, setShut] = createSignal<string[]>([]);
+  const [shut, setShutRaw] = createSignal<string[]>(loadShut());
+  const setShut = (v: string[]) => { setShutRaw(v); try { localStorage.setItem(SHUT_KEY, JSON.stringify(v)); } catch { /* private window */ } };
+  const toggle = (k: string) => setShut(shut().includes(k) ? shut().filter(x => x !== k) : [...shut(), k]);
+  let listEl!: HTMLDivElement;
+  // Modules › a group: open it (and its family), scroll to it and mark it.
+  createEffect(on(libGoto, g => {
+    if (!g) return;
+    setQ("");
+    setShut(shut().filter(x => x !== g.cat && x !== `fam:${familyOf(g.cat)}`));
+    setTimeout(() => {
+      const h = listEl?.querySelector<HTMLElement>(`.libc[data-cat="${g.cat}"]`);
+      if (!h) return;
+      h.scrollIntoView({ block: "start" });
+      h.classList.add("flash");
+      setTimeout(() => h.classList.remove("flash"), 2400);
+    }, 30);
+  }, { defer: true }));
   onMount(refreshMyBlocks);
   const mine = createMemo(() => { const s = q().toLowerCase(); return myBlocks().filter(m => !s || m.name.toLowerCase().includes(s) || m.what.toLowerCase().includes(s)); });
   const mineMenu = (e: MouseEvent, m: MyBlock) => { e.preventDefault(); openMenu(e, [
@@ -63,7 +93,7 @@ export const LibraryPanel = () => {
     <aside class="lib">
       <header><b>Library</b><Help k="library" /></header>
       <input class="libq" placeholder="Search blocks" value={q()} onInput={e => setQ(e.currentTarget.value)} />
-      <div class="libl">
+      <div class="libl" ref={listEl}>
         <Show when={mine().length}>
           <section class="mylib">
             <button class="libc" onClick={() => setShut(shut().includes("My blocks") ? shut().filter(x => x !== "My blocks") : [...shut(), "My blocks"])}><b class="car">{shut().includes("My blocks") && !q() ? "▸" : "▾"}</b>My blocks</button>
@@ -76,9 +106,13 @@ export const LibraryPanel = () => {
             </Show>
           </section>
         </Show>
-        <For each={groups()}>{([cat, defs]) => (
+        <For each={FAMILIES.map(f => f[0]).filter(fm => groups().some(g => familyOf(g[0]) === fm))}>{fm => (
+          <div class="libfam">
+            <button class="libf" data-fam={fm} onClick={() => toggle(`fam:${fm}`)}><b class="car">{shut().includes(`fam:${fm}`) && !q() ? "▸" : "▾"}</b>{fm}</button>
+            <Show when={!shut().includes(`fam:${fm}`) || q()}>
+        <For each={groups().filter(g => familyOf(g[0]) === fm)}>{([cat, defs]) => (
           <section>
-            <button class="libc" onClick={() => setShut(shut().includes(cat) ? shut().filter(x => x !== cat) : [...shut(), cat])}><b class="car">{shut().includes(cat) && !q() ? "▸" : "▾"}</b>{cat}</button>
+            <button class="libc" data-cat={cat} onClick={() => toggle(cat)}><b class="car">{shut().includes(cat) && !q() ? "▸" : "▾"}</b>{cat}<small class="libn">{defs.filter(d => !d.planned).length}</small></button>
             <Show when={!shut().includes(cat) || q()}>
               <For each={defs}>{d => (
                 <div class="libi" classList={{ off: !!d.planned }} title={d.planned ? `Planned for ${d.planned}: ${d.what}` : d.what}
@@ -90,6 +124,9 @@ export const LibraryPanel = () => {
               )}</For>
             </Show>
           </section>
+        )}</For>
+            </Show>
+          </div>
         )}</For>
       </div>
     </aside>
@@ -183,7 +220,7 @@ const ModelPanel = () => {
       <div class="ibody">
         <Show when={selWires().length}><p class="muted">A wire carries a signal from an output to an input. Drag a segment to move it; double-click a bend to remove it; Alt-drag from the wire to branch the signal to another input; press Delete to remove it.</p>
           <div class="iprow"><label>Signal name</label><input class="wnameinsp" value={selWires()[0].name ?? ""} placeholder="(none)" onChange={e => act({ NameWire: { id: selWires()[0].id, name: e.currentTarget.value } })} onKeyDown={e => { if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur(); }} /><small class="hint">Shown on the wire and in scope legends</small></div>
-          <div class="iprow"><label>Analysis point</label><select class="wpointinsp" value={selWires()[0].point ?? ""} onChange={e => act({ SetPoint: { id: selWires()[0].id, point: e.currentTarget.value } })}><option value="">None</option><option value="open">Loop opening</option><option value="in">Input</option><option value="out">Output</option></select><small class="hint">Where Control › Loop Analysis looks; a run ignores it</small></div>
+          <div class="iprow"><label>Analysis point</label><select class="wpointinsp" value={selWires()[0].point ?? ""} onChange={e => act({ SetPoint: { id: selWires()[0].id, point: e.currentTarget.value } })}><option value="">None</option><option value="open">Loop opening</option><option value="in">Input</option><option value="out">Output</option></select><small class="hint">Where Analyze › Loop Analysis looks; a run ignores it</small></div>
           <p><button class="btn sm" onClick={() => act({ SetPts: { id: selWires()[0].id, pts: [] } })}>Straighten (remove bend points)</button></p></Show>
         <Show when={s()}>
           <h4>Run <Help k="run" /></h4>

@@ -428,7 +428,7 @@ export const Dock = () => (
   </div>
 );
 
-/** View › Scopes: every scope of the last run, large. */
+/** Results › Scopes: every scope of the last run, large. */
 export const ScopesPage = () => (
   <div class="page scopespage">
     <h1>Scopes</h1>
@@ -438,7 +438,7 @@ export const ScopesPage = () => (
   </div>
 );
 
-/** View › Results: the latest value of every logged signal, and the run's figures. */
+/** Results › Results: the latest value of every logged signal, and the run's figures. */
 export const ResultsPage = () => {
   const r = results;
   return (

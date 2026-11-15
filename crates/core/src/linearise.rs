@@ -495,7 +495,7 @@ pub fn pid_report(plant: &Ss, cur: &lti::Pid, new: &lti::Pid) -> serde_json::Val
         "before": mj(lti::margins(&l0)), "after": mj(lti::margins(&l1)), "step0": step(&c0), "step1": step(&c1) })
 }
 
-/// Everything the Control tab shows for one input–output pair of a linearised model: the Bode
+/// Everything Analyze › Loop Analysis shows for one input–output pair of a linearised model: the Bode
 /// plot, poles, step and impulse; for a loop (the same loop opening as input and output) also the
 /// margins, Nyquist, sensitivity, root locus and the closed loop's step and impulse.
 pub fn report(l: &Linear, inp: usize, outp: usize) -> Result<serde_json::Value, String> {

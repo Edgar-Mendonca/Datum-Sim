@@ -284,7 +284,7 @@ pub fn library() -> Vec<Def> {
         d("Display", "Display", "Sinks", "Shows the latest value of its input on the block.", "", vec![]),
         d("ToFile", "To file (CSV)", "Sinks", "Writes its inputs and time to a CSV file at the end of the run.", "The path may be relative to the model file.",
             vec![t("file", "CSV file", "results.csv", ""), n("n", "Inputs", "1", "", "")]),
-        d("ToPlot", "To Datum Plot", "Sinks", "Sends its inputs to Datum Plot for analysis and publication graphs.", "After a run, use Analyze › Send to Datum Plot.", vec![n("n", "Inputs", "1", "", "")]),
+        d("ToPlot", "To Datum Plot", "Sinks", "Sends its inputs to Datum Plot for analysis and publication graphs.", "After a run, use Results › Send to Datum Plot.", vec![n("n", "Inputs", "1", "", "")]),
         // Subsystems
         d("Subsystem", "Subsystem", "Subsystems", "A group of blocks shown as one block. Double-click to open it.", "Inside, In and Out blocks become the subsystem's ports, ordered by their number. Select blocks and use Model › Create subsystem to group them.", vec![]),
         d("Inport", "In", "Subsystems", "An input port of the subsystem it sits in.", "The number sets the port order.", vec![n("port", "Port number", "1", "", "")]),
@@ -501,7 +501,7 @@ pub fn library() -> Vec<Def> {
         d("PressureSensor", "Pressure sensor", "Hydraulic", "Measures its port's gauge pressure. Signal output: p (Pa).", "", vec![]),
         d("FlowSensor", "Flow sensor", "Hydraulic", "Measures the flow through it, from a to b. Put it in series. Signal output: q (m³/s).", "", vec![]),
         planned("FMU", "FMU", "Subsystems", "Run a model exported by another tool (FMI standard).", "0.8"),
-        planned("PyBlock", "Python block", "Math", "A block written in Python.", "0.6.4"),
+        planned("PyBlock", "Python block", "Math", "A block written in Python.", "0.6.5"),
     ]
 }
 

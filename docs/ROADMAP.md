@@ -47,7 +47,8 @@ First written 2026-11-07 after the comparison (`docs/COMPARISON.md`); **rewritte
 | B | 0.3.1 → 0.4.0 | Drives in depth: FFT/THD, SVPWM, dead time, losses, thermal, saturation, nameplate, robot arm module | ✅ |
 | R | 0.4.1 → 0.5.0 | Robotics: any arm, URDF, 3D view, IK, controllers, gripper, scheduler, pick and place | ✅ |
 | C | 0.5.1 → 0.6.0 | Physical parts: rotational, translational, electrical, thermal, motors on ports, hydraulics, examples | ✅ |
-| **S** | 0.6.1 → 0.7.0 | **Scripting, the Datum way** | **next** |
+| U1 | 0.6.1 | **Easy to find your way, first step**: tabs in working order, one home per tool, Modules by area, the library in families, examples by topic, Where Is…? | ✅ |
+| **S** | 0.6.2 → 0.7.0 | **Scripting, the Datum way** | **next** |
 | **U** | 0.7.1 → 0.8.0 | **Easy to find your way** | then |
 | D | 0.8.1 → 0.9.0 | Exchange with other tools | later |
 | E | 0.9.1 → 0.10.0 | Studies and logic | later |
@@ -67,16 +68,25 @@ Draw parts as they are built; the app writes the equations. Plan: `docs/PLAN-0.6
 | 0.5.7 ✅ | **Examples**: H-bridge motor and gearbox, buck converter, motor heating, hydraulic press, robot joint |
 | **0.6.0** ✅ | **Milestone**: verification record (`docs/verification/2026-11-15-physical.md`), docs |
 
-### Stage S: scripting, the Datum way (0.6.1 → 0.7.0)
+### 0.6.1: easy to find your way, first step (2026-11-15)
+The user asked for one small update on ease of use before scripting. Done:
+- tabs in working order, Model · Simulate · Analyze · Results · Modules · View · Help, each kind of tool with one home (the Control tab's tools joined Analyze; Live Tuning went to Simulate; scopes, results and export to Results; the Python engine buttons to Help);
+- Modules by area (motors and drives, robotics with four menus, physical parts by domain);
+- the library in four families with remembered folding;
+- examples by topic (menu and File page chips);
+- Help › Where Is…? and Tell Me finding everyday tasks and lighting up their button;
+- quieter planned features.
+
+### Stage S: scripting, the Datum way (0.6.2 → 0.7.0)
 Python for those who want it, inside the window, on the Python already bundled. Plan: `docs/PLAN-script.md`.
 
 | Release | What it adds |
 | --- | --- |
-| 0.6.1 | **Python console** in the window: the open model is ready to use (`model.vars`, `model.run()`, results as arrays); control commands (`tf`, `step`, `bode`, `lqr`) |
-| 0.6.2 | **Script editor** and **setup scripts** saved with the model, run before every simulation |
-| 0.6.3 | **Build models from code**: add blocks and wires from Python; scripting examples |
-| 0.6.4 | **Python block**: a block whose behaviour is a Python function |
-| 0.6.5 | **Import parameter files (.m)**: plain assignments become model variables (read, never run) |
+| 0.6.2 | **Python console** in the window: the open model is ready to use (`model.vars`, `model.run()`, results as arrays); control commands (`tf`, `step`, `bode`, `lqr`) |
+| 0.6.3 | **Script editor** and **setup scripts** saved with the model, run before every simulation |
+| 0.6.4 | **Build models from code**: add blocks and wires from Python; scripting examples |
+| 0.6.5 | **Python block**: a block whose behaviour is a Python function |
+| 0.6.6 | **Import parameter files (.m)**: plain assignments become model variables (read, never run) |
 | **0.7.0** | **Milestone**: verification record, docs |
 
 ### Stage U: easy to find your way (0.7.1 → 0.8.0)

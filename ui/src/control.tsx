@@ -1,4 +1,4 @@
-// The Control tab's dialogs (0.2.3 on): Loop analysis of the whole model between its analysis
+// The Analyze tab's control-design dialogs (the Control tab until 0.6.1) (0.2.3 on): Loop analysis of the whole model between its analysis
 // points. The engine linearises and computes every number; this file only draws them.
 import { For, Show, createSignal, JSX } from "solid-js";
 import uPlot from "uplot";
@@ -119,7 +119,7 @@ export const loopAnalysis = (first = "bode", op?: number) => openDialog(() => {
   </Dialog>;
 });
 
-/** Control › Trim: find where the model rests with chosen outputs held. */
+/** Analyze › Trim: find where the model rests with chosen outputs held. */
 export const trimDialog = () => openDialog(() => {
   const [info, setInfo] = createSignal<[string[], number] | null>(null), [err, setErr] = createSignal("");
   const [hold, setHold] = createSignal<Record<string, string>>({}), [free, setFree] = createSignal<string[]>([]);
@@ -140,7 +140,7 @@ export const trimDialog = () => openDialog(() => {
       <Show when={info()} fallback={<p class="muted"><i class="spin" /> Reading the model…</p>}>
         <p class="muted small">Trim finds the states where every derivative is zero (the model at rest), with the outputs you choose held at their values. Outputs are the model's analysis-point outputs; free variables are model variables trim may change (a set point, a load, a supply).</p>
         <h4>Hold these outputs</h4>
-        <Show when={info()![0].length} fallback={<p class="muted">No outputs: mark a wire as an analysis Output (Control › Output) to hold its value.</p>}>
+        <Show when={info()![0].length} fallback={<p class="muted">No outputs: mark a wire as an analysis Output (Analyze › Output) to hold its value.</p>}>
           <table class="tbl"><tbody><For each={info()![0]}>{n => <tr><td>{n}</td><td><input class="mono trimhold" placeholder="free" value={hold()[n] ?? ""} onInput={e => setHold({ ...hold(), [n]: e.currentTarget.value })} /></td></tr>}</For></tbody></table>
         </Show>
         <h4>Variables trim may change</h4>
@@ -163,12 +163,12 @@ export const trimDialog = () => openDialog(() => {
   </Dialog>;
 });
 
-/** Control › Operating Points: the saved points; linearise at one or delete it. */
+/** Analyze › Operating Points: the saved points; linearise at one or delete it. */
 export const opsDialog = () => openDialog(() => {
   const ops = () => out()?.ops ?? [];
   const del = (i: number) => act({ SetOps: { ops: ops().filter((_, k) => k !== i) } });
   return <Dialog title="Operating points" help="trim">
-    <Show when={ops().length} fallback={<p class="muted">No operating points yet. Control › Trim finds one and saves it here.</p>}>
+    <Show when={ops().length} fallback={<p class="muted">No operating points yet. Analyze › Trim finds one and saves it here.</p>}>
       <table class="tbl"><thead><tr><th>Name</th><th>Holds</th><th>Variables</th><th /></tr></thead><tbody><For each={ops()}>{(o: OpPoint, i) => <tr>
         <td>{o.name}</td><td class="muted">{o.note}</td><td class="mono small">{o.vars.map(v => `${v[0]} = ${num(v[1], 4)}`).join(", ")}</td>
         <td><button class="btn sm" onClick={() => { closeDialog(); setTimeout(() => loopAnalysis("bode", i())); }}>Loop analysis here</button> <button class="btn sm" onClick={() => del(i())}>Delete</button></td></tr>}</For></tbody></table>
@@ -193,7 +193,7 @@ const gainOps = (b: { id: number; params?: Record<string, string> }, pid: Record
 
 const MOTORS = ["DCMotor", "BLDC", "PMSM", "PMSM3"];
 
-/** Control › Drive Tuning: the current and speed PIs of a drive from the motor's data. */
+/** Analyze › Drive Tuning: the current and speed PIs of a drive from the motor's data. */
 export const driveTuner = () => {
   const all = dview()?.blocks ?? [];
   const motors = all.filter(b => MOTORS.includes(b.kind));
@@ -245,7 +245,7 @@ export const driveTuner = () => {
   });
 };
 
-/** Control › PID Tuner: tune a PID with two sliders (speed, robustness) or a classic rule. */
+/** Analyze › PID Tuner: tune a PID with two sliders (speed, robustness) or a classic rule. */
 export const pidTuner = () => {
   const pids = (dview()?.blocks ?? []).filter(b => b.kind === "PID" || b.kind === "DiscretePID");
   const sel = selBlocks().find(b => b.kind === "PID" || b.kind === "DiscretePID") ?? (pids.length === 1 ? pids[0] : undefined);

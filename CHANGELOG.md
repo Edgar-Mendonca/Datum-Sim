@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.1 — 2026-11-15
+
+**Easier to find your way.** The window is reorganised so every kind of tool has one home, and the tabs follow the work from left to right:
+
+- **Model** builds the diagram. **Simulate** runs it; Live Tuning is now here, next to the speed setting.
+- **Analyze** helps you understand and improve the model: analysis points, loop analysis of the whole model (Bode, Nyquist, root locus, sensitivity), Bode, step and poles of a single block, trim, the PID and drive tuners, step specs and spectrum. The Control tab's tools are all here now.
+- **Results** holds what came out: scopes, the results table, CSV, Datum Plot and printing.
+- **Modules** is sorted by area:
+  - motors and drives;
+  - robotics, with four menus instead of fourteen buttons;
+  - physical parts, one button per domain, which opens that part of the library.
+- **The library** comes in four families: signal blocks, motors and drives, robotics, physical parts. Fold what you don't need; the app remembers.
+- **Examples by topic**, in the Examples menu and on the File page, with filter chips.
+- **Help › Where Is…?** lists everyday tasks in plain words. Click one: its tab opens and its button lights up. **Tell Me (Ctrl+K)** finds the same tasks ("bode", "export", "circuit").
+- **Planned features** are quieter, so the working tools come first.
+
+Models and files are unchanged. Next: scripting (0.6.2).
+
 ## 0.6.0 — 2026-11-15
 
 Physical parts: the fourth stage of the roadmap is done. 0.6.0 brings together 0.5.1 to 0.5.7. Draw a system as it is built, join the parts by their ports, and the app writes the equations:

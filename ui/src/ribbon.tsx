@@ -1,7 +1,8 @@
-// Title bar, quick access toolbar, Tell Me and the ribbon (Model · Simulate · Analyze · View · Help,
-// with Format as a contextual tab when blocks are selected). Copied from Datum Plan's ribbon.
+// Title bar, quick access toolbar, Tell Me and the ribbon (Model · Simulate · Analyze · Results ·
+// Modules · View · Help, in working order, with Format as a contextual tab when blocks are selected;
+// regrouped in 0.6.1 so each kind of tool has one home). Copied from Datum Plan's ribbon.
 import { For, Show, JSX, createSignal, createMemo, onMount } from "solid-js";
-import { call, out, tab, setTab, setBackstage, view, openMenu, Item, openDialog, closeDialog, theme, setTheme, running, paused, selBlocks, opts, setOpts, scopes, setScopes, lib, showRates, setShowRates } from "./store";
+import { call, out, tab, setTab, setBackstage, view, openMenu, Item, openDialog, closeDialog, theme, setTheme, running, paused, selBlocks, opts, setOpts, scopes, setScopes, lib, showRates, setShowRates, setLibGoto } from "./store";
 import { C, ALL_CMDS } from "./cmds";
 import * as D from "./dialogs";
 import { Icon } from "./ui";
@@ -11,6 +12,7 @@ import { invoke } from "./api";
 import { PlannedGroups, showPlanned, setShowPlanned } from "./planned";
 import { spectrumDialog } from "./drives";
 import { loopAnalysis, setPoint, trimDialog, opsDialog, pidTuner, driveTuner, liveOpen, setLiveOpen } from "./control";
+import { TASKS, goTo } from "./where";
 
 const GH = "https://github.com/Edgar-Mendonca/Datum-Sim";
 
@@ -31,7 +33,7 @@ const S = (p: { children: JSX.Element }) => <div class="stack">{p.children}</div
 /** Tell Me / command search (Ctrl+K). */
 export const palette = () => openDialog(() => {
   const [q, setQ] = createSignal(""), [k, setK] = createSignal(0);
-  const all = (): [string, () => void, string?][] => [...ALL_CMDS, ...lib().blocks.filter(d => !d.planned).map(d => [`Add ${d.name}`, () => C.addBlock(d.kind), d.cat] as [string, () => void, string])];
+  const all = (): [string, () => void, string?][] => [...TASKS.map(w => [`${w.task} · ${w.words}`, () => goTo(w), `${w.tabName} › ${w.group}`] as [string, () => void, string]), ...ALL_CMDS, ...lib().blocks.filter(d => !d.planned).map(d => [`Add ${d.name}`, () => C.addBlock(d.kind), d.cat] as [string, () => void, string])];
   const list = createMemo(() => { const s = q().toLowerCase(); return all().filter(c => c[0].toLowerCase().includes(s)).slice(0, 14); });
   const go = (i: number) => { const c = list()[i]; if (c) { closeDialog(); setTimeout(() => c[1]()); } };
   let input!: HTMLInputElement;
@@ -41,7 +43,7 @@ export const palette = () => openDialog(() => {
       <div class="pal">
         <input ref={input} placeholder="Tell me what you want to do" value={q()} onInput={e => { setQ(e.currentTarget.value); setK(0); }}
           onKeyDown={e => { if (e.key === "ArrowDown") { e.preventDefault(); setK(Math.min(list().length - 1, k() + 1)); } else if (e.key === "ArrowUp") { e.preventDefault(); setK(Math.max(0, k() - 1)); } else if (e.key === "Enter") { e.preventDefault(); go(k()); } else if (e.key === "Escape") closeDialog(); }} />
-        <div class="pl"><For each={list()}>{(c, i) => <button classList={{ on: i() === k() }} onMouseEnter={() => setK(i())} onClick={() => go(i())}><span>{c[0]}</span>{c[2] && <kbd>{c[2]}</kbd>}</button>}</For></div>
+        <div class="pl"><For each={list()}>{(c, i) => <button classList={{ on: i() === k() }} onMouseEnter={() => setK(i())} onClick={() => go(i())}><span>{c[0].split(" · ")[0]}</span>{c[2] && <kbd>{c[2]}</kbd>}</button>}</For></div>
       </div>
     </div>
   );
@@ -65,7 +67,7 @@ export const TitleBar = (p: { update: string | null }) => (
     </div>
     <nav class="tabs">
       <button class="file" onClick={() => setBackstage("home")}>File</button>
-      <For each={[["model", "Model"], ["simulate", "Simulate"], ["analyze", "Analyze"], ["control", "Control"], ["modules", "Modules"], ["view", "View"], ["help", "Help"]]}>{([k, l]) => <button classList={{ on: tab() === k }} onClick={() => setTab(k)}>{l}</button>}</For>
+      <For each={[["model", "Model"], ["simulate", "Simulate"], ["analyze", "Analyze"], ["results", "Results"], ["modules", "Modules"], ["view", "View"], ["help", "Help"]]}>{([k, l]) => <button classList={{ on: tab() === k }} onClick={() => setTab(k)}>{l}</button>}</For>
       <div class="ctxgrp" style={{ visibility: selBlocks().length ? "visible" : "hidden" }}><small>Block Tools</small><button classList={{ on: tab() === "format" }} onClick={() => setTab("format")}>Format</button></div>
     </nav>
   </header>
@@ -90,23 +92,36 @@ const fitRibbon = (el: HTMLElement) => {
   new MutationObserver(() => requestAnimationFrame(fit)).observe(el, { childList: true, subtree: false });
 };
 
-const exampleMenu = async (e: MouseEvent) => {
-  const list = await invoke<{ id: string; name: string }[]>("examples_list").catch(() => []);
-  openMenu({ x: (e.currentTarget as HTMLElement).getBoundingClientRect().left, y: (e.currentTarget as HTMLElement).getBoundingClientRect().bottom + 2 }, list.map(x => ({ label: x.name, run: () => C.newModel(x.id) })));
+type ExampleRow = { id: string; name: string; topic: string };
+const EX_TOPICS = ["Getting started", "Motors and drives", "Robotics", "Physical parts"];
+/** The examples, grouped by topic (0.6.1): one submenu per topic, or one topic's list. */
+const exampleItems = async (only?: string): Promise<Item[]> => {
+  const list = await invoke<ExampleRow[]>("examples_list").catch(() => [] as ExampleRow[]);
+  const row = (x: ExampleRow): Item => ({ label: x.name, run: () => C.newModel(x.id === "blank" ? null : x.id) });
+  if (only) return list.filter(x => x.topic === only).map(row);
+  return EX_TOPICS.map(tp => ({ label: tp, sub: list.filter(x => x.topic === tp).map(row) }));
 };
+const at = (e: MouseEvent) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); return { x: r.left, y: r.bottom + 2 }; };
+const exampleMenu = async (e: MouseEvent, only?: string) => { const p = at(e); openMenu(p, await exampleItems(only)); };
 const scopeMenu = (): Item[] => [{ label: "Show all scopes", run: () => C.view("scopes") }, { label: "Close the scopes dock", run: () => setScopes([]), off: !scopes().length }];
+const add = (label: string, kind: string): Item => ({ label, run: () => C.addBlock(kind) });
+const menuOf = (items: Item[]) => (e: MouseEvent) => openMenu(at(e), items);
+/** Open a library group (Modules › Physical Parts and Motors and Drives). */
+const libCat = (cat: string) => () => { C.view("model"); setLibGoto({ cat, n: Date.now() }); };
 
 export const Ribbon = () => (
   <section class="ribbon" ref={fitRibbon}>
+    {/* Model: build the diagram. */}
     <Show when={tab() === "model"}>
       <G l="Clipboard" h="clipboard"><B big i="paste" l="Paste" run={C.paste} off={!out()?.clip} /><S><B i="cut" l="Cut" run={C.cut} /><B i="copy" l="Copy" run={C.copy} /></S></G>
       <G l="Blocks" h="blocks"><B big i="block" l="Add Block" run={C.quickAdd} title="Find a block by name and add it (or double-click the diagram)" /><S><B i="del" l="Delete" run={C.del} /><B i="flip" l="Flip" run={C.flip} /><B i="rename" l="Rename" run={C.rename} /></S></G>
       <G l="Subsystems" h="subsystems"><B big i="sub" l="Create Subsystem" run={C.group} /><S><B i="ungroup" l="Ungroup" run={() => C.ungroup()} /><B i="sub" l="Mask" run={C.mask} title="Give the selected subsystem parameters of its own, a text on the block, help and typical ratings" /></S></G>
       <G l="Variables" h="vars"><B big i="var" l="Variables" run={C.vars} on={view() === "vars"} /></G>
       <G l="Arrange" h="arrange"><S><B i="align" l="Align Left" run={() => C.align("left")} /><B i="align" l="Align Top" run={() => C.align("top")} /><B i="align" l="Align Centres" run={() => C.align("middle")} /></S><S><B i="fit" l="Fit Diagram" run={C.fit} /><B i="grid" l={`Snap ${opts().snap ? "on" : "off"}`} on={opts().snap} run={() => setOpts({ ...opts(), snap: !opts().snap })} /><B i="search" l="Find" run={C.find} title="Find a block or a signal (Ctrl+F)" /></S></G>
-      <G l="Examples" h="blocks"><B big i="open" l="Examples" dd={exampleMenu} /></G>
+      <G l="Examples" h="blocks"><B big i="open" l="Examples" dd={e => exampleMenu(e)} title="Worked examples, by topic" /></G>
       <PlannedGroups tab="model" />
     </Show>
+    {/* Simulate: run it, and change it while it runs. */}
     <Show when={tab() === "simulate"}>
       <G l="Run" h="run">
         <Show when={!running()} fallback={<B big i="stop" l="Stop" run={C.stop} title="Stop the run (Shift+F5)" />}><B big i="run" l="Run" run={C.run} title="Run the model (F5)" /></Show>
@@ -119,36 +134,45 @@ export const Ribbon = () => (
         <Show when={["rk4", "heun", "euler"].includes(out()?.sim.solver ?? "")} fallback={<label>Tolerance <input class="mono" value={out()?.sim.rtol ?? 1e-6} onChange={e => +e.currentTarget.value > 0 && C.setSim("rtol", +e.currentTarget.value)} /></label>}>
           <label>Step <input class="mono" value={out()?.sim.step ?? 0.01} onChange={e => +e.currentTarget.value > 0 && C.setSim("step", +e.currentTarget.value)} /> s</label></Show></div></G>
       <G l="Studies" h="sweep"><B big i="sweep" l="Parameter Sweep" run={C.sweep} /></G>
-      <G l="Scopes" h="scopes"><B big i="scope" l="Scopes" run={() => C.view("scopes")} dd={e => openMenu(e, scopeMenu())} />
-        <S><label class="chk" title="Log every signal, so after a run you can read any wire by hovering it (the signal probe)"><input type="checkbox" class="logall" checked={!!out()?.sim.log_all} onChange={e => C.setSim("log_all", e.currentTarget.checked)} />Log all signals</label></S></G>
       <G l="Pacing" h="live"><div class="rfields"><label>Speed <select class="pacesel" value={String(out()?.sim.pace ?? 0)} onChange={e => { const v = +e.currentTarget.value; C.setSim("pace", v); if (running()) invoke("run_pace", { pace: v }).catch(() => {}); }}>
         <option value="0">As fast as possible</option><option value="0.1">×0.1 real time</option><option value="0.5">×0.5 real time</option><option value="1">Real time</option><option value="2">×2 real time</option><option value="10">×10 real time</option></select></label></div></G>
+      <G l="Live" h="live"><B big i="var" l="Live Tuning" on={liveOpen()} run={() => setLiveOpen(!liveOpen())} title="Sliders for tunable variables: move one while the model runs" /></G>
       <PlannedGroups tab="simulate" />
     </Show>
+    {/* Analyze: why does it behave so, and how to make it better. */}
     <Show when={tab() === "analyze"}>
-      <G l="Linear Analysis" h="linear"><B big i="bode" l="Bode" run={() => C.analyze("bode")} /><B big i="specs" l="Step Response" run={() => C.analyze("step")} /><S><B i="solver" l="Poles and Zeros" run={() => C.analyze("pz")} /></S></G>
-      <G l="Signals" h="specs"><B big i="specs" l="Step Specs" run={C.stepInfo} /><B big i="bode" l="Spectrum" run={() => spectrumDialog()} title="Harmonics and THD of a signal over whole cycles of its fundamental" /></G>
-      <G l="Results" h="exportres"><B big i="results" l="Results" run={() => C.view("results")} /><S><B i="csv" l="Save as CSV" run={() => C.exportCsv()} /><B i="plot" l="Send to Datum Plot" run={C.toPlot} /></S></G>
-      <G l="Python" h="linear"><S><B i="py" l="Engine Version" run={() => C.engine()} /><B i="py" l="Restart Engine" run={() => C.engine(true)} /></S></G>
-      <PlannedGroups tab="analyze" />
-    </Show>
-    <Show when={tab() === "control"}>
       <G l="Analysis Points" h="points"><B big i="wire" l="Loop Opening" run={() => setPoint("open")} title="Cut the loop on the selected wire's signal, for open-loop analysis" /><S><B i="wire" l="Input" run={() => setPoint("in")} title="Add a test signal on the selected wire's signal" /><B i="wire" l="Output" run={() => setPoint("out")} title="Measure the selected wire's signal" /><B i="del" l="Remove Point" run={() => setPoint("")} /></S></G>
-      <G l="Linearise" h="loop"><B big i="bode" l="Loop Analysis" run={() => loopAnalysis()} title="Linearise the whole model between its analysis points: Bode, margins, step and poles" /><S><B i="bode" l="Nyquist" run={() => loopAnalysis("nyquist")} /><B i="solver" l="Root Locus" run={() => loopAnalysis("rlocus")} /><B i="specs" l="Sensitivity" run={() => loopAnalysis("sens")} /></S><S><B i="specs" l="Step Response" run={() => loopAnalysis("step")} /><B i="solver" l="Poles" run={() => loopAnalysis("poles")} /></S></G>
+      <G l="Loop (Whole Model)" h="loop"><B big i="bode" l="Loop Analysis" run={() => loopAnalysis()} title="Linearise the whole model between its analysis points: Bode, margins, step and poles" /><S><B i="bode" l="Nyquist" run={() => loopAnalysis("nyquist")} /><B i="solver" l="Root Locus" run={() => loopAnalysis("rlocus")} /><B i="specs" l="Sensitivity" run={() => loopAnalysis("sens")} /></S><S><B i="specs" l="Loop Step" run={() => loopAnalysis("step")} title="Step response of the closed loop" /><B i="solver" l="Loop Poles" run={() => loopAnalysis("poles")} /></S></G>
+      <G l="Single Block" h="linear"><B big i="bode" l="Bode" run={() => C.analyze("bode")} title="Bode plot of the selected linear block (transfer function, state space, PID …)" /><S><B i="specs" l="Step" run={() => C.analyze("step")} title="Step response of the selected linear block" /><B i="solver" l="Poles and Zeros" run={() => C.analyze("pz")} /></S></G>
       <G l="Operating Points" h="trim"><B big i="solver" l="Trim" run={trimDialog} title="Find where the model is at rest with chosen outputs held" /><B big i="list" l="Operating Points" run={opsDialog} /></G>
       <G l="Tuning" h="pidtune"><B big i="specs" l="PID Tuner" run={pidTuner} title="Tune the selected PID with two sliders: speed and robustness" /><B big i="motor" l="Drive Tuning" run={driveTuner} title="Tune a drive's current and speed loops from the motor's data" /></G>
-      <G l="Live" h="live"><B big i="var" l="Live Tuning" on={liveOpen()} run={() => setLiveOpen(!liveOpen())} title="Sliders for tunable variables: move one while the model runs" /></G>
-      <PlannedGroups tab="control" />
+      <G l="Signals" h="specs"><B big i="specs" l="Step Specs" run={C.stepInfo} title="Rise time, overshoot and settling of a signal from the last run" /><B big i="bode" l="Spectrum" run={() => spectrumDialog()} title="Harmonics and THD of a signal over whole cycles of its fundamental" /></G>
+      <PlannedGroups tab="analyze" />
     </Show>
+    {/* Results: what came out, and where it goes. */}
+    <Show when={tab() === "results"}>
+      <G l="Scopes" h="scopes"><B big i="scope" l="Scopes" run={() => C.view("scopes")} dd={e => openMenu(e, scopeMenu())} on={view() === "scopes"} />
+        <S><label class="chk" title="Log every signal, so after a run you can read any wire by hovering it (the signal probe)"><input type="checkbox" class="logall" checked={!!out()?.sim.log_all} onChange={e => C.setSim("log_all", e.currentTarget.checked)} />Log all signals</label></S></G>
+      <G l="Results" h="exportres"><B big i="results" l="Results" run={() => C.view("results")} on={view() === "results"} title="Every logged signal as numbers" /></G>
+      <G l="Export" h="exportres"><S><B i="csv" l="Save as CSV" run={() => C.exportCsv()} /><B i="plot" l="Send to Datum Plot" run={C.toPlot} /><B i="print" l="Print" run={C.print} title="Print the diagram and scopes (Ctrl+P)" /></S></G>
+      <PlannedGroups tab="results" />
+    </Show>
+    {/* Modules: one area of engineering each, with its parts and examples. */}
     <Show when={tab() === "modules"}>
-      <G l="Robot Arm" h="robot"><B big i="motor" l="Robot Arm Example" run={() => C.newModel("robotarm")} title="A two-link arm following a trajectory under computed-torque control, with an animated view" />
-        <S><B i="block" l="Add Arm (Any Joints)" run={() => C.addBlock("RobotArm")} /><B i="block" l="Add Two-Link Arm" run={() => C.addBlock("RobotArm2")} /><B i="block" l="Add Trajectory" run={() => C.addBlock("ArmTrajectory")} /><B i="block" l="Add Controller" run={() => C.addBlock("ArmController")} /></S>
-        <S><B i="block" l="Add Inverse Kinematics" run={() => C.addBlock("ArmIK")} /><B i="scope" l="Add Arm View" run={() => C.addBlock("ArmView")} /><B i="scope" l="Add 3D View" run={() => C.addBlock("RobotView")} /></S><S><B i="solver" l="Add IK (Any Arm)" run={() => C.addBlock("ArmIKN")} /><B i="block" l="Add Tool Path" run={() => C.addBlock("ToolPath")} /></S><S><B i="specs" l="Add Controller (Any Arm)" run={() => C.addBlock("ArmControllerN")} /><B i="motor" l="Add Joint Motors" run={() => C.addBlock("JointDrive")} /><B i="block" l="Add Gravity Torques" run={() => C.addBlock("ArmGravity")} /></S><S><B i="block" l="Add Payload" run={() => C.addBlock("Payload")} /><B i="list" l="Add Task Scheduler" run={() => C.addBlock("TaskScheduler")} /></S></G>
+      <G l="Motors and Drives" h="blocks"><B big i="motor" l="Motor Examples" dd={e => exampleMenu(e, "Motors and drives")} title="Worked motor and drive examples" />
+        <S><B i="motor" l="Motors" run={libCat("Motors")} title="The motor library" /><B i="block" l="Drives" run={libCat("Drives")} title="Inverters, PWM, transforms, sensors" /></S></G>
+      <G l="Robotics" h="robot"><B big i="motor" l="Robot Arm Example" run={() => C.newModel("robotarm")} title="A two-link arm following a trajectory under computed-torque control, with an animated view" />
+        <S><B i="block" l="Arms" dd={menuOf([add("Arm, any joints (6-joint, 7-joint, URDF, DH)", "RobotArm"), add("Two-link planar arm", "RobotArm2"), add("Payload", "Payload"), add("Joint motors", "JointDrive"), add("Joint flange (physical drive)", "JointFlange")])} />
+          <B i="solver" l="Motion" dd={menuOf([add("Joint trajectory", "ArmTrajectory"), add("Tool path", "ToolPath"), add("Inverse kinematics (any arm)", "ArmIKN"), add("Inverse kinematics (two-link)", "ArmIK"), add("Task scheduler", "TaskScheduler")])} />
+          <B i="specs" l="Control" dd={menuOf([add("Controller (any arm)", "ArmControllerN"), add("Controller (two-link)", "ArmController"), add("Gravity torques", "ArmGravity"), add("Inverse dynamics", "ArmInvDyn")])} /></S>
+        <S><B i="scope" l="Views" dd={menuOf([add("3D view", "RobotView"), add("Arm view (two-link)", "ArmView")])} /><B i="open" l="Robot Examples" dd={e => exampleMenu(e, "Robotics")} /></S></G>
+      <G l="Physical Parts" h="physical"><S><B i="block" l="Rotational" run={libCat("Rotational")} title="Inertias, springs, gears, friction" /><B i="block" l="Translational" run={libCat("Translational")} title="Masses, springs, end stops, rack and pinion" /><B i="block" l="Electrical" run={libCat("Electrical")} title="R, L, C, sources, switches, diodes" /></S>
+        <S><B i="block" l="Thermal" run={libCat("Thermal")} title="Heat capacity, conduction, convection, radiation" /><B i="block" l="Hydraulic" run={libCat("Hydraulic")} title="Pumps, valves, cylinders" /><B i="open" l="Physical Examples" dd={e => exampleMenu(e, "Physical parts")} /></S></G>
       <PlannedGroups tab="modules" />
     </Show>
+    {/* View: what the window shows. */}
     <Show when={tab() === "view"}>
-      <G l="Views" h="views"><B big i="model" l="Diagram" run={() => C.view("model")} on={view() === "model"} /><B big i="scope" l="Scopes" run={() => C.view("scopes")} on={view() === "scopes"} />
-        <S><B i="var" l="Variables" run={C.vars} on={view() === "vars"} /><B i="results" l="Results" run={() => C.view("results")} on={view() === "results"} /><B i="issues" l="Issues" run={() => C.view("issues")} on={view() === "issues"} /></S></G>
+      <G l="Panels" h="views"><B big i="model" l="Diagram" run={() => C.view("model")} on={view() === "model"} /><S><B i="var" l="Variables" run={C.vars} on={view() === "vars"} /><B i="issues" l="Issues" run={() => C.view("issues")} on={view() === "issues"} /></S></G>
       <G l="Zoom" h="zoom"><S><B i="zin" l="Zoom In" run={C.zoomIn} /><B i="zout" l="Zoom Out" run={C.zoomOut} /><B i="fit" l="Fit" run={C.fit} /></S></G>
       <G l="Show" h="show"><S><label class="chk"><input type="checkbox" checked={opts().grid} onChange={e => setOpts({ ...opts(), grid: e.currentTarget.checked })} />Grid</label><label class="chk"><input type="checkbox" checked={opts().snap} onChange={e => setOpts({ ...opts(), snap: e.currentTarget.checked })} />Snap to grid</label><label class="chk"><input type="checkbox" checked={scopes().length > 0} onChange={e => setScopes(e.currentTarget.checked ? [] : [])} disabled={!scopes().length} />Scopes dock</label></S>
         <S><label class="chk" title="Colour each block by how often its output changes: continuous, each sample time, constant"><input type="checkbox" class="ratechk" checked={showRates()} onChange={e => setShowRates(e.currentTarget.checked)} />Sample-time colours</label></S></G>
@@ -161,9 +185,10 @@ export const Ribbon = () => (
       <G l="Look" h="blocks"><S><B i="grid" l="Block Colour" dd={e => C.colourMenu(e)} title="Colour the selected blocks, to mark plant, controller and sensors" /><B i="rename" l="Note" run={C.note} title="A text note on the diagram" /><B i="rename" l="Name Signal" run={C.nameSignal} title="Name the signal on the selected wire" /></S></G>
     </Show>
     <Show when={tab() === "help"}>
-      <G l="Learn"><B big i="report" l="Getting Started" run={() => D.gettingStarted()} /><B big i="info" l="Glossary" run={() => D.glossary()} /><B big i="help" l="What Is This Tool?" dd={e => openMenu(e, Object.entries(HELP).map(([k, h]) => ({ label: h.t, run: () => helpCard(k) })))} /><B big i="keys" l="Shortcuts" run={() => D.shortcuts()} /><B big i="py" l="Automation" run={() => D.automation()} title="Run models from the command line and from Python" /><B big i="search" l="Tell Me" run={palette} /></G>
+      <G l="Learn"><B big i="report" l="Getting Started" run={() => D.gettingStarted()} /><B big i="search" l="Where Is…?" run={() => D.whereIs()} title="Everyday tasks, and the tab and button for each" /><B big i="info" l="Glossary" run={() => D.glossary()} /><B big i="help" l="What Is This Tool?" dd={e => openMenu(e, Object.entries(HELP).map(([k, h]) => ({ label: h.t, run: () => helpCard(k) })))} /><B big i="keys" l="Shortcuts" run={() => D.shortcuts()} /><B big i="py" l="Automation" run={() => D.automation()} title="Run models from the command line and from Python" /><B big i="search" l="Tell Me" run={palette} /></G>
       <G l="Datum Sim on GitHub"><B big i="github" l="GitHub" run={() => call("open_url", { url: GH })} /><B big i="tag" l="Releases" run={() => call("open_url", { url: `${GH}/releases` })} /><B big i="bug" l="Report an Issue" run={() => call("open_url", { url: `${GH}/issues/new` })} /></G>
       <G l="Updates"><B big i="upd" l="Check for Updates" run={() => setBackstage("about")} /><B big i="list" l="Roadmap" run={() => setBackstage("roadmap")} /></G>
+      <G l="Python Engine" h="linear"><S><B i="py" l="Engine Version" run={() => C.engine()} /><B i="py" l="Restart Engine" run={() => C.engine(true)} /></S></G>
     </Show>
   </section>
 );

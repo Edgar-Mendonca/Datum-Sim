@@ -19,6 +19,8 @@ export type View = "model" | "vars" | "scopes" | "results" | "analysis" | "issue
 export const [view, setView] = createSignal<View>("model");
 export const [backstage, setBackstage] = createSignal<string | null>("home");
 export const [tab, setTab] = createSignal("model");
+/** Modules › a library group: the library opens that group, scrolls to it and marks it (0.6.1). */
+export const [libGoto, setLibGoto] = createSignal<{ cat: string; n: number } | null>(null);
 
 // ---------- the block library ----------
 export const [lib, setLib] = createSignal<Library>({ cats: [], blocks: [] });

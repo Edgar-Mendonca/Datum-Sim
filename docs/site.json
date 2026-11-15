@@ -25,6 +25,7 @@
   ],
   "highlights": [
     "Draw a model as blocks and wires, press Run and watch live scopes",
+    "Easy to find your way: tabs in working order (build, run, analyse, results), one home for every tool, the library and the examples grouped by topic, and Help › Where Is…? to find any everyday task",
     "Control design on the whole model: analysis points on wires, loop Bode with gain and phase margins, Nyquist, root locus, sensitivity, closed-loop step and impulse",
     "Trim finds operating points; a PID tuner with two sliders (speed and robustness), Ziegler–Nichols and SIMC; one-click tuning of motor drives",
     "Live tuning: move variables on sliders while the model runs, in real time or faster",
@@ -100,7 +101,7 @@
       ]
     },
     {
-      "v": "0.6.x → 0.7",
+      "v": "0.6.2 → 0.7",
       "title": "Scripting",
       "when": "Next",
       "items": [

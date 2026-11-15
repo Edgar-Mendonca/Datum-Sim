@@ -137,7 +137,7 @@ export const PrintPage = () => {
         <Check label="The scopes of the last run" value={ps.scopes} set={v => { setPs("scopes", v); collect(); }} />
         <Check label="A results report" value={ps.report} set={v => { setPs("report", v); collect(); }} />
         <Show when={ps.scopes && !results()}><p class="muted">Run the model to print its scopes.</p></Show>
-        <Show when={ps.scopes && results() && !chans().length}><p class="muted">Open the scopes (View › Scopes) to print them.</p></Show>
+        <Show when={ps.scopes && results() && !chans().length}><p class="muted">Open the scopes (Results › Scopes) to print them.</p></Show>
         <div class="prow"><label>Paper<Pick value={ps.paper} set={v => setPs("paper", v)} options={PAPERS.map(p => p[0])} /></label><label>Orientation<Pick value={ps.landscape ? "1" : "0"} set={v => setPs("landscape", v === "1")} options={[["1", "Landscape"], ["0", "Portrait"]]} /></label></div>
         <h4>Header and footer</h4>
         <For each={["header", "footer"] as const}>{k => <div class="pslots"><b>{k === "header" ? "Header" : "Footer"}</b>

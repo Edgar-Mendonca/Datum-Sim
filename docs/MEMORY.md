@@ -150,6 +150,7 @@
 | 0.1.4 | Zero-crossings count only strict sign changes (with the last non-zero sign kept) | A signal resting at zero made endless tiny steps |
 | 0.1.4 | Release order for the bigger build: 0.1.4 discrete + motor extras, 0.1.5 scopes + probe, 0.1.6 wires, 0.2.0 masks + My blocks; buses and algebraic loops move to 0.3 | The user: "as you please" (PLAN-0.2 §7) |
 | 0.1.3 | **Publisher "Datum"** in `tauri.conf.json` (`bundle.publisher`); copyright stays "© 2026 Edgar Mendonca". Discrete control, wires and scopes move to 0.1.4, 0.1.5 and 0.1.6 | The user's family-wide change (hub FAMILY §9); a patch release takes the next number |
+| 0.6.1 | Two tabs for two questions: Analyze ("why does it behave so, and how to improve it": analysis points, loop and single-block linear analysis, trim, tuning, step specs, spectrum) and Results ("what came out, and where it goes": scopes, results, export, print); the Control tab's tools joined Analyze, Live Tuning went to Simulate | The user's idea (keep both Analyze and Results), with my recommendation to merge Control into Analyze so every Bode lives on one tab |
 | 0.5.3 | Diode modes are settled inside every evaluation (flip disagreeing diodes and re-solve, a few rounds), with continuous zero-crossing functions for the exact instants | Stepping with a stale mode dumped inductor energy through the off leakage (the buck converter read 5 % low) |
 | 0.5.6 | Network Newton: converged when every unknown's step is tiny against its own size | One tolerance from the largest unknown let 1e-4 m³/s flows stay wrong beside 1e7 Pa |
 | 0.5.6 | Cylinder chambers are internal nodes behind a port restriction (g_port) | A capacitance on a port node fights a tank's fixed pressure (singular) |
@@ -215,7 +216,8 @@
 | 0.5.6 | Hydraulics (cylinder chambers behind a port restriction); Newton converges per unknown | ✅ |
 | 0.5.7 | Examples: hbridge, buck, motorheat, press, robotjoint | ✅ |
 | 0.6.0 | Stage C milestone: record 2026-11-15-physical | ✅ |
-| 0.6.1–0.7.0 | Stage S, scripting (`docs/PLAN-script.md`): console, scripts and setup scripts, build from code, Python block, `.m` parameter import | 🔜 |
+| 0.6.1 | Easy to find your way, first step: tabs Model · Simulate · Analyze · Results · Modules · View · Help (Control merged into Analyze), one home per tool, Modules by area, library families, examples by topic, Help › Where Is…? (`ui/src/where.ts`), Tell Me finds tasks | ✅ |
+| 0.6.2–0.7.0 | Stage S, scripting (`docs/PLAN-script.md`): console, scripts and setup scripts, build from code, Python block, `.m` parameter import | 🔜 |
 | 0.7.1–0.8.0 | Stage U, easy to find your way (`docs/PLAN-ease.md`, to be written) | ⬜ |
 | 0.8.x | Exchange: FMU, MAT/HDF5, Modelica | ⬜ |
 | 0.9.x | State machines, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
@@ -411,7 +413,27 @@
   - clippy and `cargo deny`;
   - the real app ran gearbox, hbridge and press.
 - Record: `docs/verification/2026-11-15-physical.md`.
-- Release runs: 0.5.2–0.5.5 succeeded on GitHub; 0.5.6, 0.5.7 and 0.6.0 dispatched.
+- Release runs: 0.5.2–0.5.5 succeeded on GitHub; 0.5.6 and 0.6.0 dispatched. 0.5.7 got no installer of its own (0.6.0 was pushed before its run started; its changes are in 0.6.0).
+
+### 2026-11-15: Session 9 continued (0.6.1, easier to find your way)
+- The user: "the app is very difficult to use … navigating between the tools … grouped properly". Asked for one small update first, with a proposal before building.
+- Walked every tab in the real app and found:
+  - two Bodes on two tabs;
+  - Scopes, Results and Variables in two places;
+  - engine buttons among the tools;
+  - a flat Modules tab;
+  - an 18-group library;
+  - 32 unsorted examples;
+  - loud planned groups.
+- The user's idea: keep Analyze for analysis, and Results for plots and reports. My recommendation, used: merge Control into Analyze.
+- Built:
+  - the new ribbon;
+  - Modules by area;
+  - the library in families, with the fold remembered in localStorage;
+  - example topics (`examples::topic`) in the menu (submenus) and on the File page (chips, headings);
+  - `ui/src/where.ts` (tasks, `goTo` with a flash) for Help › Where Is…? and Tell Me.
+- Checks: 13 new UI checks (one home per tool, Where Is, Tell Me, Modules → library group, grouped examples, families and folding), all passing. The real app showed every tab, the File page and Modules.
+- Scripting moved to 0.6.2–0.6.6.
 
 ## 5. Known limits and next steps
 

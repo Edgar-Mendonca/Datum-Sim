@@ -934,3 +934,31 @@ ul.plain { list-style: none; padding: 0; margin: 4px 0; }
 .dom-thermal { --dom: #dc2626; }
 .dom-hydraulic { --dom: #0d9488; }
 .pline.temp { stroke-dasharray: 4 3; fill: none; }
+
+/* 0.6.1: easier to find your way. */
+/* A tool that Where Is…? or Tell Me points to, highlighted for a moment. */
+@keyframes flashring { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 30%, 70% { box-shadow: 0 0 0 3px var(--accent2); } }
+.flash { animation: flashring 1.2s ease-in-out 2; border-radius: 4px; background: var(--hl); }
+/* Library families. */
+.libf { display: flex; gap: 6px; width: 100%; padding: 8px 10px 4px; font: 600 11px var(--sans); color: var(--text); border-top: 1px solid var(--line2); }
+.libfam:first-child .libf { border-top: 0; }
+.libf .car { width: 10px; color: var(--muted); }
+.libfam .libc { padding-left: 18px; }
+.libn { margin-left: auto; font: 500 9.5px var(--mono); color: var(--muted); letter-spacing: 0; }
+/* Examples by topic on the File page. */
+.exchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 4px; }
+.exchip { display: inline-flex; gap: 6px; align-items: baseline; padding: 4px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg2); color: var(--text2); font-size: 12px; cursor: pointer; }
+.exchip small { font: 500 10px var(--mono); color: var(--muted); }
+.exchip.on { background: var(--pale); border-color: var(--accent2); color: var(--text); }
+h3.topic { margin: 16px 0 8px; font: 600 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+/* Where Is…? */
+.whereq { width: 100%; margin-bottom: 10px; }
+.where { max-height: 60vh; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 4px 18px; }
+.where section { break-inside: avoid; }
+.where h4 { margin: 8px 0 4px; font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.wrow { display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 4px 6px; border-radius: 4px; text-align: left; }
+.wrow:hover { background: var(--pale); }
+.wrow small { color: var(--muted); white-space: nowrap; }
+/* Planned features: quieter, so the working tools come first. */
+.grp.planned { opacity: .5; }
+.grp.planned .rb span { font-size: 11px; }

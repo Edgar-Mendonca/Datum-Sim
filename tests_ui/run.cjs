@@ -90,18 +90,36 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   check("diagram draws every wire", (await p.$$(".wire")).length === fix.diagram.wires.length);
   const nports = fix.diagram.blocks.reduce((a, b) => a + b.ins.length + b.outs.length, 0);
   check("every port is drawn", (await p.$$(".port")).length === nports);
-  check("ribbon tabs", JSON.stringify(await p.$$eval(".tabs > button:not(.file)", els => els.map(e => e.textContent))) === JSON.stringify(["Model", "Simulate", "Analyze", "Control", "Modules", "View", "Help"]));
+  check("ribbon tabs", JSON.stringify(await p.$$eval(".tabs > button:not(.file)", els => els.map(e => e.textContent))) === JSON.stringify(["Model", "Simulate", "Analyze", "Results", "Modules", "View", "Help"]));
   check("library lists categories with planned blocks dimmed", (await p.$$(".libc")).length >= 8 && (await p.$$(".libi.off")).length >= 2);
+  // The library's parts, found by the search box (it searches folded groups too).
+  const libHas = async (...names) => {
+    let ok = true;
+    for (const n of names) { await p.fill(".libq", n); await p.waitForTimeout(40); if (!(await p.$(`.libi:has-text("${n}")`))) ok = false; }
+    await p.fill(".libq", ""); await p.waitForTimeout(40);
+    return ok;
+  };
+  const libCat = async c => !!(await p.$(`.libc[data-cat="${c}"]`));
   // 0.5.2: the translational parts are in the library, ready to use (not dimmed).
-  check("the library has the translational parts", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("Translational") && t.includes("Rack and pinion") && t.includes("Hard stop"); }) && fix.library.blocks.filter(b => b.cat === "Translational" && !b.planned).length === 12);
+  check("the library has the translational parts", await libCat("Translational") && await libHas("Rack and pinion", "Hard stop") && fix.library.blocks.filter(b => b.cat === "Translational" && !b.planned).length === 12);
   // 0.5.3: the electrical parts.
-  check("the library has the electrical parts", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("Electrical") && t.includes("Diode") && t.includes("Op-amp") && t.includes("Ideal transformer"); }) && fix.library.blocks.filter(b => b.cat === "Electrical" && !b.planned).length === 14);
+  check("the library has the electrical parts", await libCat("Electrical") && await libHas("Diode", "Op-amp", "Ideal transformer") && fix.library.blocks.filter(b => b.cat === "Electrical" && !b.planned).length === 14);
   // 0.5.4: the thermal parts.
-  check("the library has the thermal parts", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("Thermal") && t.includes("Heat capacity") && t.includes("Radiation"); }) && fix.library.blocks.filter(b => b.cat === "Thermal" && !b.planned).length === 9);
+  check("the library has the thermal parts", await libCat("Thermal") && await libHas("Heat capacity", "Radiation") && fix.library.blocks.filter(b => b.cat === "Thermal" && !b.planned).length === 9);
   // 0.5.6: the hydraulic parts; no "coming" group is left.
-  check("the library has the hydraulic parts", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("Hydraulic") && t.includes("Cylinder") && t.includes("Relief valve") && !t.includes("Physical (coming)"); }) && fix.library.blocks.filter(b => b.cat === "Hydraulic" && !b.planned).length === 11);
+  check("the library has the hydraulic parts", await libCat("Hydraulic") && await libHas("Cylinder", "Relief valve") && !(await libCat("Physical (coming)")) && fix.library.blocks.filter(b => b.cat === "Hydraulic" && !b.planned).length === 11);
   // 0.5.5: motors with physical ports, and the robot joint flange.
-  check("the library has the motors on ports", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("DC motor (physical)") && t.includes("PMSM d–q (physical)") && t.includes("Joint flange"); }));
+  check("the library has the motors on ports", await libHas("DC motor (physical)", "PMSM d–q (physical)", "Joint flange"));
+  // 0.6.1: the library in four families; at first the signal blocks are open and the other
+  // families list their groups only; a family folds and stays folded.
+  const fams = await p.$$eval(".libf", bs => bs.map(b => b.dataset.fam));
+  check("the library is grouped in four families", JSON.stringify(fams) === JSON.stringify(["Signal blocks", "Motors and drives", "Robotics", "Physical parts"]), JSON.stringify(fams));
+  check("at first only the signal blocks are open", !!(await p.$('.libi:has-text("Gain")')) && !(await p.$('.libi:has-text("Rack and pinion")')) && await libCat("Hydraulic"));
+  await p.click('.libf[data-fam="Signal blocks"]');
+  const folded = !(await p.$('.libc[data-cat="Math"]'));
+  const stored = await p.evaluate(() => localStorage.getItem("datumsim.lib.shut.v1") || "");
+  await p.click('.libf[data-fam="Signal blocks"]');
+  check("a library family folds, and the fold is remembered", folded && stored.includes("fam:Signal blocks") && !!(await p.$('.libc[data-cat="Math"]')), stored);
 
   // 2b. Dragging a block from the library onto the diagram adds it there (0.1.0 bug on Windows: HTML drag and drop never reached the diagram).
   const libItem = await p.$('.libi:has-text("Gain")');
@@ -214,7 +232,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(300);
   check("hovering a wire offers the signal probe", (await p.$$(".probetip")).length === 1 && (await p.textContent(".probetip")).includes("Log all signals"));
   await p.mouse.move(5, 5);
-  await p.click('.tabs > button:text-is("Simulate")');
+  await p.click('.tabs > button:text-is("Results")');
   await p.waitForTimeout(100);
   await p.click(".logall");
   await p.waitForTimeout(150);
@@ -357,7 +375,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   // 11. The ribbon never scrolls sideways.
   for (const w of [1280, 1600, 1000]) {
     await p.setViewportSize({ width: w, height: 900 });
-    for (const t of ["Model", "Simulate", "Analyze", "Control", "Modules", "View", "Help"]) {
+    for (const t of ["Model", "Simulate", "Analyze", "Results", "Modules", "View", "Help"]) {
       await p.click(`.tabs > button:text-is("${t}")`);
       await p.waitForTimeout(80);
       const over = await p.$eval(".ribbon", el => el.scrollWidth - el.clientWidth);
@@ -365,6 +383,59 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
     }
   }
   await p.setViewportSize({ width: 1440, height: 900 });
+
+  // 11b. Easier to find your way (0.6.1). Each kind of tool has one home: these buttons appear on
+  // exactly one tab, the one named.
+  const homes = {};
+  for (const t of ["Model", "Simulate", "Analyze", "Results", "Modules", "View", "Help"]) {
+    await p.click(`.tabs > button:text-is("${t}")`);
+    await p.waitForTimeout(60);
+    for (const l of await p.$$eval(".ribbon .grp:not(.planned) .rb span, .ribbon .grp:not(.planned) label.chk", els => els.map(e => e.textContent.replace("▾", "").trim()))) (homes[l] ??= []).push(t);
+  }
+  const want = { "Loop Analysis": "Analyze", "Bode": "Analyze", "PID Tuner": "Analyze", "Trim": "Analyze", "Spectrum": "Analyze", "Scopes": "Results", "Results": "Results", "Save as CSV": "Results", "Log all signals": "Results", "Live Tuning": "Simulate", "Parameter Sweep": "Simulate", "Engine Version": "Help", "Where Is…?": "Help", "Electrical": "Modules", "Robot Arm Example": "Modules" };
+  const wrong = Object.entries(want).filter(([l, t]) => JSON.stringify(homes[l]) !== JSON.stringify([t])).map(([l]) => `${l}: ${homes[l]}`);
+  check("each tool has one home tab", !wrong.length, wrong.join("; "));
+  // Help › Where Is…?: a task opens its tab and lights up its button.
+  await p.click('.tabs > button:text-is("Help")');
+  await p.click('.ribbon button:has-text("Where Is")');
+  await p.fill(".whereq", "pid");
+  check("Where Is…? finds a task by everyday words", (await p.$$(".wrow")).length >= 1 && (await p.textContent(".wrow")).includes("Tune a PID"));
+  await p.click(".wrow");
+  await p.waitForTimeout(150);
+  check("choosing a task opens its tab and highlights its button", (await p.textContent(".tabs button.on")) === "Analyze" && !!(await p.$('.ribbon .flash:has-text("PID Tuner")')));
+  // Tell Me finds the same tasks, and says where each lives.
+  await p.keyboard.press("Control+k");
+  await p.keyboard.type("export");
+  await p.waitForTimeout(100);
+  const first = await p.textContent(".pal .pl button");
+  check("Tell Me finds a task and shows where it lives", first.includes("Save results as CSV") && first.includes("Results › Export"), first);
+  await p.keyboard.press("Enter");
+  await p.waitForTimeout(150);
+  check("Tell Me takes you to it", (await p.textContent(".tabs button.on")) === "Results" && !!(await p.$('.ribbon .flash:has-text("Save as CSV")')));
+  // Modules › Physical Parts › Electrical opens that library group and marks it.
+  await p.click('.tabs > button:text-is("Modules")');
+  await p.click('.ribbon button:has-text("Electrical")');
+  await p.waitForTimeout(150);
+  check("a Modules button opens its library group", !!(await p.$('.libc.flash[data-cat="Electrical"]')) && !!(await p.$('.libi:has-text("Resistor")')));
+  // The examples are grouped by topic in the menu.
+  await p.click('.tabs > button:text-is("Model")');
+  await p.click('.ribbon button:has-text("Examples")');
+  await p.waitForTimeout(150);
+  const topics = await p.$$eval(".menu > button, .menu > .mi", els => els.map(e => e.textContent.replace("▸", "").trim()));
+  check("the Examples menu is grouped by topic", ["Getting started", "Motors and drives", "Robotics", "Physical parts"].every(t => topics.some(x => x.startsWith(t))), JSON.stringify(topics));
+  await p.keyboard.press("Escape");
+  await p.mouse.click(5, 5);
+  // The File page: topic headings, and chips that filter.
+  await p.evaluate(() => document.querySelector(".tabs .file").click());
+  await p.waitForTimeout(150);
+  const heads = await p.$$eval("h3.topic", h => h.map(x => x.textContent));
+  await p.click('.exchip:has-text("Physical parts")');
+  await p.waitForTimeout(100);
+  const nphys = fix.examples_list.filter(x => x.topic === "Physical parts").length;
+  const shown = (await p.$$(".home .tile")).length - 1;
+  check("the File page groups examples by topic, and a chip filters them", heads.length === 4 && nphys === 6 && shown === nphys, `${JSON.stringify(heads)} ${shown}/${nphys}`);
+  await p.click('.exchip:has-text("All")');
+  await p.click(".bs aside .back");
 
   // 12. Motors: glyphs, port names, and typical ratings that set every parameter in one edit (0.1.2).
   await p.evaluate(() => { window.__motor = true; document.querySelector(".tabs .file").click(); });
@@ -415,7 +486,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.click('.tabs > button:text-is("Model")');
 
   // 13b2. Analysis points and Loop analysis (0.2.3).
-  await p.click('.tabs > button:text-is("Control")');
+  await p.click('.tabs > button:text-is("Analyze")');
   await p.waitForTimeout(100);
   await p.click('.ribbon button:has-text("Loop Analysis")');
   await p.waitForTimeout(500);
@@ -438,7 +509,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.click('.tabs > button:text-is("Model")');
 
   // 13b3. Trim (0.2.5): hold an output, find, save as an operating point (one SetOps edit).
-  await p.click('.tabs > button:text-is("Control")');
+  await p.click('.tabs > button:text-is("Analyze")');
   await p.click('.ribbon button:has-text("Trim")');
   await p.waitForTimeout(300);
   await p.fill(".trimhold", "2");
@@ -454,7 +525,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
 
   // 13b4. PID tuner (0.2.6): the sliders redesign; Apply is one Batch edit of the PID's gains.
   // The diagram has one PID: the tuner takes it without a selection.
-  await p.click('.tabs > button:text-is("Control")');
+  await p.click('.tabs > button:text-is("Analyze")');
   await p.click('.ribbon button:has-text("PID Tuner")');
   await p.waitForTimeout(400);
   check("the PID tuner shows the present and tuned gains", (await p.textContent(".dlg")).includes("Tuned") && (await p.textContent(".dlg")).includes("phase margin"), (await p.textContent(".dlg")).slice(0, 200));
@@ -468,7 +539,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.click('.tabs > button:text-is("Model")');
 
   // 13b5. Drive tuning (0.2.7): no motor → a hint; with a DC motor block → gains, Apply sets the PID.
-  await p.click('.tabs > button:text-is("Control")');
+  await p.click('.tabs > button:text-is("Analyze")');
   await p.click('.ribbon button:has-text("Drive Tuning")');
   await p.waitForTimeout(200);
   check("drive tuning without a motor block says what it needs", ((await p.textContent("#toast").catch(() => "")) ?? "").includes("no DC, BLDC or PMSM motor"));
@@ -479,7 +550,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.keyboard.press("Control+a");
   await p.click('.ribbon button:has-text("Flip")');
   await p.waitForTimeout(300);
-  await p.click('.tabs > button:text-is("Control")');
+  await p.click('.tabs > button:text-is("Analyze")');
   await p.click('.ribbon button:has-text("Drive Tuning")');
   await p.waitForTimeout(300);
   const dt = await p.textContent(".dlg").catch(() => "");
@@ -495,7 +566,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.click('.tabs > button:text-is("Model")');
 
   // 13b6. Live tuning (0.2.8): add a variable, move its slider while running → live_set; Keep → SetVars.
-  await p.click('.tabs > button:text-is("Control")');
+  await p.click('.tabs > button:text-is("Simulate")');
   await p.click('.ribbon button:has-text("Live Tuning")');
   await p.waitForTimeout(150);
   check("the Live panel opens", (await p.$$(".livepanel")).length === 1);

@@ -35,7 +35,7 @@ export interface Chan { sink: number; port: number; elem: number; name: string; 
 export interface RunStats { steps: number; rejected: number; fevals: number; events: number; stopped: boolean; ms: number }
 export interface ResultsInfo { chans: Chan[]; stats: RunStats; n: number; t0: number; t1: number; last: number[]; sweep: [string, number[]] | null }
 export interface Series { t: number[]; y: number[] }
-export interface Example { id: string; name: string; what: string }
+export interface Example { id: string; name: string; what: string; topic: string }
 export interface Options {
   autosave: number; beta: boolean; theme: string; openLast: boolean; solver: string; stop: number; snap: boolean; grid: boolean;
   paper: string; landscape: boolean; company: string; blocksDir?: string;

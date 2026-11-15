@@ -1,6 +1,6 @@
-# Plan: scripting, the Datum way (stage S, 0.6.1 → 0.7.0)
+# Plan: scripting, the Datum way (stage S, 0.6.2 → 0.7.0)
 
-Written 2026-11-15 at 0.5.1. Status: **agreed in outline** (the user, 2026-11-15). The details below are my defaults; §6 lists what can still change before 0.6.1.
+Written 2026-11-15 at 0.5.1; numbers moved by one on 2026-11-15, when 0.6.1 became the ease-of-use step. Status: **agreed in outline** (the user, 2026-11-15). The details below are my defaults; §6 lists what can still change before 0.6.2.
 
 ## 1. Why
 The app is built to be used with the mouse, and that stays true. Some users want to type a few lines:
@@ -11,17 +11,17 @@ The app is built to be used with the mouse, and that stays true. Some users want
 Today they can only do that from outside, with the Python API or the command line. Stage S brings it inside the window, using what the app already ships: Python, numpy, SciPy and python-control.
 
 ## 2. What the user gets
-- **0.6.1 Python console.** A panel beside the scopes with a prompt.
+- **0.6.2 Python console.** A panel beside the scopes with a prompt.
   - The open model is ready as `model`: `model.vars["Kp"] = 3`, `r = model.run()`, `r["Speed"]` as an array.
   - The control commands are loaded: `tf`, `ss`, `step`, `bode`, `feedback`, `lqr` (from python-control).
   - `plot(t, y)` draws in a Datum scope, not in a separate plotting library.
-- **0.6.2 Script editor and setup scripts.**
+- **0.6.3 Script editor and setup scripts.**
   - Scripts are `.py` files kept with the model.
   - One script can be marked **setup**: it runs before every simulation, so variables can come from a calculation (for example `K = lqr(A, B, Q, R)`).
   - Errors show the line, in plain words.
-- **0.6.3 Build models from code.** `model.add("Gain", k=2)` and `model.connect(a, b)`, with undo like any edit. Scripting examples come with it.
-- **0.6.4 Python block.** A block whose output is a Python function of its inputs and time, for things the library lacks. It is slower than built-in blocks, and its ? card says so.
-- **0.6.5 Import parameter files (.m).** Plain assignments become model variables:
+- **0.6.4 Build models from code.** `model.add("Gain", k=2)` and `model.connect(a, b)`, with undo like any edit. Scripting examples come with it.
+- **0.6.5 Python block.** A block whose output is a Python function of its inputs and time, for things the library lacks. It is slower than built-in blocks, and its ? card says so.
+- **0.6.6 Import parameter files (.m).** Plain assignments become model variables:
   - numbers and arithmetic, such as `J = 0.01;` and `wn = 2*pi*50;`;
   - `%` comments are kept as notes.
   - The file is **read, never run**: no loops, functions or toolbox calls. Lines that cannot be read are listed.
