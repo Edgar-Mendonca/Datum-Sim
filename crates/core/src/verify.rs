@@ -618,6 +618,118 @@ mod tests {
         assert!((last(&r, 0) - want).abs() < 1e-6, "radiation {} vs {want}", last(&r, 0));
     }
 
+    /// Machines on ports (0.5.5): the physical DC motor gives the same speed and current as the
+    /// DC motor block, and its heat port passes exactly ∫R·i² dt; the physical PMSM matches the
+    /// PMSM block; a joint flange carries a drive's torque to a joint (rigid limit).
+    #[test]
+    fn machines_on_ports() {
+        let mut m = Mk::new(3.0, "rk45");
+        m.d.m.sim.rtol = 1e-10;
+        m.d.m.sim.atol = 1e-12;
+        let st = m.add("Step", &[("time", "0.1"), ("final", "12")]);
+        // The signal motor.
+        let sm = m.add("DCMotor", &[]);
+        let tl = m.add("Constant", &[("value", "0")]);
+        m.wire(st, 0, sm, 0);
+        m.wire(tl, 0, sm, 1);
+        // The physical motor, driven by the same voltage, its heat into a body.
+        let vs = m.add("VoltageSource", &[]);
+        let am = m.add("CurrentSensor", &[]);
+        let pm = m.add("DCMachine", &[]);
+        let g = m.add("Ground", &[]);
+        let sp = m.add("RotSensor", &[]);
+        let hc = m.add("HeatCapacity", &[("C", "2"), ("T0", "0")]);
+        let th = m.add("TempSensor", &[]);
+        m.wire(st, 0, vs, 0);
+        m.link(vs, 0, am, 0);
+        m.link(am, 1, pm, 0);
+        m.link(pm, 1, g, 0);
+        m.link(vs, 1, g, 0);
+        m.link(sp, 0, pm, 2);
+        m.link(pm, 4, hc, 0);
+        m.link(th, 0, hc, 0);
+        // ∫R·i²/C from the signal motor's current (R = 1).
+        let sq = m.add("Product", &[]);
+        let ig = m.add("Integrator", &[]);
+        let k = m.add("Gain", &[("k", "0.5")]);
+        m.wire(sm, 1, sq, 0);
+        m.wire(sm, 1, sq, 1);
+        m.wire(sq, 0, ig, 0);
+        m.wire(ig, 0, k, 0);
+        let sc = m.add("Scope", &[("n", "6")]);
+        m.wire(sm, 0, sc, 0);
+        m.wire(sp, 0, sc, 1);
+        m.wire(sm, 1, sc, 2);
+        m.wire(am, 0, sc, 3);
+        m.wire(k, 0, sc, 4);
+        m.wire(th, 0, sc, 5);
+        let r = m.run();
+        let d = |a: usize, b: usize| (0..r.t.len()).map(|i| (r.y[a][i] - r.y[b][i]).abs()).fold(0.0, f64::max);
+        assert!(d(0, 1) < 1e-6 && d(2, 3) < 1e-6, "speed {} current {}", d(0, 1), d(2, 3));
+        assert!(d(4, 5) < 1e-6 && last(&r, 5) > 0.5, "heat {} (T {})", d(4, 5), last(&r, 5));
+        // PMSM: v_d = 0, v_q = 10 V on both.
+        let mut m = Mk::new(0.2, "rk45");
+        m.d.m.sim.rtol = 1e-10;
+        m.d.m.sim.atol = 1e-12;
+        let vd = m.add("Constant", &[("value", "0")]);
+        let vq = m.add("Constant", &[("value", "10")]);
+        let tl = m.add("Constant", &[("value", "0")]);
+        let sm = m.add("PMSM", &[]);
+        m.wire(vd, 0, sm, 0);
+        m.wire(vq, 0, sm, 1);
+        m.wire(tl, 0, sm, 2);
+        let sd = m.add("VoltageSource", &[]);
+        let sq = m.add("VoltageSource", &[]);
+        let pm = m.add("PMSMdq", &[]);
+        let sp = m.add("RotSensor", &[]);
+        m.wire(vd, 0, sd, 0);
+        m.wire(vq, 0, sq, 0);
+        m.link(sd, 0, pm, 0);
+        m.link(sq, 0, pm, 2);
+        let g = m.add("Ground", &[]);
+        m.link(sd, 1, g, 0);
+        m.link(sq, 1, g, 0);
+        m.link(pm, 1, g, 0);
+        m.link(pm, 3, g, 0);
+        m.link(sp, 0, pm, 4);
+        let sc = m.add("Scope", &[("n", "6")]);
+        m.wire(sm, 0, sc, 0);
+        m.wire(sp, 0, sc, 1);
+        m.wire(sm, 1, sc, 2);
+        m.wire(pm, 0, sc, 3);
+        m.wire(sm, 2, sc, 4);
+        m.wire(pm, 1, sc, 5);
+        let r = m.run();
+        let d = |a: usize, b: usize| (0..r.t.len()).map(|i| (r.y[a][i] - r.y[b][i]).abs()).fold(0.0, f64::max);
+        assert!(d(0, 1) < 1e-6 && d(2, 3) < 1e-6 && d(4, 5) < 1e-6, "PMSM ω {} i_d {} i_q {}", d(0, 1), d(2, 3), d(4, 5));
+        assert!(last(&r, 0) > 10.0, "it turns");
+        // A joint flange: a motor inertia and a gear N = 10 drive a joint of inertia 0.5
+        // (an Integrator of τ/J on the signal side). Nearly rigid: q̈ = N·τm/(Jm·N² + J).
+        let mut m = Mk::new(0.5, "stiff");
+        let c = m.add("Constant", &[("value", "0.2")]);
+        let ts = m.add("TorqueSource", &[]);
+        let jm = m.add("RotInertia", &[("J", "0.001")]);
+        let gr = m.add("Gear", &[("N", "10")]);
+        let jf = m.add("JointFlange", &[("k", "1e5"), ("d", "50")]);
+        let gj = m.add("Gain", &[("k", "2")]);
+        let ig = m.add("Integrator", &[]);
+        let sc = m.add("Scope", &[]);
+        m.wire(c, 0, ts, 0);
+        m.link(ts, 0, jm, 0);
+        m.link(jm, 0, gr, 0);
+        m.link(gr, 1, jf, 0);
+        m.wire(jf, 0, gj, 0);
+        m.wire(gj, 0, ig, 0);
+        m.wire(ig, 0, jf, 0);
+        m.wire(ig, 0, sc, 0);
+        let r = m.run();
+        let want = 10.0 * 0.2 / (0.001 * 100.0 + 0.5) * 0.5;
+        assert!((last(&r, 0) - want).abs() < 0.01 * want, "joint speed {} vs {want}", last(&r, 0));
+        // A signal into input 1 keeps the physical connection on physical port 1 (0.5.5 bug:
+        // connecting the joint's speed removed its flange's connection to the gear).
+        assert!(m.d.m.root.wires.iter().any(|w| w.phys && w.to == (jf, 0)) && m.d.m.root.wires.iter().any(|w| !w.phys && w.to == (jf, 0)));
+    }
+
     /// Pulse and square-wave edges at a high frequency with a variable-step solver (0.5.3 bug:
     /// an edge reached a rounding error early held the old level through the next step, and a
     /// 10 kHz pulse train lost about one pulse in three). The mean of a 50 % pulse over 300

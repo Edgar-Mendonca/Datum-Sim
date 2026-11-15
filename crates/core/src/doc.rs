@@ -373,7 +373,9 @@ fn exec(m: &mut Model, op: Op, created: &mut Vec<u32>) -> Result<(), String> {
             }
             let id = m.id();
             let d = diagram(m, pf)?;
-            d.wires.retain(|w| w.to != to);
+            // One signal per input; a physical connection that ends on the physical port with
+            // the same number is a different port and stays (0.5.5 bug).
+            d.wires.retain(|w| w.phys || w.to != to);
             d.wires.push(Wire { id, from, to, pts, ..Default::default() });
             created.push(id);
         }

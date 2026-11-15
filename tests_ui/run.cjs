@@ -31,6 +31,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
           window.__calls.push([c, a]);
           if (c === "diagram") {
             if (window.__motor) return f.motor;
+            if (window.__physv2) return window.__physv2;
             if (window.__physv) return f.physview;
             if (window.__xy) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.kind === "Scope" ? { ...b, kind: window.__xy } : b) };
             if (window.__dcblock) return { ...f.diagram, blocks: f.diagram.blocks.map(b => b.id === f.sub ? { ...b, kind: "DCMotor", sub: false } : b) };
@@ -97,6 +98,8 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   check("the library has the electrical parts", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("Electrical") && t.includes("Diode") && t.includes("Op-amp") && t.includes("Ideal transformer"); }) && fix.library.blocks.filter(b => b.cat === "Electrical" && !b.planned).length === 14);
   // 0.5.4: the thermal parts.
   check("the library has the thermal parts", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("Thermal") && t.includes("Heat capacity") && t.includes("Radiation"); }) && fix.library.blocks.filter(b => b.cat === "Thermal" && !b.planned).length === 9);
+  // 0.5.5: motors with physical ports, and the robot joint flange.
+  check("the library has the motors on ports", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("DC motor (physical)") && t.includes("PMSM d–q (physical)") && t.includes("Joint flange"); }));
 
   // 2b. Dragging a block from the library onto the diagram adds it there (0.1.0 bug on Windows: HTML drag and drop never reached the diagram).
   const libItem = await p.$('.libi:has-text("Gain")');
@@ -561,7 +564,7 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(300);
   const nmr = (await p.evaluate(() => window.__calls)).filter(c => c[0] === "new_model").pop();
   check("Modules › Robot Arm Example opens the robot arm model", JSON.stringify(nmr?.[1] ?? {}).includes("robotarm"), JSON.stringify(nmr));
-  check("the library has the robot arm blocks", fix.library.blocks.filter(b => b.cat === "Robot arm").length === 15);
+  check("the library has the robot arm blocks", fix.library.blocks.filter(b => b.cat === "Robot arm").length === 16);
   await p.click('.tabs > button:text-is("Model")');
 
   // 13b9. Physical ports (0.5.1): drawn as squares in their domain's colour; connections have no
@@ -588,7 +591,21 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   await p.waitForTimeout(200);
   const pc = (await p.evaluate(() => window.__calls)).filter(c => c[0] === "apply").pop();
   check("dragging between physical ports sends a physical connection", JSON.stringify(pc?.[1] ?? {}).includes('"phys":true'), JSON.stringify(pc));
-  await p.evaluate(() => { window.__physv = false; });
+  // 0.5.5 bug: a physical connection ending on a part's physical port 1 made its signal
+  // input 1 look connected. Here the load's torque source loses its signal and gains a
+  // physical connection to its port 1: its input arrow must show as open.
+  const ld = pv0.blocks.find(b => b.name === "Load");
+  await p.evaluate(([v, id]) => {
+    const w = v.wires.filter(x => !(x.to[0] === id && !x.phys)).map(x => x.phys && x.from[0] === id ? { ...x, from: x.to, to: x.from } : x);
+    window.__physv2 = { ...v, wires: w };
+  }, [pv0, ld.id]);
+  const gb = await box(g0.name + " (");
+  await p.mouse.click(gb.x, gb.y);
+  await p.click('.ribbon button:has-text("Flip")');
+  await p.waitForTimeout(400);
+  const openIn = await p.evaluate(id => { const r = document.querySelector(`.pport[data-pb="${id}"]`).parentElement; return r.querySelectorAll(".port.in.open").length; }, ld.id);
+  check("a physical connection does not mark a signal input as connected", openIn === 1, String(openIn));
+  await p.evaluate(() => { window.__physv2 = null; window.__physv = false; });
   }
 
   // 13c. Planned features (0.2.2): dimmed on their tab with the release; a greyed dialog; a switch hides them.

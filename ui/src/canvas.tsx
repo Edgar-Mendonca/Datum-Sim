@@ -373,7 +373,7 @@ export const Canvas = () => {
     } else if (d.k === "wire") {
       if (d.from) {
         let to = portAt(p, "in");
-        if (!to) { const b = blockAt(p); if (b && b.id !== d.from[0]) { const used = new Set(v()!.wires.filter(w => w.to[0] === b.id).map(w => w.to[1])); const i = b.ins.findIndex((_, k) => !used.has(k)); if (i >= 0) to = [b.id, i]; } }
+        if (!to) { const b = blockAt(p); if (b && b.id !== d.from[0]) { const used = new Set(v()!.wires.filter(w => !w.phys && w.to[0] === b.id).map(w => w.to[1])); const i = b.ins.findIndex((_, k) => !used.has(k)); if (i >= 0) to = [b.id, i]; } }
         if (to) act({ Connect: { from: d.from, to, pts: [] } });
       } else if (d.to) {
         let from = portAt(p, "out");
@@ -548,7 +548,7 @@ export const Canvas = () => {
           }}</For>
           <For each={v()?.blocks ?? []}>{b => {
             const o = () => off(b.id);
-            const connected = createMemo(() => new Set((v()?.wires ?? []).filter(w => w.to[0] === b.id).map(w => w.to[1])));
+            const connected = createMemo(() => new Set((v()?.wires ?? []).filter(w => !w.phys && w.to[0] === b.id).map(w => w.to[1])));
             return <g transform={`translate(${o()[0]} ${o()[1]})`}>
               <For each={b.ins}>{(p, i) => <path d={b.flip ? `M${p[0] + 1} ${p[1] - 4}l-6 4l6 4z` : `M${p[0] - 1} ${p[1] - 4}l6 4l-6 4z`} class="port in" classList={{ open: !connected().has(i()) }} />}</For>
               <For each={b.outs}>{p => <path d={b.flip ? `M${p[0]} ${p[1] - 4}l-6 4l6 4z` : `M${p[0]} ${p[1] - 4}l6 4l-6 4z`} class="port out" />}</For>

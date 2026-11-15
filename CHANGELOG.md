@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.5 — 2026-11-15
+
+Physical parts, step 5: **motors on ports**.
+
+- **DC motor (physical)** (Library › Motors): its winding, shaft, case and a heat port. Drive it from a circuit (a source, an H-bridge) and connect its shaft to gears and loads drawn as parts. Its copper loss heats whatever its heat port touches.
+- **PMSM d–q (physical)**: the d and q windings, shaft, case and heat port, with the same equations as the PMSM block. Signal outputs: i_d, i_q.
+- **Joint flange** (Library › Robot arm): turns a robot arm's joint into a rotational port, so its motor, gear and friction can be drawn as physical parts.
+- Checked:
+  - the physical DC motor gives the same speed and current as the DC motor block;
+  - its heat port passes exactly ∫R·i² dt;
+  - the physical PMSM matches the PMSM block;
+  - a joint driven through a gear by a motor inertia matches (J_m·N² + J) in the rigid limit.
+
+**Fixed:** connecting a signal to a part's input 1 removed a physical connection on that part's physical port 1, and the window showed that input as connected. The two are now kept apart. A test and a window check cover it.
+
+Next: hydraulics (0.5.6).
+
 ## 0.5.4 — 2026-11-15
 
 Physical parts, step 4: **thermal parts and heat ports**.

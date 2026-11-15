@@ -93,6 +93,10 @@ pub enum Prim {
     /// An operational amplifier: no input current; the output (to ground) is
     /// vsat·tanh(gain·(e_p − e_m)/vsat), supplied by the flow j.
     OpAmp { p: usize, m: usize, o: usize, gain: f64, vsat: f64, j: usize },
+    /// A PMSM in the rotor (d–q) frame between the d and q windings, a flange and a case:
+    /// states i_d (x) and i_q (x + 1); the ports carry 1.5·i so that v·i is the power;
+    /// outputs i_d, i_q at y, y + 1; the copper loss goes to `heat`.
+    Dq { da: usize, db: usize, qa: usize, qb: usize, f: usize, c: usize, rs: f64, ld: f64, lq: f64, psi: f64, pp: f64, x: usize, y: usize, heat: usize },
 }
 
 /// A rigid link: e_a = r·e_b (with efficiency η weighting a's contribution when merged).
@@ -235,7 +239,7 @@ impl Network {
         let shift = nx;
         let prims: Vec<Prim> = prims.into_iter().map(|mut p| {
             match &mut p {
-                Prim::CapF { x, .. } | Prim::Ind { x, .. } | Prim::Lash { x, .. } | Prim::Stop { x, .. } | Prim::Pos { x, .. } => *x += shift,
+                Prim::CapF { x, .. } | Prim::Ind { x, .. } | Prim::Lash { x, .. } | Prim::Stop { x, .. } | Prim::Pos { x, .. } | Prim::Dq { x, .. } => *x += shift,
                 Prim::MeasA { x: Some(x), .. } => *x += shift,
                 _ => {}
             }
@@ -319,6 +323,17 @@ impl Network {
                     let v = if th > h { k * (th - h) + c * de(e, *a, *b) } else if th < -h { k * (th + h) + c * de(e, *a, *b) } else { 0.0 };
                     add(*a, v);
                     add(*b, -v);
+                }
+                Prim::Dq { da, db, qa, qb, f: fl, c, rs, ld, lq, psi, pp, x: xi, heat, .. } => {
+                    let (id, iq) = (x[*xi], x[*xi + 1]);
+                    add(*da, 1.5 * id);
+                    add(*db, -1.5 * id);
+                    add(*qa, 1.5 * iq);
+                    add(*qb, -1.5 * iq);
+                    let te = 1.5 * pp * (psi * iq + (ld - lq) * id * iq);
+                    add(*fl, -te);
+                    add(*c, te);
+                    add(*heat, -1.5 * rs * (id * id + iq * iq));
                 }
                 Prim::OpAmp { p, m, o, gain, vsat, j: ji } => {
                     add(*o, j[*ji]);
@@ -481,6 +496,12 @@ impl Network {
                     Prim::Lash { a, b, x: xi, .. } => dx[*xi] = de(&e, *a, *b),
                     Prim::Stop { a, x: xi, .. } | Prim::Pos { a, x: xi, .. } => dx[*xi] = de(&e, *a, GROUND),
                     Prim::MeasA { a, b, x: Some(xi), .. } => dx[*xi] = de(&e, *a, *b),
+                    Prim::Dq { da, db, qa, qb, f, c, rs, ld, lq, psi, pp, x: xi, .. } => {
+                        let (id, iq) = (x[*xi], x[*xi + 1]);
+                        let we = pp * de(&e, *f, *c);
+                        dx[*xi] = (de(&e, *da, *db) - rs * id + we * lq * iq) / ld;
+                        dx[*xi + 1] = (de(&e, *qa, *qb) - rs * iq - we * (ld * id + psi)) / lq;
+                    }
                     _ => {}
                 }
             }
@@ -495,6 +516,10 @@ impl Network {
                         }
                     }
                     Prim::MeasF { y: yi, j: ji, .. } => y[*yi] = s.j[*ji],
+                    Prim::Dq { x: xi, y: yi, .. } => {
+                        y[*yi] = x[*xi];
+                        y[*yi + 1] = x[*xi + 1];
+                    }
                     _ => {}
                 }
             }
@@ -631,6 +656,10 @@ pub fn ports_of(kind: &str) -> Option<&'static [PortSpec]> {
         "Ground" => &[("p", Elec, false)],
         "Transformer" => &[("p1", Elec, false), ("n1", Elec, false), ("p2", Elec, false), ("n2", Elec, false)],
         "OpAmp" => &[("in+", Elec, false), ("in−", Elec, false), ("out", Elec, false)],
+        // Machines on ports (0.5.5)
+        "DCMachine" => &[("p", Elec, false), ("n", Elec, false), ("flange", Rot, false), ("case", Rot, true), ("heat", Therm, true)],
+        "PMSMdq" => &[("d+", Elec, false), ("d−", Elec, true), ("q+", Elec, false), ("q−", Elec, true), ("flange", Rot, false), ("case", Rot, true), ("heat", Therm, true)],
+        "JointFlange" => &[("flange", Rot, false)],
         // Thermal (0.5.4): temperature T (°C) and heat flow Q.
         "HeatCapacity" | "FixedTemp" | "TempSource" | "HeatFlowSource" | "TempSensor" => &[("port", Therm, false)],
         "Conduction" | "Convection" | "Radiation" | "HeatFlowSensor" => &[("a", Therm, false), ("b", Therm, false)],
@@ -667,7 +696,8 @@ fn pos(p: &crate::rt::Pv, k: &str) -> Result<f64, String> {
 pub fn signals_of(kind: &str) -> (usize, usize) {
     match kind {
         "TorqueSource" | "SpeedSource" | "ForceSource" | "VelocitySource" | "VoltageSource" | "CurrentSource" | "IdealSwitch" | "TempSource" | "HeatFlowSource" => (1, 0),
-        "RotSensor" | "PosSensor" => (0, 2),
+        "RotSensor" | "PosSensor" | "PMSMdq" => (0, 2),
+        "JointFlange" => (1, 1),
         "TorqueSensor" | "ForceSensor" | "VoltageSensor" | "CurrentSensor" | "TempSensor" | "HeatFlowSensor" => (0, 1),
         _ => (0, 0),
     }
@@ -839,6 +869,41 @@ pub fn part(kind: &str, p: &crate::rt::Pv, name: &str) -> Result<Part, String> {
             pt.prims.push(Prim::MeasF { a: 0, b: 1, y: 0, j: 0 });
             pt.nj = 1;
         }
+        // ---- machines on ports.
+        // DC machine: R (with its loss to the heat port) and L in series, then the ideal machine
+        // v = K·ω, τ = K·i between the winding and the flange (relative to the case); the
+        // rotor's inertia and viscous friction on the flange. Internal nodes 5 and 6.
+        "DCMachine" => {
+            let k = pos(p, "K")?;
+            pt.internal = 2;
+            pt.prims.push(Prim::Res { a: 0, b: 5, law: Law::Lin(1.0 / pos(p, "R")?), mode: 0, heat: 4 });
+            pt.prims.push(Prim::Ind { a: 5, b: 6, l: pos(p, "L")?, x: 0 });
+            pt.xs.push(num(p, "i0")?);
+            pt.prims.push(Prim::Tdx { a: 6, b: 1, c: 2, d: 3, k, j: 0 });
+            pt.nj = 1;
+            pt.prims.push(Prim::Cap { n: 2, c: pos(p, "J")?, init: Some(num(p, "w0")?) });
+            pt.prims.push(Prim::Res { a: 2, b: 3, law: Law::Lin(num(p, "b")?), mode: 0, heat: GROUND });
+        }
+        "PMSMdq" => {
+            pt.prims.push(Prim::Dq { da: 0, db: 1, qa: 2, qb: 3, f: 4, c: 5, rs: pos(p, "Rs")?, ld: pos(p, "Ld")?, lq: pos(p, "Lq")?, psi: num(p, "psi")?, pp: pos(p, "p")?, x: 0, y: 0, heat: 6 });
+            pt.xs.extend([0.0, 0.0]);
+            pt.prims.push(Prim::Cap { n: 4, c: pos(p, "J")?, init: Some(num(p, "w0")?) });
+            pt.prims.push(Prim::Res { a: 4, b: 5, law: Law::Lin(num(p, "b")?), mode: 0, heat: GROUND });
+        }
+        // A robot arm's joint as a flange: the joint's speed (a signal from the arm) drives one
+        // end of a stiff, damped coupling (the output shaft); the coupling's torque is the
+        // signal back to the arm. Internal node 1.
+        "JointFlange" => {
+            pt.internal = 1;
+            pt.prims.push(Prim::ASrc { a: 1, b: GROUND, u: Some(0), v: 1.0, j: 0 });
+            pt.prims.push(Prim::MeasF { a: 0, b: 2, y: 0, j: 1 });
+            pt.internal = 2;
+            let k = pos(p, "k")?;
+            pt.prims.push(Prim::Ind { a: 2, b: 1, l: 1.0 / k, x: 0 });
+            pt.xs.push(0.0);
+            pt.prims.push(Prim::Res { a: 2, b: 1, law: Law::Lin(num(p, "d")?), mode: 0, heat: GROUND });
+            pt.nj = 2;
+        }
         k => return Err(format!("'{k}' is not a physical part")),
     }
     Ok(pt)
@@ -972,6 +1037,13 @@ pub fn build(plan: &Plan, kinds: &[&str], names: &[&str], pvs: &[&crate::rt::Pv]
                 Prim::Lash { a, b, x, .. } => { *a = map(*a); *b = map(*b); *x += nx; }
                 Prim::Stop { a, x, .. } | Prim::Pos { a, x, .. } => { *a = map(*a); *x += nx; }
                 Prim::OpAmp { p, m, o, j, .. } => { *p = map(*p); *m = map(*m); *o = map(*o); *j += nj; }
+                Prim::Dq { da, db, qa, qb, f, c, x, y, heat, .. } => {
+                    for n in [da, db, qa, qb, f, c, heat] {
+                        *n = map(*n);
+                    }
+                    *x += nx;
+                    *y += ny;
+                }
             }
             prims.push(p);
         }
