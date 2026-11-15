@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.4 — 2026-11-15
+
+Physical parts, step 4: **thermal parts and heat ports**.
+
+- **New parts** (Library › Thermal): heat capacity, conduction, convection, radiation, ambient (a fixed temperature), temperature and heat-flow sources driven by a signal, a thermometer and a heat-flow sensor. Temperatures are in °C.
+- **Heat ports** (red squares, on the bottom edge) on the resistor, the switch and the diode. They pass the part's loss to a thermal network, so a resistor or a switch warms up as it works. Left unconnected, the heat goes nowhere.
+- Checked against known answers:
+  - a body cooling through a conductance (exact exponential);
+  - a resistor heating a body at exactly its R·i² loss;
+  - the steady temperature with convection;
+  - radiation against the T⁴ law.
+
+Next: motors on ports (0.5.5).
+
 ## 0.5.3 — 2026-11-15
 
 Physical parts, step 3: **electrical circuits**.

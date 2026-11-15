@@ -59,7 +59,7 @@ pub const COLOURS: &[(&str, &str)] = &[("red", "#FDE2E1"), ("orange", "#FDE8D7")
 
 pub const CATS: &[&str] = &[
     "Sources", "Math", "Continuous", "Discontinuities", "Discrete", "Routing", "Lookup tables", "Sinks", "Subsystems",
-    "Motors", "Drives", "Robot arm", "Rotational", "Translational", "Electrical", "Annotations", "Physical (coming)",
+    "Motors", "Drives", "Robot arm", "Rotational", "Translational", "Electrical", "Thermal", "Annotations", "Physical (coming)",
 ];
 
 fn d(kind: &'static str, name: &'static str, cat: &'static str, what: &'static str, how: &'static str, params: Vec<P>) -> Def {
@@ -85,6 +85,9 @@ pub fn size(kind: &str) -> (f64, f64) {
         "Resistor" | "Capacitor" | "Inductor" | "DCVoltage" | "DCCurrent" | "Diode" | "CurrentSensor" => (60.0, 30.0),
         "VoltageSource" | "CurrentSource" | "IdealSwitch" | "VoltageSensor" => (60.0, 44.0),
         "Ground" => (30.0, 30.0),
+        "HeatCapacity" | "FixedTemp" | "TempSensor" => (50.0, 40.0),
+        "TempSource" | "HeatFlowSource" => (60.0, 44.0),
+        "Conduction" | "Convection" | "Radiation" | "HeatFlowSensor" => (60.0, 30.0),
         "Transformer" => (60.0, 60.0),
         "OpAmp" => (60.0, 50.0),
         "TorqueSource" | "SpeedSource" | "RotSensor" => (60.0, 44.0),
@@ -419,7 +422,7 @@ pub fn library() -> Vec<Def> {
         d("LeadScrew", "Lead screw", "Translational", "Turns a screw's rotation into the nut's travel: v = lead·ω/2π.", "The lead is the travel per turn. The efficiency applies to power from the screw to the nut.",
             vec![n("lead", "Lead", "0.005", "m/rev", ""), n("eta", "Efficiency η", "0.9", "", "0 < η ≤ 1")]),
         // Electrical parts (0.5.3): voltage V and current i.
-        d("Resistor", "Resistor", "Electrical", "A resistor between p and n.", "v = R·i.", vec![n("R", "Resistance R", "1", "Ω", "")]),
+        d("Resistor", "Resistor", "Electrical", "A resistor between p and n. Its heat port (red) passes its loss R·i² to a thermal network; left free, the heat goes nowhere.", "v = R·i.", vec![n("R", "Resistance R", "1", "Ω", "")]),
         d("Capacitor", "Capacitor", "Electrical", "A capacitor between p and n.", "i = C·dv/dt. A capacitor straight across a voltage source cannot be solved: put a small resistance in series.",
             vec![n("C", "Capacitance C", "1e-6", "F", ""), n("v0", "Initial voltage", "0", "V", "")]),
         d("Inductor", "Inductor", "Electrical", "An inductor between p and n.", "v = L·di/dt. Current flows from p to n; it cannot be broken by a switch alone: give it a path (a diode or a resistance).",
@@ -429,10 +432,10 @@ pub fn library() -> Vec<Def> {
         d("VoltageSource", "Voltage source", "Electrical", "A voltage from a signal: v(p) − v(n) = u. Signal input: v.", "", vec![]),
         d("DCCurrent", "DC current source", "Electrical", "A constant current I, driven out of p (into the circuit) and back in at n.", "", vec![n("I", "Current I", "1", "A", "")]),
         d("CurrentSource", "Current source", "Electrical", "A current from a signal, driven out of p and back in at n. Signal input: i.", "", vec![]),
-        d("IdealSwitch", "Switch", "Electrical", "A switch between p and n, closed while its signal is at least 0.5. Signal input: on.", "Closed: v = Ron·i; open: i = Goff·v. It switches at the instant its signal steps, so drive it from a pulse or PWM block.",
+        d("IdealSwitch", "Switch", "Electrical", "A switch between p and n, closed while its signal is at least 0.5. Signal input: on.", "Closed: v = Ron·i; open: i = Goff·v. It switches at the instant its signal steps, so drive it from a pulse or PWM block. Its heat port passes its conduction loss to a thermal network.",
             vec![n("Ron", "On resistance", "1e-3", "Ω", ""), n("Goff", "Off conductance", "1e-6", "S", "")]),
         d("Diode", "Diode", "Electrical", "A diode from anode to cathode. Ideal (default): on while current flows forward, off while the voltage is below Vf; the solver finds the exact switching instants. Smooth: one continuous curve, no switching events.",
-            "Ideal: on, v = Vf + Ron·i; off, i = Goff·v. Smooth: i = (s/Ron)·ln(1 + e^((v − Vf)/s)) + Goff·v, where s sets how sharp the knee is.",
+            "Ideal: on, v = Vf + Ron·i; off, i = Goff·v. Smooth: i = (s/Ron)·ln(1 + e^((v − Vf)/s)) + Goff·v, where s sets how sharp the knee is. Its heat port passes its loss v·i to a thermal network.",
             vec![c("model", "Model", &["ideal", "smooth"], ""), n("Vf", "Forward voltage Vf", "0.7", "V", ""), n("Ron", "On resistance", "1e-3", "Ω", ""), n("Goff", "Off conductance", "1e-8", "S", ""), n("s", "Knee width (smooth)", "0.02", "V", "")]),
         d("Transformer", "Ideal transformer", "Electrical", "Two windings: v1 = n·v2 and i2 = n·i1, with no losses. Ports: p1, n1 (primary) and p2, n2 (secondary).", "n is the turns ratio, primary to secondary. Give each winding its own ground (or one shared one).",
             vec![n("n", "Turns ratio n", "10", "", "")]),
@@ -440,7 +443,20 @@ pub fn library() -> Vec<Def> {
             vec![n("A", "Open-loop gain A", "1e5", "", ""), n("Vsat", "Output limit Vsat", "15", "V", "")]),
         d("VoltageSensor", "Voltage sensor", "Electrical", "Measures v(p) − v(n). Signal output: v. It draws no current.", "", vec![]),
         d("CurrentSensor", "Current sensor", "Electrical", "Measures the current flowing through it, from p to n. Put it in series. Signal output: i.", "", vec![]),
-        planned("HeatCap", "Heat capacity, conduction", "Physical (coming)", "Thermal components you connect by ports.", "0.5.4"),
+        // Thermal parts (0.5.4): temperature T (°C) and heat flow Q (W).
+        d("HeatCapacity", "Heat capacity", "Thermal", "A body that stores heat: its temperature rises with the heat flowing in.", "C·dT/dt = sum of the heat flows into its port. C = mass × specific heat (steel about 460 J/(kg·K), aluminium 900, water 4186).",
+            vec![n("C", "Heat capacity C", "100", "J/K", ""), n("T0", "Initial temperature", "20", "°C", "")]),
+        d("Conduction", "Conduction", "Thermal", "Heat conducted between two ports: Q = G·(Ta − Tb).", "G = k·A/L for a slab (k the conductivity, A the area, L the thickness), or 1/R for a thermal resistance R in K/W.",
+            vec![n("G", "Thermal conductance G", "1", "W/K", "")]),
+        d("Convection", "Convection", "Thermal", "Heat carried away by a fluid: Q = h·A·(T_solid − T_fluid). Ports: the solid, then the fluid.", "h is the film coefficient: still air 5–25 W/(m²·K), moving air 10–200, water 500–10 000.",
+            vec![n("h", "Film coefficient h", "10", "W/(m²·K)", ""), n("A", "Area A", "0.01", "m²", "")]),
+        d("Radiation", "Radiation", "Thermal", "Heat radiated between two surfaces: Q = ε·σ·A·(Ta⁴ − Tb⁴), with the temperatures in kelvin.", "σ = 5.670 374 419 × 10⁻⁸ W/(m²·K⁴).",
+            vec![n("eps", "Emissivity ε", "0.9", "", "0 < ε ≤ 1"), n("A", "Area A", "0.01", "m²", "")]),
+        d("FixedTemp", "Ambient", "Thermal", "A fixed temperature: the surroundings, a large heat sink or a coolant.", "", vec![n("T", "Temperature", "20", "°C", "")]),
+        d("TempSource", "Temperature source", "Thermal", "Holds its port at a temperature from a signal. Signal input: T (°C).", "", vec![]),
+        d("HeatFlowSource", "Heat flow source", "Thermal", "Injects a heat flow from a signal into its port (a heater, a loss). Signal input: Q (W).", "", vec![]),
+        d("TempSensor", "Thermometer", "Thermal", "Measures its port's temperature. Signal output: T (°C).", "", vec![]),
+        d("HeatFlowSensor", "Heat flow sensor", "Thermal", "Measures the heat flow through it, from a to b. Put it in series. Signal output: Q (W).", "", vec![]),
         planned("Pipe", "Pipe, pump, valve, tank", "Physical (coming)", "Hydraulic components you connect by ports.", "0.5.6"),
         planned("FMU", "FMU", "Subsystems", "Run a model exported by another tool (FMI standard).", "0.8"),
         planned("PyBlock", "Python block", "Math", "A block written in Python.", "0.6.4"),
@@ -590,6 +606,10 @@ pub fn port_names(b: &Block) -> (Vec<String>, Vec<String>) {
         "IdealSwitch" => (s(&["on"]), vec![]),
         "VoltageSensor" => (vec![], s(&["v"])),
         "CurrentSensor" => (vec![], s(&["i"])),
+        "TempSource" => (s(&["T"]), vec![]),
+        "HeatFlowSource" => (s(&["Q"]), vec![]),
+        "TempSensor" => (vec![], s(&["T"])),
+        "HeatFlowSensor" => (vec![], s(&["Q"])),
         "DCMotor" => (s(&["V", "T_L"]), s(&["ω", "i", "θ"])),
         "PMSM" => (s(&["v_d", "v_q", "T_L"]), s(&["ω", "i_d", "i_q", "T_e", "θ"])),
         "DCSepEx" => (s(&["V_a", "V_f", "T_L"]), s(&["ω", "i_a", "i_f", "T_e", "θ"])),
@@ -647,10 +667,18 @@ pub fn phys_xy(b: &Block) -> Vec<(f64, f64)> {
     if ni + no > 0 {
         return (0..n).map(|i| ((b.x + b.w * (i as f64 + 0.5) / n as f64).round(), b.y + b.h)).collect();
     }
+    // Heat ports (losses to a thermal network) sit on the bottom edge; the others split between
+    // the left and right sides.
+    let side: Vec<usize> = (0..n).filter(|i| spec[*i].0 != "heat").collect();
+    let ns = side.len();
     let (l, r) = if b.flip { (b.x + b.w, b.x) } else { (b.x, b.x + b.w) };
-    let left = n.div_ceil(2);
+    let left = ns.div_ceil(2);
     let col = |k: usize, i: usize| (b.y + b.h * (i as f64 + 0.5) / k as f64).round();
-    (0..n).map(|i| if i < left { (l, col(left, i)) } else { (r, col(n - left, i - left)) }).collect()
+    (0..n).map(|i| match side.iter().position(|s| *s == i) {
+        Some(k) if k < left => (l, col(left, k)),
+        Some(k) => (r, col(ns - left, k - left)),
+        None => ((b.x + b.w / 2.0).round(), b.y + b.h),
+    }).collect()
 }
 
 pub fn port_xy(b: &Block) -> (Vec<(f64, f64)>, Vec<(f64, f64)>) {

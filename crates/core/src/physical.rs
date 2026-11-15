@@ -69,7 +69,9 @@ pub enum Prim {
     CapF { a: usize, b: usize, c: f64, x: usize, j: usize },
     /// An inductor or spring: state flow (x); ẋ = Δe/L.
     Ind { a: usize, b: usize, l: f64, x: usize },
-    Res { a: usize, b: usize, law: Law, mode: usize },
+    /// A resistive element; its loss (flow × difference) is injected at `heat` (a thermal
+    /// node, or GROUND for none).
+    Res { a: usize, b: usize, law: Law, mode: usize, heat: usize },
     /// A transducer: (e_a − e_b) = k·(e_c − e_d), flow j at a→b, −k·j at c→d.
     Tdx { a: usize, b: usize, c: usize, d: usize, k: f64, j: usize },
     /// An across source: Δe = u·scale, flow j.
@@ -275,10 +277,12 @@ impl Network {
                     add(*a, x[*xi]);
                     add(*b, -x[*xi]);
                 }
-                Prim::Res { a, b, law, mode } => {
-                    let v = res_flow(law, de(e, *a, *b), e, *a, *b, u, modes.get(*mode).cloned().unwrap_or(false));
+                Prim::Res { a, b, law, mode, heat } => {
+                    let d = de(e, *a, *b);
+                    let v = res_flow(law, d, e, *a, *b, u, modes.get(*mode).cloned().unwrap_or(false));
                     add(*a, v);
                     add(*b, -v);
+                    add(*heat, -v * d);
                 }
                 Prim::Tdx { a, b, c, d, k, j: ji } => {
                     add(*a, j[*ji]);
@@ -621,11 +625,15 @@ pub fn ports_of(kind: &str) -> Option<&'static [PortSpec]> {
         "RackPinion" => &[("pinion", Rot, false), ("rack", Trans, false)],
         "LeadScrew" => &[("screw", Rot, false), ("nut", Trans, false)],
         // Electrical (0.5.3)
-        "Resistor" | "Capacitor" | "Inductor" | "DCVoltage" | "DCCurrent" | "VoltageSource" | "CurrentSource" | "IdealSwitch" | "VoltageSensor" | "CurrentSensor" => &[("p", Elec, false), ("n", Elec, false)],
-        "Diode" => &[("anode", Elec, false), ("cathode", Elec, false)],
+        "Resistor" | "IdealSwitch" => &[("p", Elec, false), ("n", Elec, false), ("heat", Therm, true)],
+        "Capacitor" | "Inductor" | "DCVoltage" | "DCCurrent" | "VoltageSource" | "CurrentSource" | "VoltageSensor" | "CurrentSensor" => &[("p", Elec, false), ("n", Elec, false)],
+        "Diode" => &[("anode", Elec, false), ("cathode", Elec, false), ("heat", Therm, true)],
         "Ground" => &[("p", Elec, false)],
         "Transformer" => &[("p1", Elec, false), ("n1", Elec, false), ("p2", Elec, false), ("n2", Elec, false)],
         "OpAmp" => &[("in+", Elec, false), ("in−", Elec, false), ("out", Elec, false)],
+        // Thermal (0.5.4): temperature T (°C) and heat flow Q.
+        "HeatCapacity" | "FixedTemp" | "TempSource" | "HeatFlowSource" | "TempSensor" => &[("port", Therm, false)],
+        "Conduction" | "Convection" | "Radiation" | "HeatFlowSensor" => &[("a", Therm, false), ("b", Therm, false)],
         _ => return None,
     })
 }
@@ -658,9 +666,9 @@ fn pos(p: &crate::rt::Pv, k: &str) -> Result<f64, String> {
 /// The signal ports of a part kind: (inputs, outputs).
 pub fn signals_of(kind: &str) -> (usize, usize) {
     match kind {
-        "TorqueSource" | "SpeedSource" | "ForceSource" | "VelocitySource" | "VoltageSource" | "CurrentSource" | "IdealSwitch" => (1, 0),
+        "TorqueSource" | "SpeedSource" | "ForceSource" | "VelocitySource" | "VoltageSource" | "CurrentSource" | "IdealSwitch" | "TempSource" | "HeatFlowSource" => (1, 0),
         "RotSensor" | "PosSensor" => (0, 2),
-        "TorqueSensor" | "ForceSensor" | "VoltageSensor" | "CurrentSensor" => (0, 1),
+        "TorqueSensor" | "ForceSensor" | "VoltageSensor" | "CurrentSensor" | "TempSensor" | "HeatFlowSensor" => (0, 1),
         _ => (0, 0),
     }
 }
@@ -677,13 +685,13 @@ pub fn part(kind: &str, p: &crate::rt::Pv, name: &str) -> Result<Part, String> {
             pt.prims.push(Prim::Ind { a: 0, b: 1, l: 1.0 / k, x: 0 });
             pt.xs.push(k * num(p, "phi0")?);
         }
-        "RotDamper" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Lin(num(p, "d")?), mode: 0 }),
+        "RotDamper" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Lin(num(p, "d")?), mode: 0, heat: GROUND }),
         "RotFriction" => {
             let (fc, fs, ws, c) = (num(p, "Tc")?, num(p, "Ts")?, pos(p, "ws")?, num(p, "d")?);
             if fs < fc {
                 return Err("the static (break-away) torque must be at least the sliding torque".into());
             }
-            pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Friction { fc, fs, ws, c }, mode: 0 });
+            pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Friction { fc, fs, ws, c }, mode: 0, heat: GROUND });
         }
         "Backlash" => {
             pt.prims.push(Prim::Lash { a: 0, b: 1, k: pos(p, "k")?, c: num(p, "d")?, gap: num(p, "gap")?.max(0.0), x: 0 });
@@ -717,13 +725,13 @@ pub fn part(kind: &str, p: &crate::rt::Pv, name: &str) -> Result<Part, String> {
             pt.prims.push(Prim::Ind { a: 0, b: 1, l: 1.0 / k, x: 0 });
             pt.xs.push(k * num(p, "x0")?);
         }
-        "TransDamper" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Lin(num(p, "d")?), mode: 0 }),
+        "TransDamper" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Lin(num(p, "d")?), mode: 0, heat: GROUND }),
         "TransFriction" => {
             let (fc, fs, ws, c) = (num(p, "Fc")?, num(p, "Fs")?, pos(p, "vs")?, num(p, "d")?);
             if fs < fc {
                 return Err("the static (break-away) force must be at least the sliding force".into());
             }
-            pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Friction { fc, fs, ws, c }, mode: 0 });
+            pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Friction { fc, fs, ws, c }, mode: 0, heat: GROUND });
         }
         "TransFixed" => pt.links.push(Link { a: 0, b: GROUND, r: 0.0, eta: 1.0, what: name.into() }),
         "ForceSource" => pt.prims.push(Prim::FSrc { a: 0, b: 1, u: Some(0), v: 1.0 }),
@@ -756,7 +764,7 @@ pub fn part(kind: &str, p: &crate::rt::Pv, name: &str) -> Result<Part, String> {
             pt.links.push(Link { a: 0, b: 1, r: 1.0 / r, eta, what: name.into() });
         }
         // ---- electrical: voltage V and current i.
-        "Resistor" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Lin(1.0 / pos(p, "R")?), mode: 0 }),
+        "Resistor" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Lin(1.0 / pos(p, "R")?), mode: 0, heat: 2 }),
         "Capacitor" => {
             pt.prims.push(Prim::CapF { a: 0, b: 1, c: pos(p, "C")?, x: 0, j: 0 });
             pt.xs.push(num(p, "v0")?);
@@ -778,13 +786,13 @@ pub fn part(kind: &str, p: &crate::rt::Pv, name: &str) -> Result<Part, String> {
         // A current source drives its current from n to p through itself (out of p).
         "DCCurrent" => pt.prims.push(Prim::FSrc { a: 0, b: 1, u: None, v: num(p, "I")? }),
         "CurrentSource" => pt.prims.push(Prim::FSrc { a: 0, b: 1, u: Some(0), v: 1.0 }),
-        "IdealSwitch" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Switch { ron: pos(p, "Ron")?, goff: num(p, "Goff")?.max(0.0), u: 0 }, mode: 0 }),
+        "IdealSwitch" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Switch { ron: pos(p, "Ron")?, goff: num(p, "Goff")?.max(0.0), u: 0 }, mode: 0, heat: 2 }),
         "Diode" => {
             let (ron, goff, vf) = (pos(p, "Ron")?, num(p, "Goff")?.max(0.0), num(p, "Vf")?);
             if p.txt("model") == "smooth" {
-                pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::SoftDiode { ron, goff, vf, s: pos(p, "s")? }, mode: 0 });
+                pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::SoftDiode { ron, goff, vf, s: pos(p, "s")? }, mode: 0, heat: 2 });
             } else {
-                pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Diode { ron, goff, vf }, mode: 0 });
+                pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Diode { ron, goff, vf }, mode: 0, heat: 2 });
                 pt.nmodes = 1;
             }
         }
@@ -803,6 +811,31 @@ pub fn part(kind: &str, p: &crate::rt::Pv, name: &str) -> Result<Part, String> {
         }
         "VoltageSensor" => pt.prims.push(Prim::MeasA { a: 0, b: 1, y: 0, x: None, yx: 0 }),
         "CurrentSensor" => {
+            pt.prims.push(Prim::MeasF { a: 0, b: 1, y: 0, j: 0 });
+            pt.nj = 1;
+        }
+        // ---- thermal: temperature T in °C (the reference is 0 °C) and heat flow Q in W.
+        "HeatCapacity" => pt.prims.push(Prim::Cap { n: 0, c: pos(p, "C")?, init: Some(num(p, "T0")?) }),
+        "Conduction" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Lin(pos(p, "G")?), mode: 0, heat: GROUND }),
+        "Convection" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Lin(pos(p, "h")? * pos(p, "A")?), mode: 0, heat: GROUND }),
+        "Radiation" => {
+            let (eps, area) = (num(p, "eps")?, pos(p, "A")?);
+            if !(eps > 0.0 && eps <= 1.0) {
+                return Err("the emissivity must be in (0, 1]".into());
+            }
+            pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Rad(eps * 5.670374419e-8 * area), mode: 0, heat: GROUND });
+        }
+        "FixedTemp" => {
+            pt.prims.push(Prim::ASrc { a: 0, b: GROUND, u: None, v: num(p, "T")?, j: 0 });
+            pt.nj = 1;
+        }
+        "TempSource" => {
+            pt.prims.push(Prim::ASrc { a: 0, b: GROUND, u: Some(0), v: 1.0, j: 0 });
+            pt.nj = 1;
+        }
+        "HeatFlowSource" => pt.prims.push(Prim::FSrc { a: 0, b: GROUND, u: Some(0), v: 1.0 }),
+        "TempSensor" => pt.prims.push(Prim::MeasA { a: 0, b: GROUND, y: 0, x: None, yx: 0 }),
+        "HeatFlowSensor" => {
             pt.prims.push(Prim::MeasF { a: 0, b: 1, y: 0, j: 0 });
             pt.nj = 1;
         }
@@ -920,9 +953,10 @@ pub fn build(plan: &Plan, kinds: &[&str], names: &[&str], pvs: &[&crate::rt::Pv]
                 Prim::Cap { n, .. } => *n = map(*n),
                 Prim::CapF { a, b, x, j, .. } => { *a = map(*a); *b = map(*b); *x += nx; *j += nj; }
                 Prim::Ind { a, b, x, .. } => { *a = map(*a); *b = map(*b); *x += nx; }
-                Prim::Res { a, b, law, mode } => {
+                Prim::Res { a, b, law, mode, heat } => {
                     *a = map(*a);
                     *b = map(*b);
+                    *heat = map(*heat);
                     *mode += nm;
                     match law {
                         Law::Switch { u, .. } | Law::Valve { u, .. } => *u += nu,

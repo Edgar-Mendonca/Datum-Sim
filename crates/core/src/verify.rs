@@ -545,6 +545,79 @@ mod tests {
     }
 
 
+    /// Thermal parts and heat ports (0.5.4): a body cooling through a conductance to ambient
+    /// (closed form); a resistor heating a body by its R·i² loss (energy balance, then the
+    /// steady temperature with convection); radiation's steady state against its T⁴ law.
+    #[test]
+    fn thermal_parts() {
+        // C = 100 J/K at 100 °C, G = 2 W/K to 20 °C: T = 20 + 80·e^{−t/50}.
+        let mut m = Mk::new(100.0, "rk45");
+        m.d.m.sim.rtol = 1e-10;
+        m.d.m.sim.atol = 1e-12;
+        let c = m.add("HeatCapacity", &[("C", "100"), ("T0", "100")]);
+        let g = m.add("Conduction", &[("G", "2")]);
+        let a = m.add("FixedTemp", &[("T", "20")]);
+        let th = m.add("TempSensor", &[]);
+        let sc = m.add("Scope", &[]);
+        m.link(c, 0, g, 0);
+        m.link(g, 1, a, 0);
+        m.link(th, 0, c, 0);
+        m.wire(th, 0, sc, 0);
+        let r = m.run();
+        let e = max_err(&r, 0, |t| 20.0 + 80.0 * (-t / 50.0).exp());
+        assert!(e < 1e-6, "cooling {e}");
+        // 10 V across 10 Ω: 10 W into C = 50 J/K: +0.2 K/s while insulated.
+        let mut m = Mk::new(5.0, "rk45");
+        m.d.m.sim.rtol = 1e-10;
+        let v = m.add("DCVoltage", &[("V", "10")]);
+        let rr = m.add("Resistor", &[("R", "10")]);
+        let gnd = m.add("Ground", &[]);
+        let c = m.add("HeatCapacity", &[("C", "50"), ("T0", "20")]);
+        let th = m.add("TempSensor", &[]);
+        let sc = m.add("Scope", &[]);
+        m.link(v, 0, rr, 0);
+        m.link(rr, 1, gnd, 0);
+        m.link(v, 1, gnd, 0);
+        m.link(rr, 2, c, 0);
+        m.link(th, 0, c, 0);
+        m.wire(th, 0, sc, 0);
+        let r = m.run();
+        let e = max_err(&r, 0, |t| 20.0 + 0.2 * t);
+        assert!(e < 1e-8, "I²R heating {e}");
+        // The resistor's ports: p on the left, n on the right, heat on the bottom edge.
+        let blk = m.d.m.block(rr).unwrap().clone();
+        let xy = crate::blocks::phys_xy(&blk);
+        assert!(xy[0].0 == blk.x && xy[1].0 == blk.x + blk.w && xy[2].1 == blk.y + blk.h, "{xy:?}");
+        // With convection h·A = 0.5 W/K to 25 °C, it settles at 25 + 10/0.5 = 45 °C.
+        let cv = m.add("Convection", &[("h", "50"), ("A", "0.01")]);
+        let a = m.add("FixedTemp", &[("T", "25")]);
+        m.link(cv, 0, c, 0);
+        m.link(cv, 1, a, 0);
+        m.d.m.sim.stop = 2000.0;
+        let r = m.run();
+        assert!((last(&r, 0) - 45.0).abs() < 1e-6, "steady {}", last(&r, 0));
+        // Radiation: 100 W into a small body, ε = 1, A = 1 m², to 20 °C surroundings.
+        let mut m = Mk::new(60.0, "rk45");
+        m.d.m.sim.rtol = 1e-10;
+        m.d.m.sim.atol = 1e-12;
+        let q = m.add("Constant", &[("value", "100")]);
+        let hs = m.add("HeatFlowSource", &[]);
+        let c = m.add("HeatCapacity", &[("C", "10"), ("T0", "20")]);
+        let rd = m.add("Radiation", &[("eps", "1"), ("A", "1")]);
+        let a = m.add("FixedTemp", &[("T", "20")]);
+        let th = m.add("TempSensor", &[]);
+        let sc = m.add("Scope", &[]);
+        m.wire(q, 0, hs, 0);
+        m.link(hs, 0, c, 0);
+        m.link(c, 0, rd, 0);
+        m.link(rd, 1, a, 0);
+        m.link(th, 0, c, 0);
+        m.wire(th, 0, sc, 0);
+        let r = m.run();
+        let want = (293.15f64.powi(4) + 100.0 / 5.670374419e-8).powf(0.25) - 273.15;
+        assert!((last(&r, 0) - want).abs() < 1e-6, "radiation {} vs {want}", last(&r, 0));
+    }
+
     /// Pulse and square-wave edges at a high frequency with a variable-step solver (0.5.3 bug:
     /// an edge reached a rounding error early held the old level through the next step, and a
     /// 10 kHz pulse train lost about one pulse in three). The mean of a 50 % pulse over 300
