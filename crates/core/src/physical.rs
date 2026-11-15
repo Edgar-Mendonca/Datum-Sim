@@ -376,12 +376,14 @@ impl Network {
             let e = self.potentials(x, &z);
             return Sol { e, j: vec![], ok: true };
         }
-        let norm = |r: &[f64]| r.iter().fold(0.0f64, |a, v| a.max(v.abs()));
+        // Converged when every unknown's Newton step is tiny against its own size: unknowns of
+        // very different scales (pressures of 1e7 Pa beside flows of 1e-4 m³/s) each meet
+        // their own tolerance (0.5.6 bug: one tolerance from the largest let flows stay wrong).
         let (mut r, _, _) = self.residual(t, x, &z, u, modes);
         let mut ok = false;
-        for _ in 0..50 {
-            let scale = 1.0 + z.iter().fold(0.0f64, |a, v| a.max(v.abs()));
-            if norm(&r) <= 1e-11 * scale {
+        let mut last = f64::INFINITY;
+        for it in 0..50 {
+            if r.iter().all(|v| *v == 0.0) || (it > 0 && last <= 1e-12) {
                 ok = true;
                 break;
             }
@@ -398,14 +400,18 @@ impl Network {
             let Some(lu) = crate::linalg::Lu::new(jac, n) else { break };
             let mut d: Vec<f64> = r.iter().map(|v| -v).collect();
             lu.solve(&mut d);
+            // The largest step relative to each unknown (with a floor of 1e-9 of the largest
+            // unknown, for those near zero).
+            let big = z.iter().zip(&d).fold(0.0f64, |a, (zv, dv)| a.max(zv.abs()).max((zv + dv).abs()));
+            last = 0.0;
             for c in 0..n {
                 z[c] += d[c];
+                last = last.max(d[c].abs() / (z[c].abs() + 1e-9 * big + 1e-300));
             }
             r = self.residual(t, x, &z, u, modes).0;
         }
         if !ok {
-            let scale = 1.0 + z.iter().fold(0.0f64, |a, v| a.max(v.abs()));
-            ok = norm(&r) <= 1e-8 * scale;
+            ok = last <= 1e-8;
         }
         let e = self.potentials(x, &z);
         Sol { e, j: z[self.nz..].to_vec(), ok }
@@ -660,6 +666,11 @@ pub fn ports_of(kind: &str) -> Option<&'static [PortSpec]> {
         "DCMachine" => &[("p", Elec, false), ("n", Elec, false), ("flange", Rot, false), ("case", Rot, true), ("heat", Therm, true)],
         "PMSMdq" => &[("d+", Elec, false), ("d−", Elec, true), ("q+", Elec, false), ("q−", Elec, true), ("flange", Rot, false), ("case", Rot, true), ("heat", Therm, true)],
         "JointFlange" => &[("flange", Rot, false)],
+        // Hydraulic (0.5.6): pressure p (Pa, gauge) and volume flow q (m³/s).
+        "Tank" | "FluidVolume" | "Accumulator" | "PressureSensor" => &[("port", Hyd, false)],
+        "Orifice" | "Valve" | "Pipe" | "ReliefValve" | "FlowSensor" => &[("a", Hyd, false), ("b", Hyd, false)],
+        "Pump" => &[("in", Hyd, false), ("out", Hyd, false), ("shaft", Rot, false), ("case", Rot, true)],
+        "Cylinder" => &[("A", Hyd, false), ("B", Hyd, false), ("rod", Trans, false), ("case", Trans, true)],
         // Thermal (0.5.4): temperature T (°C) and heat flow Q.
         "HeatCapacity" | "FixedTemp" | "TempSource" | "HeatFlowSource" | "TempSensor" => &[("port", Therm, false)],
         "Conduction" | "Convection" | "Radiation" | "HeatFlowSensor" => &[("a", Therm, false), ("b", Therm, false)],
@@ -692,13 +703,19 @@ fn pos(p: &crate::rt::Pv, k: &str) -> Result<f64, String> {
     if v > 0.0 { Ok(v) } else { Err(format!("{k} must be positive")) }
 }
 
+/// A sharp-edged orifice's coefficient: q = Cd·A·√(2·Δp/ρ) = k·√Δp.
+fn orifice_k(p: &crate::rt::Pv, area: &str) -> Result<f64, String> {
+    Ok(pos(p, "Cd")? * pos(p, area)? * (2.0 / pos(p, "rho")?).sqrt())
+}
+
 /// The signal ports of a part kind: (inputs, outputs).
 pub fn signals_of(kind: &str) -> (usize, usize) {
     match kind {
-        "TorqueSource" | "SpeedSource" | "ForceSource" | "VelocitySource" | "VoltageSource" | "CurrentSource" | "IdealSwitch" | "TempSource" | "HeatFlowSource" => (1, 0),
+        "TorqueSource" | "SpeedSource" | "ForceSource" | "VelocitySource" | "VoltageSource" | "CurrentSource" | "IdealSwitch" | "TempSource" | "HeatFlowSource" | "Valve" => (1, 0),
         "RotSensor" | "PosSensor" | "PMSMdq" => (0, 2),
         "JointFlange" => (1, 1),
-        "TorqueSensor" | "ForceSensor" | "VoltageSensor" | "CurrentSensor" | "TempSensor" | "HeatFlowSensor" => (0, 1),
+        "TorqueSensor" | "ForceSensor" | "VoltageSensor" | "CurrentSensor" | "TempSensor" | "HeatFlowSensor" | "PressureSensor" | "FlowSensor" => (0, 1),
+        "Cylinder" => (0, 1),
         _ => (0, 0),
     }
 }
@@ -903,6 +920,57 @@ pub fn part(kind: &str, p: &crate::rt::Pv, name: &str) -> Result<Part, String> {
             pt.xs.push(0.0);
             pt.prims.push(Prim::Res { a: 2, b: 1, law: Law::Lin(num(p, "d")?), mode: 0, heat: GROUND });
             pt.nj = 2;
+        }
+        // ---- hydraulic: gauge pressure p (Pa) and volume flow q (m³/s); oil is incompressible
+        // except in volumes, where the bulk modulus gives each a capacitance V/β.
+        "Tank" => {
+            pt.prims.push(Prim::ASrc { a: 0, b: GROUND, u: None, v: num(p, "p")?, j: 0 });
+            pt.nj = 1;
+        }
+        "FluidVolume" => pt.prims.push(Prim::Cap { n: 0, c: pos(p, "V")? / pos(p, "beta")?, init: Some(num(p, "p0")?) }),
+        // A gas-charged accumulator, linearised about its precharge (isothermal: C = V/p).
+        "Accumulator" => {
+            let p0 = pos(p, "p0")?;
+            pt.prims.push(Prim::Cap { n: 0, c: pos(p, "V")? / p0, init: Some(p0) });
+        }
+        "Orifice" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Orifice { k: orifice_k(p, "A")?, d: pos(p, "pcr")? }, mode: 0, heat: GROUND }),
+        "Valve" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Valve { k: orifice_k(p, "Amax")?, d: pos(p, "pcr")?, u: 0 }, mode: 0, heat: GROUND }),
+        // Laminar flow in a round pipe: q = Δp·π·d⁴/(128·μ·L).
+        "Pipe" => {
+            let (l, d, mu) = (pos(p, "L")?, pos(p, "d")?, pos(p, "mu")?);
+            pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Lin(std::f64::consts::PI * d.powi(4) / (128.0 * mu * l)), mode: 0, heat: GROUND });
+        }
+        "ReliefValve" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Relief { pset: num(p, "pset")?, g: pos(p, "g")? }, mode: 0, heat: GROUND }),
+        // A fixed-displacement pump: q = D·ω from in to out; the shaft carries D·Δp; leakage
+        // back from out to in.
+        "Pump" => {
+            let dd = pos(p, "D")? / std::f64::consts::TAU;
+            pt.prims.push(Prim::Gyr { a: 0, b: 1, c: 2, d: 3, k: dd });
+            pt.prims.push(Prim::Res { a: 1, b: 0, law: Law::Lin(num(p, "leak")?.max(0.0)), mode: 0, heat: GROUND });
+        }
+        // A double-acting cylinder: chamber A pushes the rod out (area Aa), chamber B pulls it
+        // in (area Ab); each chamber (internal nodes 4 and 5) has a dead volume (capacitance
+        // V0/β) and joins its port through the port's small restriction, so a port may go
+        // straight to a tank; end stops at 0 and the stroke. Signal output: the rod's position.
+        "Cylinder" => {
+            let (aa, ab, c0) = (pos(p, "Aa")?, pos(p, "Ab")?, pos(p, "V0")? / pos(p, "beta")?);
+            let (stroke, gp) = (pos(p, "stroke")?, pos(p, "gport")?);
+            pt.internal = 2;
+            pt.prims.push(Prim::Res { a: 0, b: 4, law: Law::Lin(gp), mode: 0, heat: GROUND });
+            pt.prims.push(Prim::Res { a: 1, b: 5, law: Law::Lin(gp), mode: 0, heat: GROUND });
+            pt.prims.push(Prim::Gyr { a: 4, b: GROUND, c: 2, d: 3, k: aa });
+            pt.prims.push(Prim::Gyr { a: 5, b: GROUND, c: 2, d: 3, k: -ab });
+            pt.prims.push(Prim::Cap { n: 4, c: c0, init: Some(0.0) });
+            pt.prims.push(Prim::Cap { n: 5, c: c0, init: Some(0.0) });
+            pt.prims.push(Prim::Stop { a: 2, k: pos(p, "kstop")?, c: num(p, "dstop")?.max(0.0), lo: 0.0, hi: stroke, x: 0 });
+            pt.prims.push(Prim::MeasA { a: 2, b: GROUND, y: 0, x: Some(1), yx: 0 });
+            let x0 = num(p, "x0")?;
+            pt.xs.extend([x0, x0]);
+        }
+        "PressureSensor" => pt.prims.push(Prim::MeasA { a: 0, b: GROUND, y: 0, x: None, yx: 0 }),
+        "FlowSensor" => {
+            pt.prims.push(Prim::MeasF { a: 0, b: 1, y: 0, j: 0 });
+            pt.nj = 1;
         }
         k => return Err(format!("'{k}' is not a physical part")),
     }

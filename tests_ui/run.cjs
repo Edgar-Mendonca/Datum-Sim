@@ -91,13 +91,15 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   const nports = fix.diagram.blocks.reduce((a, b) => a + b.ins.length + b.outs.length, 0);
   check("every port is drawn", (await p.$$(".port")).length === nports);
   check("ribbon tabs", JSON.stringify(await p.$$eval(".tabs > button:not(.file)", els => els.map(e => e.textContent))) === JSON.stringify(["Model", "Simulate", "Analyze", "Control", "Modules", "View", "Help"]));
-  check("library lists categories with planned blocks dimmed", (await p.$$(".libc")).length >= 8 && (await p.$$(".libi.off")).length >= 3);
+  check("library lists categories with planned blocks dimmed", (await p.$$(".libc")).length >= 8 && (await p.$$(".libi.off")).length >= 2);
   // 0.5.2: the translational parts are in the library, ready to use (not dimmed).
   check("the library has the translational parts", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("Translational") && t.includes("Rack and pinion") && t.includes("Hard stop"); }) && fix.library.blocks.filter(b => b.cat === "Translational" && !b.planned).length === 12);
   // 0.5.3: the electrical parts.
   check("the library has the electrical parts", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("Electrical") && t.includes("Diode") && t.includes("Op-amp") && t.includes("Ideal transformer"); }) && fix.library.blocks.filter(b => b.cat === "Electrical" && !b.planned).length === 14);
   // 0.5.4: the thermal parts.
   check("the library has the thermal parts", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("Thermal") && t.includes("Heat capacity") && t.includes("Radiation"); }) && fix.library.blocks.filter(b => b.cat === "Thermal" && !b.planned).length === 9);
+  // 0.5.6: the hydraulic parts; no "coming" group is left.
+  check("the library has the hydraulic parts", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("Hydraulic") && t.includes("Cylinder") && t.includes("Relief valve") && !t.includes("Physical (coming)"); }) && fix.library.blocks.filter(b => b.cat === "Hydraulic" && !b.planned).length === 11);
   // 0.5.5: motors with physical ports, and the robot joint flange.
   check("the library has the motors on ports", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("DC motor (physical)") && t.includes("PMSM d–q (physical)") && t.includes("Joint flange"); }));
 

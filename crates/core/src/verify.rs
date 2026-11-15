@@ -730,6 +730,91 @@ mod tests {
         assert!(m.d.m.root.wires.iter().any(|w| w.phys && w.to == (jf, 0)) && m.d.m.root.wires.iter().any(|w| !w.phys && w.to == (jf, 0)));
     }
 
+    /// Hydraulic parts (0.5.6): a pump at a fixed speed moves a cylinder at q/A; an orifice
+    /// between two pressures passes its law's flow; a relief valve holds its set pressure plus
+    /// q/g; the pump's shaft carries D·Δp/2π.
+    #[test]
+    fn hydraulic_parts() {
+        // A pump at 100 rad/s, D = 10 cm³/rev: q = 1e-5·100/2π. Chamber A of a cylinder
+        // (Aa = 1e-3 m²) pushes a 50 kg rod against a damper; B drains to the tank.
+        let mut m = Mk::new(0.5, "stiff");
+        m.d.m.sim.rtol = 1e-8;
+        let w = m.add("Constant", &[("value", "100")]);
+        let ss = m.add("SpeedSource", &[]);
+        let pu = m.add("Pump", &[]);
+        let tk = m.add("Tank", &[]);
+        let cy = m.add("Cylinder", &[]);
+        let ms = m.add("Mass", &[("m", "50")]);
+        let dm = m.add("TransDamper", &[("d", "1e5")]);
+        let ts = m.add("TorqueSensor", &[]);
+        let ps = m.add("PressureSensor", &[]);
+        let vs = m.add("PosSensor", &[]);
+        let sc = m.add("Scope", &[("n", "4")]);
+        m.wire(w, 0, ss, 0);
+        m.link(ss, 0, ts, 0);
+        m.link(ts, 1, pu, 2);
+        m.link(pu, 0, tk, 0);
+        m.link(pu, 1, cy, 0);
+        m.link(cy, 1, tk, 0);
+        m.link(cy, 2, ms, 0);
+        m.link(dm, 0, ms, 0);
+        m.link(ps, 0, cy, 0);
+        m.link(vs, 0, ms, 0);
+        m.wire(vs, 0, sc, 0);
+        m.wire(cy, 0, sc, 1);
+        m.wire(ps, 0, sc, 2);
+        m.wire(ts, 0, sc, 3);
+        let r = m.run();
+        let q = 1e-5 * 100.0 / std::f64::consts::TAU;
+        let v = q / 1e-3;
+        assert!((last(&r, 0) - v).abs() < 1e-6 * v.max(1.0), "rod speed {} vs {v}", last(&r, 0));
+        // The force needed is d·v, so the chamber holds d·v/Aa, and the port adds q/g.
+        let pa = 1e5 * v / 1e-3 + q / 1e-7;
+        assert!((last(&r, 2) - pa).abs() < 1e-4 * pa, "pressure {} vs {pa}", last(&r, 2));
+        let tq = 1e-5 * pa / std::f64::consts::TAU;
+        assert!((last(&r, 3) - tq).abs() < 1e-4 * tq, "shaft torque {} vs {tq}", last(&r, 3));
+        // The rod moved v·t from 0.1 m.
+        assert!(last(&r, 1) > 0.1 && last(&r, 1) < 0.1 + v * 0.5 + 1e-6, "position {}", last(&r, 1));
+        // An orifice between 10 bar and the tank.
+        let mut m = Mk::new(0.01, "rk45");
+        let hp = m.add("Tank", &[("p", "1e6")]);
+        let or = m.add("Orifice", &[]);
+        let fs = m.add("FlowSensor", &[]);
+        let tk = m.add("Tank", &[]);
+        let sc = m.add("Scope", &[]);
+        m.link(hp, 0, or, 0);
+        m.link(or, 1, fs, 0);
+        m.link(fs, 1, tk, 0);
+        m.wire(fs, 0, sc, 0);
+        let r = m.run();
+        let k = 0.7 * 1e-5 * (2.0f64 / 870.0).sqrt();
+        let want = k * 1e6 / (1e6f64 + 1000.0).sqrt();
+        assert!((last(&r, 0) - want).abs() < 1e-12, "orifice {} vs {want}", last(&r, 0));
+        assert!((want - k * 1e3).abs() < 1e-3 * want, "close to the turbulent law");
+        // A pump into a closed volume with a relief valve to the tank: p = pset + q/g.
+        let mut m = Mk::new(1.0, "stiff");
+        m.d.m.sim.rtol = 1e-8;
+        let w = m.add("Constant", &[("value", "100")]);
+        let ss = m.add("SpeedSource", &[]);
+        let pu = m.add("Pump", &[]);
+        let tk = m.add("Tank", &[]);
+        let vol = m.add("FluidVolume", &[("V", "1e-4")]);
+        let rv = m.add("ReliefValve", &[("pset", "1e7"), ("g", "1e-9")]);
+        let ps = m.add("PressureSensor", &[]);
+        let sc = m.add("Scope", &[]);
+        m.wire(w, 0, ss, 0);
+        m.link(ss, 0, pu, 2);
+        m.link(pu, 0, tk, 0);
+        m.link(pu, 1, vol, 0);
+        m.link(rv, 0, vol, 0);
+        m.link(rv, 1, tk, 0);
+        m.link(ps, 0, vol, 0);
+        m.wire(ps, 0, sc, 0);
+        let r = m.run();
+        let want = 1e7 + q / 1e-9;
+        assert!((last(&r, 0) - want).abs() < 1e-6 * want, "relief {} vs {want}", last(&r, 0));
+    }
+
     /// Pulse and square-wave edges at a high frequency with a variable-step solver (0.5.3 bug:
     /// an edge reached a rounding error early held the old level through the next step, and a
     /// 10 kHz pulse train lost about one pulse in three). The mean of a 50 % pulse over 300

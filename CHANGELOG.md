@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.6 — 2026-11-15
+
+Physical parts, step 6: **hydraulics**.
+
+- **New parts** (Library › Hydraulic):
+  - tank, pump (fixed displacement, with leakage), orifice, valve driven by a signal, and pipe (laminar);
+  - fluid volume (the oil's compliance, from its bulk modulus) and accumulator;
+  - a **double-acting cylinder** with end stops;
+  - a **relief valve**, and pressure and flow sensors.
+- Pressures are gauge pressures in Pa (1 bar = 10⁵ Pa).
+- Checked against known answers:
+  - a pump moving a cylinder at q/A, with the chamber pressure and the pump's shaft torque D·Δp/2π;
+  - an orifice against its flow law;
+  - a relief valve holding its set pressure.
+
+**Fixed:** a physical network whose unknowns have very different sizes could stop solving too early. With pressures of 10⁷ Pa beside flows of 10⁻⁴ m³/s, a flow error went unnoticed (a cylinder ran 36 % slow). Each unknown now meets its own tolerance, and such runs are also much faster (1 565 steps instead of 358 305 in the test).
+
+Next: examples (0.5.7).
+
 ## 0.5.5 — 2026-11-15
 
 Physical parts, step 5: **motors on ports**.

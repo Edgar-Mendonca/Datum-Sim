@@ -24,7 +24,6 @@ export const FEATS: Feat[] = [
   f("r-arc", "modules", "Robotics", "later", "Arc Tool Paths", "solver", "Tool paths along arcs and with orientation changes."),
 
   // ---- Stage C: physical components (0.4.x → 0.5.0)
-  f("phys-hyd", "modules", "Physical", "0.5.6", "Hydraulics", "block", "Pump, valve, cylinder and pipe."),
 
   // ---- Stage S: scripting, the Datum way (0.6.x → 0.7.0)
   f("console", "analyze", "Scripting", "0.6.1", "Python Console", "py", "Type Python beside the diagram: the open model is ready as `model` (variables, run, results as arrays), with the control commands tf, step, bode and lqr.", [{ k: "text", l: ">>>", v: "model.vars['Kp'] = 3; r = model.run()" }]),
