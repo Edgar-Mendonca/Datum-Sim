@@ -1,6 +1,6 @@
 # Plan 0.6: physical components (stage C, 0.5.1 → 0.6.0)
 
-Written 2026-11-11 (session 9), after robotics (0.5.0). Status: **agreed (the defaults in §8), being built**. 0.5.1 is done.
+Written 2026-11-11 (session 9), after robotics (0.5.0). Status: **built** (0.5.1 → 0.6.0, 2026-11-11 to 2026-11-15, the defaults in §8). Record: `docs/verification/2026-11-15-physical.md`.
 
 ## 1. What changes for the user
 

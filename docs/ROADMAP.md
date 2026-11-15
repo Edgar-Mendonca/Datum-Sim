@@ -6,17 +6,16 @@ First written 2026-11-07 after the comparison (`docs/COMPARISON.md`); **rewritte
 - a new ease-of-use stage (U);
 - the later stages renumbered.
 
-## 1. Where we are (0.5.1)
+## 1. Where we are (0.6.0)
 
-- **Done:**
+- **Done (0.6.0, 2026-11-15):**
   - the basics (editor, solvers, scopes, 14 motor types);
   - stage A, control design (0.3.0);
   - stage B, drives in depth (0.4.0);
   - stage R, robotics (0.5.0);
-  - the first step of stage C (0.5.1, physical networks and rotational parts).
+  - stage C, physical parts (0.6.0): rotational, translational, electrical, thermal and hydraulic parts, motors on ports, six examples.
 - **Strong:** a first result in minutes; control design built in; motors and drives; robot arms; public verification; scripting from outside (command line and Python API).
 - **Weak:**
-  - physical parts beyond rotational;
   - no scripting inside the window;
   - **the app is hard to find your way around** (the user, 2026-11-15);
   - no FMU exchange or state machines;
@@ -47,8 +46,8 @@ First written 2026-11-07 after the comparison (`docs/COMPARISON.md`); **rewritte
 | A | 0.2.2 → 0.3.0 | Control design: analysis points, linearisation, Nyquist, root locus, trim, PID and drive tuning, live tuning, buses, algebraic loops | ✅ |
 | B | 0.3.1 → 0.4.0 | Drives in depth: FFT/THD, SVPWM, dead time, losses, thermal, saturation, nameplate, robot arm module | ✅ |
 | R | 0.4.1 → 0.5.0 | Robotics: any arm, URDF, 3D view, IK, controllers, gripper, scheduler, pick and place | ✅ |
-| **C** | 0.5.1 → 0.6.0 | **Physical parts** | **now** (0.5.1 done) |
-| **S** | 0.6.1 → 0.7.0 | **Scripting, the Datum way** | next |
+| C | 0.5.1 → 0.6.0 | Physical parts: rotational, translational, electrical, thermal, motors on ports, hydraulics, examples | ✅ |
+| **S** | 0.6.1 → 0.7.0 | **Scripting, the Datum way** | **next** |
 | **U** | 0.7.1 → 0.8.0 | **Easy to find your way** | then |
 | D | 0.8.1 → 0.9.0 | Exchange with other tools | later |
 | E | 0.9.1 → 0.10.0 | Studies and logic | later |
@@ -60,13 +59,13 @@ Draw parts as they are built; the app writes the equations. Plan: `docs/PLAN-0.6
 | Release | What it adds |
 | --- | --- |
 | 0.5.1 ✅ | The network engine; physical ports and connections in the editor; **rotational** parts |
-| 0.5.2 | **Translational** parts; rack and pinion, lead screw |
-| 0.5.3 | **Electrical** parts with ideal switches and diodes |
-| 0.5.4 | **Thermal** parts and heat ports |
-| 0.5.5 | **Motors on ports** (DC, PMSM) and robot joints with rotational ports |
-| 0.5.6 | **Hydraulics** |
-| 0.5.7 | **Examples**: H-bridge motor and gearbox, buck converter, motor heating, hydraulic press, robot joint |
-| **0.6.0** | **Milestone**: verification record, docs |
+| 0.5.2 ✅ | **Translational** parts; rack and pinion, lead screw |
+| 0.5.3 ✅ | **Electrical** parts with ideal switches and diodes |
+| 0.5.4 ✅ | **Thermal** parts and heat ports |
+| 0.5.5 ✅ | **Motors on ports** (DC, PMSM) and robot joints with rotational ports |
+| 0.5.6 ✅ | **Hydraulics** |
+| 0.5.7 ✅ | **Examples**: H-bridge motor and gearbox, buck converter, motor heating, hydraulic press, robot joint |
+| **0.6.0** ✅ | **Milestone**: verification record (`docs/verification/2026-11-15-physical.md`), docs |
 
 ### Stage S: scripting, the Datum way (0.6.1 → 0.7.0)
 Python for those who want it, inside the window, on the Python already bundled. Plan: `docs/PLAN-script.md`.
@@ -124,7 +123,7 @@ Production code generation, hardware in the loop and real-time targets, certific
 
 ## 5. Size and pace
 - Each patch is one focused piece. If one turns out larger, it is split rather than shipped late.
-- Stage C has 6 patches left plus its milestone. Stage S has 5 patches plus its milestone. Stage U is sized by its plan.
+- Stage S has 5 patches plus its milestone. Stage U is sized by its plan.
 
 ## 6. Decisions (2026-11-15)
 The user agreed:

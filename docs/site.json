@@ -7,7 +7,7 @@
   "for": "Control, mechanical, electrical, process and mechatronics engineers, researchers and students.",
   "about": [
     "Datum Sim models and simulates dynamic systems. You draw the system as blocks and wires: sources, transfer functions, state space, continuous and discrete PID controllers, lookup tables, and a motor library with DC, induction, synchronous, switched reluctance, BLDC and stepper motors, inverters, losses, thermal networks and transforms, and a robot arm module. Group blocks into subsystems, give them parameters of their own with a mask, and keep them in your own library. Then press Run and watch the signals on live scopes.",
-    "Five solvers cover everything from simple fixed-step runs to stiff systems; the variable-step solvers find switching times exactly. Discrete controllers run at their own sample times, and the diagram can colour every block by its rate. Motors come with typical values for low, medium and high voltage ratings. Scopes have measuring cursors, step-response marks and comparison of earlier runs, and a probe reads any wire after a run. Models also run from the command line and from Python, for scripts, batch studies and build servers. For control design the engine linearises the whole model between points you mark on wires: loop Bode plots with gain and phase margins, Nyquist, root locus, sensitivity and closed-loop responses. It finds operating points, tunes a PID with two sliders (speed and robustness) or a whole motor drive from the motor's data, and lets you move variables on sliders while the model runs, in real time if you like. Buses carry named signals, and loops without a state are solved. Parameter sweeps run in the app's own engine, and the solvers, main blocks, motors and analyses are checked against known answers. Robot arms with any number of joints, or loaded from URDF files, move in a 3D view, with inverse kinematics, model-based controllers, a gripper and a task scheduler for pick and place."
+    "Five solvers cover everything from simple fixed-step runs to stiff systems; the variable-step solvers find switching times exactly. Discrete controllers run at their own sample times, and the diagram can colour every block by its rate. Motors come with typical values for low, medium and high voltage ratings. Scopes have measuring cursors, step-response marks and comparison of earlier runs, and a probe reads any wire after a run. Models also run from the command line and from Python, for scripts, batch studies and build servers. For control design the engine linearises the whole model between points you mark on wires: loop Bode plots with gain and phase margins, Nyquist, root locus, sensitivity and closed-loop responses. It finds operating points, tunes a PID with two sliders (speed and robustness) or a whole motor drive from the motor's data, and lets you move variables on sliders while the model runs, in real time if you like. Buses carry named signals, and loops without a state are solved. Parameter sweeps run in the app's own engine, and the solvers, main blocks, motors and analyses are checked against known answers. Robot arms with any number of joints, or loaded from URDF files, move in a 3D view, with inverse kinematics, model-based controllers, a gripper and a task scheduler for pick and place. Physical parts are drawn as they are built and joined by ports, in mechanics, electrical circuits, heat and hydraulics, and the app writes their equations; motors and robot joints connect to them."
   ],
   "steps": [
     {
@@ -31,10 +31,11 @@
     "Drives in depth: spectrum and THD, space-vector PWM and dead time, inverter losses with junction temperature, induction-machine saturation and iron loss, and machine parameters from the nameplate",
     "A robot arm module: a two-link arm, smooth joint trajectories, computed-torque control, inverse kinematics and an animated view",
     "Robotics: arms with any number of joints, a 6-joint and a 7-joint arm, robots from URDF files, a 3D view, inverse kinematics, controllers, joint motors, a gripper with a payload, a task scheduler and pick-and-place examples",
+    "Physical parts drawn as they are built and joined by ports: inertias, gears, springs and friction; masses and end stops; resistors, capacitors, inductors, switches, diodes, transformers and op-amps; heat capacities, conduction, convection and radiation; pumps, valves, cylinders and relief valves. Motors on ports, and heat ports that pass losses to thermal networks",
     "Scopes with two measuring cursors, step-response marks, comparison of the last five runs, stacked plots, and PNG or SVG pictures",
     "A signal probe: hover any wire after a run to read its value",
     "Wires that route themselves: move segments, branch from a wire, name signals; notes, block colours and Find on the diagram",
-    "84 blocks: sources, math, transfer functions, state space, PID, delays, discontinuities, lookup tables, discrete control, motors and drives",
+    "164 blocks: sources, math, transfer functions, state space, PID, delays, discontinuities, lookup tables, discrete control, motors, drives, robot arms and physical parts",
     "Discrete control: discrete transfer function, state space, integrator and PID, rate transition, and sample-time colours on the diagram",
     "Motor library: DC (separately excited, shunt, series, compound), induction (squirrel-cage, double-cage, wound-rotor), synchronous (permanent-magnet, reluctance, wound-field with dampers), switched reluctance, BLDC and stepper",
     "Typical ratings for low, medium and high voltage motors, filled in with one choice",
@@ -91,12 +92,11 @@
     {
       "v": "0.5.x → 0.6",
       "title": "Physical components",
-      "when": "Now (0.5.1)",
+      "when": "Done (0.6.0)",
       "items": [
-        "Rotational parts connected by ports: inertia, spring, damper, gear, friction, backlash, sources and sensors (0.5.1)",
-        "Translational, electrical, thermal and hydraulic parts",
-        "Motors connected to electrical and mechanical networks",
-        "Examples: a motor and gearbox from an H-bridge, a buck converter, a hydraulic press"
+        "Parts connected by ports: rotational and translational mechanics, electrical circuits with ideal switches and diodes, thermal parts with heat ports, and hydraulics",
+        "Physical DC and PMSM motors, and robot joints with physical drives",
+        "Examples: an H-bridge motor drive, a buck converter, a motor heating up, a hydraulic press, a robot joint"
       ]
     },
     {

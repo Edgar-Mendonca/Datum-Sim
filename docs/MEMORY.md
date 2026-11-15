@@ -42,6 +42,7 @@
 | `crates/core/src/blocks.rs` | The block library: names, categories, parameters with units and hints, help text, sizes, ports, port names and positions, labels, typical ratings (from `motors.rs`); planned blocks |
 | `crates/core/src/rt.rs` | How each block runs (about 45 kinds, including the DC motor and the d–q PMSM), transfer function → state space, roots → polynomials; hands motor and drive kinds to `motors.rs` |
 | `crates/core/src/motors.rs` | The motor library (0.1.2): DC (sep. excited, shunt, series, compound), induction (cage, double cage, wound rotor; αβ frame, flux states), PMSM3, SynRM, wound-field synchronous with dampers, BLDC, stepper; Clarke/Park, three-phase source, inverter, PWM, encoder; typical-ratings presets from per-unit values |
+| `crates/core/src/physical.rs` | Physical parts (stage C, 0.5.1–0.6.0): `Network` (across/through nodes, rigid links merged by weighted union-find, capacitive groups as states, the rest by Newton with per-unknown convergence, diode modes settled each evaluation), `NetRt` (one block per network; feedthrough found by probing), the parts of every domain (`ports_of`, `signals_of`, `part`), `plan` and `build`. `compile.rs` `lift_physical` turns each network into a `PhysNet` flat and its parts into `PhysTap`s |
 | `crates/core/src/compile.rs` | Flatten, parameters, widths, sorting, signal layout, logged channels; the run loop; CSV; decimation; the linear model of one block for analysis |
 | `crates/core/src/solve.rs` | Euler, Heun, RK4, Dormand–Prince 5(4), Rosenbrock 2(3); the stepping loop with hits and zero-crossings; solver conformance tests |
 | `crates/core/src/measure.rs` | Value at a time (probe, cursors) and step-response marks (10–90 % rise, peak, overshoot, 2 % settling) |
@@ -149,6 +150,9 @@
 | 0.1.4 | Zero-crossings count only strict sign changes (with the last non-zero sign kept) | A signal resting at zero made endless tiny steps |
 | 0.1.4 | Release order for the bigger build: 0.1.4 discrete + motor extras, 0.1.5 scopes + probe, 0.1.6 wires, 0.2.0 masks + My blocks; buses and algebraic loops move to 0.3 | The user: "as you please" (PLAN-0.2 §7) |
 | 0.1.3 | **Publisher "Datum"** in `tauri.conf.json` (`bundle.publisher`); copyright stays "© 2026 Edgar Mendonca". Discrete control, wires and scopes move to 0.1.4, 0.1.5 and 0.1.6 | The user's family-wide change (hub FAMILY §9); a patch release takes the next number |
+| 0.5.3 | Diode modes are settled inside every evaluation (flip disagreeing diodes and re-solve, a few rounds), with continuous zero-crossing functions for the exact instants | Stepping with a stale mode dumped inductor energy through the off leakage (the buck converter read 5 % low) |
+| 0.5.6 | Network Newton: converged when every unknown's step is tiny against its own size | One tolerance from the largest unknown let 1e-4 m³/s flows stay wrong beside 1e7 Pa |
+| 0.5.6 | Cylinder chambers are internal nodes behind a port restriction (g_port) | A capacitance on a port node fights a tank's fixed pressure (singular) |
 | 0.5.1+ | Motto: "Draw a dynamic system, run it and trust the result: free, open, and no coding needed." Order C → S (scripting) → U (ease of use) → D → E → F | The user, 2026-11-15 (ROADMAP §2.6, §6) |
 | 0.5.1+ | Scripting uses the bundled Python unchanged (no matplotlib; plots go to Datum scopes), in its own process; `.m` files are read for assignments only, never run, and never named by product in public words | Keeps the installer small and the window safe; FAMILY §13 |
 | 0.5.1 | Physical parts form networks solved inside one signal block (not a general equation compiler); rigid links merged; feedthrough found by probing | Keeps every solver, linearisation, trim and live tuning working unchanged (PLAN-0.6 §3) |
@@ -204,9 +208,14 @@
 | 0.4.8 | Pick-and-place examples with both arms; compiler width hints | ✅ |
 | 0.5.0 | Stage R milestone: record 2026-11-11-robotics | ✅ |
 | 0.5.1 | Physical networks (`physical.rs`: across/through nodes, rigid links merged, Newton for the rest; one block per network) and the editor's physical ports and connections; rotational parts; gearbox example | ✅ |
-| 0.5.2–0.5.7 | Translational, electrical, thermal, motors on ports, hydraulics, examples (`docs/PLAN-0.6.md`) | 🔜 |
-| 0.6.0 | Stage C milestone | ⬜ |
-| 0.6.1–0.7.0 | Stage S, scripting (`docs/PLAN-script.md`): console, scripts and setup scripts, build from code, Python block, `.m` parameter import | ⬜ |
+| 0.5.2 | Translational parts; rack and pinion, lead screw | ✅ |
+| 0.5.3 | Electrical parts (ideal switch, ideal and smooth diode, transformer, op-amp); diode modes settled at each evaluation; Pulse/Square edge fix | ✅ |
+| 0.5.4 | Thermal parts; heat ports on resistor, switch and diode (`Prim::Res.heat`) | ✅ |
+| 0.5.5 | Physical DC motor and PMSM (`Prim::Dq`), joint flange; signal Connect no longer drops a physical wire on the same port number | ✅ |
+| 0.5.6 | Hydraulics (cylinder chambers behind a port restriction); Newton converges per unknown | ✅ |
+| 0.5.7 | Examples: hbridge, buck, motorheat, press, robotjoint | ✅ |
+| 0.6.0 | Stage C milestone: record 2026-11-15-physical | ✅ |
+| 0.6.1–0.7.0 | Stage S, scripting (`docs/PLAN-script.md`): console, scripts and setup scripts, build from code, Python block, `.m` parameter import | 🔜 |
 | 0.7.1–0.8.0 | Stage U, easy to find your way (`docs/PLAN-ease.md`, to be written) | ⬜ |
 | 0.8.x | Exchange: FMU, MAT/HDF5, Modelica | ⬜ |
 | 0.9.x | State machines, Monte Carlo, sensitivity, fitting, report builder | ⬜ |
@@ -377,6 +386,32 @@
   - the order C → S → U (ease of use, added because "navigating between the tools … is very difficult");
   - Linux and macOS later.
 - Rewrote `docs/ROADMAP.md`; wrote `docs/PLAN-script.md`; renumbered the planned features (D 0.8.x, E 0.9.x, F 0.10.x; the Python block moved into S as 0.6.4).
+
+### 2026-11-15: Session 9 continued (stage C finished, 0.5.2 → 0.6.0)
+- The user chose "option A": finish stage C overnight.
+- Released, one per step:
+  - 0.5.2 translational;
+  - 0.5.3 electrical;
+  - 0.5.4 thermal and heat ports;
+  - 0.5.5 motors on ports (`DCMachine`, `PMSMdq`, `JointFlange`);
+  - 0.5.6 hydraulics;
+  - 0.5.7 five examples;
+  - 0.6.0 the milestone.
+- The engine needed only small additions for the new domains: `Law::SoftDiode`, `Prim::OpAmp`, `Prim::Dq`, `Res.heat`, `settle()` for diodes, and per-unknown Newton convergence.
+- Bugs found and fixed (all with tests that fail on the old code):
+  - Pulse and Square lost pulses at fast edges;
+  - diodes were stepped in a stale mode;
+  - a signal Connect deleted a physical wire with the same port number (and the window showed the input as connected);
+  - Newton stopped early across scales;
+  - a spurious algebraic-loop warning, now avoided by probing feedthrough.
+- Checks:
+  - every engine test (112);
+  - 4 CLI tests and 10 Python tests;
+  - 100 UI checks;
+  - clippy and `cargo deny`;
+  - the real app ran gearbox, hbridge and press.
+- Record: `docs/verification/2026-11-15-physical.md`.
+- Release runs: 0.5.2–0.5.5 succeeded on GitHub; 0.5.6, 0.5.7 and 0.6.0 dispatched.
 
 ## 5. Known limits and next steps
 

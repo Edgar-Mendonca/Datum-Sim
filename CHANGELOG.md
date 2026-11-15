@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0 — 2026-11-15
+
+Physical parts: the fourth stage of the roadmap is done. 0.6.0 brings together 0.5.1 to 0.5.7. Draw a system as it is built, join the parts by their ports, and the app writes the equations:
+
+- **Rotational and translational mechanics:** inertias, masses, springs, dampers, friction with break-away, backlash, end stops, gears, a rack and pinion and a lead screw.
+- **Electrical circuits:** R, L, C, sources, switches, ideal diodes switching at their exact instants (or smooth ones), a transformer and an op-amp.
+- **Heat:** heat capacities, conduction, convection and radiation, and heat ports that pass a part's losses to a thermal network.
+- **Hydraulics:** pump, valves, pipes, volumes, accumulator, cylinder and relief valve.
+- **Motors on ports:** a physical DC motor and PMSM, and a joint flange for robot arms.
+- **Six examples:** a gearbox with a flexible shaft, an H-bridge motor drive, a buck converter, a motor heating up, a hydraulic press and a robot joint.
+
+New in 0.6.0: the verification record for the stage (docs/verification/2026-11-15-physical.md): what was checked against known answers, and what was not.
+
+Next on the roadmap: scripting the Datum way (0.6.1 → 0.7.0), then making the app easier to find your way around (0.7.x).
+
 ## 0.5.7 — 2026-11-15
 
 Physical parts, step 7: **five worked examples** (Model › Examples). Each one runs and meets its target in the checks:
