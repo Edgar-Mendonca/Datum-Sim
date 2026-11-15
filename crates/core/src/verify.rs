@@ -298,6 +298,79 @@ mod tests {
         }
     }
 
+    /// Translational parts (0.5.2). A mass on a spring and damper to the frame, released from a
+    /// stretch, follows the damped closed form; a hard stop without damping returns the mass at
+    /// the speed it arrived; a rack and pinion moves pinion and rack as one (J + m·r²); a lead
+    /// screw's nut travels lead·ω/2π.
+    #[test]
+    fn translational_parts() {
+        let (mm, k, c, x0) = (2.0f64, 200.0f64, 4.0f64, 0.05f64);
+        let mut m = Mk::new(2.0, "rk45");
+        m.d.m.sim.rtol = 1e-10;
+        m.d.m.sim.atol = 1e-12;
+        let ms = m.add("Mass", &[("m", "2")]);
+        let sp = m.add("TransSpring", &[("k", "200"), ("x0", "0.05")]);
+        let dm = m.add("TransDamper", &[("d", "4")]);
+        let s = m.add("PosSensor", &[("x0", "0.05")]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.link(ms, 0, sp, 0);
+        m.link(ms, 0, dm, 0);
+        m.link(s, 0, ms, 0);
+        m.wire(s, 0, sc, 0);
+        m.wire(s, 1, sc, 1);
+        let r = m.run();
+        // m ẍ + c ẋ + k x = 0, x(0) = x0, ẋ(0) = 0.
+        let wn = (k / mm).sqrt();
+        let z = c / (2.0 * (k * mm).sqrt());
+        let wd = wn * (1.0 - z * z).sqrt();
+        let x = |t: f64| x0 * (-z * wn * t).exp() * ((wd * t).cos() + z / (1.0 - z * z).sqrt() * (wd * t).sin());
+        let e = max_err(&r, 1, x);
+        assert!(e < 1e-6, "mass–spring–damper {e}");
+        // A hard stop with no damping: the mass leaves at the speed it came.
+        let mut m = Mk::new(0.5, "stiff");
+        m.d.m.sim.rtol = 1e-8;
+        let ms = m.add("Mass", &[("m", "1"), ("v0", "1")]);
+        let hs = m.add("HardStop", &[("lo", "-1"), ("hi", "0.1"), ("k", "1e5"), ("d", "0")]);
+        let s = m.add("PosSensor", &[]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.link(ms, 0, hs, 0);
+        m.link(s, 0, ms, 0);
+        m.wire(s, 0, sc, 0);
+        m.wire(s, 1, sc, 1);
+        let r = m.run();
+        let v = *r.y[0].last().unwrap();
+        assert!((v + 1.0).abs() < 1e-3, "elastic rebound {v}");
+        let xmax = r.y[1].iter().cloned().fold(f64::MIN, f64::max);
+        assert!((xmax - (0.1 + (1.0f64 / 1e5).sqrt())).abs() < 1e-4, "penetration {xmax}");
+        // With damping the rebound is slower.
+        m.d.apply(Op::SetParam { id: hs, key: "d".into(), value: "100".into() }).unwrap();
+        let r = m.run();
+        let v = *r.y[0].last().unwrap();
+        assert!(v < -0.3 && v > -0.99, "damped rebound {v}");
+        // Rack and pinion: τ on the pinion accelerates J + m r².
+        for (kind, rr, key, val) in [("RackPinion", 0.05f64, "r", "0.05"), ("LeadScrew", 0.01 / std::f64::consts::TAU, "lead", "0.01")] {
+            let mut m = Mk::new(1.0, "rk45");
+            m.d.m.sim.rtol = 1e-10;
+            let c = m.add("Constant", &[("value", "0.5")]);
+            let ts = m.add("TorqueSource", &[]);
+            let j = m.add("RotInertia", &[("J", "0.001")]);
+            let g = m.add(kind, &[(key, val), ("eta", "1")]);
+            let ms = m.add("Mass", &[("m", "3")]);
+            let s = m.add("PosSensor", &[]);
+            let sc = m.add("Scope", &[]);
+            m.wire(c, 0, ts, 0);
+            m.link(ts, 0, j, 0);
+            m.link(j, 0, g, 0);
+            m.link(g, 1, ms, 0);
+            m.link(s, 0, ms, 0);
+            m.wire(s, 0, sc, 0);
+            let r = m.run();
+            let v = *r.y[0].last().unwrap();
+            let want = rr * 0.5 / (0.001 + 3.0 * rr * rr);
+            assert!((v - want).abs() < 1e-6 * want, "{kind}: v {v} vs {want}");
+        }
+    }
+
     /// A network with no reference for a node, or fighting sources, is a clear model error.
     #[test]
     fn physical_errors() {

@@ -573,6 +573,16 @@ pub fn ports_of(kind: &str) -> Option<&'static [PortSpec]> {
         "TorqueSource" | "SpeedSource" => &[("a", Rot, false), ("b", Rot, true)],
         "RotSensor" => &[("flange", Rot, false)],
         "TorqueSensor" => &[("a", Rot, false), ("b", Rot, false)],
+        // Translational (0.5.2)
+        "Mass" => &[("flange", Trans, false)],
+        "TransSpring" | "TransDamper" | "TransFriction" => &[("a", Trans, false), ("b", Trans, true)],
+        "TransFixed" => &[("flange", Trans, false)],
+        "ForceSource" | "VelocitySource" => &[("a", Trans, false), ("b", Trans, true)],
+        "PosSensor" => &[("flange", Trans, false)],
+        "ForceSensor" => &[("a", Trans, false), ("b", Trans, false)],
+        "HardStop" => &[("flange", Trans, false)],
+        "RackPinion" => &[("pinion", Rot, false), ("rack", Trans, false)],
+        "LeadScrew" => &[("screw", Rot, false), ("nut", Trans, false)],
         _ => return None,
     })
 }
@@ -605,9 +615,9 @@ fn pos(p: &crate::rt::Pv, k: &str) -> Result<f64, String> {
 /// The signal ports of a part kind: (inputs, outputs).
 pub fn signals_of(kind: &str) -> (usize, usize) {
     match kind {
-        "TorqueSource" | "SpeedSource" => (1, 0),
-        "RotSensor" => (0, 2),
-        "TorqueSensor" => (0, 1),
+        "TorqueSource" | "SpeedSource" | "ForceSource" | "VelocitySource" => (1, 0),
+        "RotSensor" | "PosSensor" => (0, 2),
+        "TorqueSensor" | "ForceSensor" => (0, 1),
         _ => (0, 0),
     }
 }
@@ -656,6 +666,51 @@ pub fn part(kind: &str, p: &crate::rt::Pv, name: &str) -> Result<Part, String> {
         "TorqueSensor" => {
             pt.prims.push(Prim::MeasF { a: 0, b: 1, y: 0, j: 0 });
             pt.nj = 1;
+        }
+        // ---- translational: the same elements as the rotational ones, with v and F.
+        "Mass" => pt.prims.push(Prim::Cap { n: 0, c: pos(p, "m")?, init: Some(num(p, "v0")?) }),
+        "TransSpring" => {
+            let k = pos(p, "k")?;
+            pt.prims.push(Prim::Ind { a: 0, b: 1, l: 1.0 / k, x: 0 });
+            pt.xs.push(k * num(p, "x0")?);
+        }
+        "TransDamper" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Lin(num(p, "d")?), mode: 0 }),
+        "TransFriction" => {
+            let (fc, fs, ws, c) = (num(p, "Fc")?, num(p, "Fs")?, pos(p, "vs")?, num(p, "d")?);
+            if fs < fc {
+                return Err("the static (break-away) force must be at least the sliding force".into());
+            }
+            pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Friction { fc, fs, ws, c }, mode: 0 });
+        }
+        "TransFixed" => pt.links.push(Link { a: 0, b: GROUND, r: 0.0, eta: 1.0, what: name.into() }),
+        "ForceSource" => pt.prims.push(Prim::FSrc { a: 0, b: 1, u: Some(0), v: 1.0 }),
+        "VelocitySource" => {
+            pt.prims.push(Prim::ASrc { a: 0, b: 1, u: Some(0), v: 1.0, j: 0 });
+            pt.nj = 1;
+        }
+        "PosSensor" => {
+            pt.prims.push(Prim::MeasA { a: 0, b: GROUND, y: 0, x: Some(0), yx: 1 });
+            pt.xs.push(num(p, "x0")?);
+        }
+        "ForceSensor" => {
+            pt.prims.push(Prim::MeasF { a: 0, b: 1, y: 0, j: 0 });
+            pt.nj = 1;
+        }
+        "HardStop" => {
+            let (lo, hi) = (num(p, "lo")?, num(p, "hi")?);
+            if lo >= hi {
+                return Err("the lower end must be below the upper end".into());
+            }
+            pt.prims.push(Prim::Stop { a: 0, k: pos(p, "k")?, c: num(p, "d")?.max(0.0), lo, hi, x: 0 });
+            pt.xs.push(num(p, "x0")?);
+        }
+        // v = r·ω: the pinion's speed times its radius (a lead screw: lead/2π per radian).
+        "RackPinion" | "LeadScrew" => {
+            let (r, eta) = if kind == "RackPinion" { (pos(p, "r")?, num(p, "eta")?) } else { (num(p, "lead")? / std::f64::consts::TAU, num(p, "eta")?) };
+            if r == 0.0 || !(eta > 0.0 && eta <= 1.0) {
+                return Err("the radius or lead must not be 0 and the efficiency must be in (0, 1]".into());
+            }
+            pt.links.push(Link { a: 0, b: 1, r: 1.0 / r, eta, what: name.into() });
         }
         k => return Err(format!("'{k}' is not a physical part")),
     }

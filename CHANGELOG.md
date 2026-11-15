@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.2 — 2026-11-15
+
+Physical parts, step 2: **translational mechanics**.
+
+- **New parts** (Library › Translational): mass, spring, damper, friction with break-away (stick–slip), **hard stop** (end stops with contact stiffness and damping), fixed point, force and velocity sources driven by a signal, and force, velocity and position sensors.
+- **Between rotation and translation:** a **rack and pinion** and a **lead screw**, with efficiency. A pinion's inertia and the rack's mass move as one.
+- Checked: a mass on a spring and damper against the exact damped response; an end stop without damping returns the mass at the speed it arrived; a rack and pinion and a lead screw against J + m·r².
+
+Next: electrical parts (0.5.3).
+
 ## 0.5.1 — 2026-11-11
 
 Physical parts begin: draw a machine as it is built, and the app writes the equations.
