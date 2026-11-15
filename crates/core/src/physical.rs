@@ -55,6 +55,8 @@ pub enum Law {
     Valve { k: f64, d: f64, u: usize },
     /// A relief valve: opens linearly above the set difference.
     Relief { pset: f64, g: f64 },
+    /// A smooth diode: f = (s/ron)·ln(1 + e^{(Δe − vf)/s}) + goff·Δe (no switching events).
+    SoftDiode { ron: f64, goff: f64, vf: f64, s: f64 },
 }
 
 /// The primitive elements a part is made of. Nodes are network node indices (or GROUND).
@@ -86,6 +88,9 @@ pub enum Prim {
     Stop { a: usize, k: f64, c: f64, lo: f64, hi: f64, x: usize },
     /// Integrates a node's potential (a position from a velocity) for parts that need it.
     Pos { a: usize, x: usize, x0: f64 },
+    /// An operational amplifier: no input current; the output (to ground) is
+    /// vsat·tanh(gain·(e_p − e_m)/vsat), supplied by the flow j.
+    OpAmp { p: usize, m: usize, o: usize, gain: f64, vsat: f64, j: usize },
 }
 
 /// A rigid link: e_a = r·e_b (with efficiency η weighting a's contribution when merged).
@@ -311,6 +316,10 @@ impl Network {
                     add(*a, v);
                     add(*b, -v);
                 }
+                Prim::OpAmp { p, m, o, gain, vsat, j: ji } => {
+                    add(*o, j[*ji]);
+                    r[*ji] = de(e, *o, GROUND) - vsat * (gain * de(e, *p, *m) / vsat).tanh();
+                }
                 Prim::Stop { a, k, c, lo, hi, x: xi } => {
                     let xx = x[*xi];
                     let v = if xx > *hi { k * (xx - hi) + c * de(e, *a, GROUND).max(0.0) } else if xx < *lo { k * (xx - lo) + c * de(e, *a, GROUND).min(0.0) } else { 0.0 };
@@ -407,9 +416,37 @@ impl Network {
         Ok(())
     }
 
+    /// Solve with diode modes that agree with the solution: on while current flows forward, off
+    /// while the voltage stays below Vf. Starting from the modes kept at the last step, each
+    /// disagreeing diode flips and the network is solved again (a few rounds at most), so no
+    /// evaluation runs with a diode in the wrong state.
+    fn settle(&self, t: f64, x: &[f64], u: &[f64]) -> (Sol, Vec<bool>) {
+        let mut modes = self.modes.clone();
+        let ds = self.diodes();
+        let mut s = self.solve(t, x, u, &modes);
+        for _ in 0..(2 * ds.len() + 2) {
+            let mut changed = false;
+            for (m, p) in &ds {
+                if let Prim::Res { a, b, law: Law::Diode { ron, vf, .. }, .. } = p {
+                    let d = de(&s.e, *a, *b);
+                    let on = if modes[*m] { (d - vf) / ron >= 0.0 } else { d > *vf };
+                    if on != modes[*m] {
+                        modes[*m] = on;
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+            s = self.solve(t, x, u, &modes);
+        }
+        (s, modes)
+    }
+
     /// Derivatives and outputs.
     pub fn eval(&self, t: f64, x: &[f64], u: &[f64], dx: Option<&mut [f64]>, y: Option<&mut [f64]>) {
-        let s = self.solve(t, x, u, &self.modes);
+        let (s, modes) = self.settle(t, x, u);
         let z: Vec<f64> = {
             let mut z = vec![0.0; self.nz];
             for g in 0..self.gcap.len() {
@@ -421,7 +458,7 @@ impl Network {
             z.extend(&s.j);
             z
         };
-        let (_, sg, e) = self.residual(t, x, &z, u, &self.modes);
+        let (_, sg, e) = self.residual(t, x, &z, u, &modes);
         if let Some(dx) = dx {
             dx.fill(0.0);
             if !s.ok {
@@ -482,6 +519,11 @@ fn res_flow(law: &Law, d: f64, e: &[f64], a: usize, b: usize, u: &[f64], on: boo
         Law::Switch { ron, goff, u: ui } => if u[*ui] >= 0.5 { d / ron } else { goff * d },
         Law::Valve { k, d: dd, u: ui } => k * u[*ui].clamp(0.0, 1.0) * d / (d.abs() + dd).sqrt(),
         Law::Relief { pset, g } => if d > *pset { g * (d - pset) } else { 0.0 },
+        Law::SoftDiode { ron, goff, vf, s } => {
+            let z = (d - vf) / s;
+            let sp = if z > 30.0 { z } else { z.exp().ln_1p() };
+            s / ron * sp + goff * d
+        }
     }
 }
 
@@ -517,7 +559,7 @@ impl Rt for NetRt {
         self.net.eval(c.t, x, u, Some(dx), None);
     }
     fn update(&mut self, c: &Ctx, x: &mut [f64], u: &[f64]) {
-        let s = self.net.solve(c.t, x, u, &self.net.modes);
+        let (s, modes) = self.net.settle(c.t, x, u);
         if s.ok {
             let mut z = vec![0.0; self.net.nz];
             for g in 0..self.net.gcap.len() {
@@ -529,25 +571,20 @@ impl Rt for NetRt {
             z.extend(&s.j);
             self.net.z0 = z;
         }
-        // Diode modes: on while current flows forward, off while the voltage stays below Vf.
-        let ds: Vec<(usize, Prim)> = self.net.diodes().into_iter().map(|(m, p)| (m, p.clone())).collect();
-        for (m, p) in ds {
-            if let Prim::Res { a, b, law: Law::Diode { ron, vf, .. }, .. } = p {
-                let d = de(&s.e, a, b);
-                let on = self.net.modes[m];
-                self.net.modes[m] = if on { (d - vf) / ron > 0.0 } else { d > vf };
-            }
-        }
+        // The diode modes that agree with this step's solution are kept for the next one.
+        self.net.modes = modes;
     }
     fn nzc(&self) -> usize {
         self.net.diodes().len()
     }
     fn zc(&self, c: &Ctx, x: &[f64], u: &[f64], z: &mut [f64]) {
-        let s = self.net.solve(c.t, x, u, &self.net.modes);
+        // Continuous through each switching instant: the forward current while on, the voltage
+        // below Vf while off; both reach zero where the diode switches.
+        let (s, modes) = self.net.settle(c.t, x, u);
         for (k, (m, p)) in self.net.diodes().into_iter().enumerate() {
             if let Prim::Res { a, b, law: Law::Diode { ron, vf, .. }, .. } = p {
                 let d = de(&s.e, *a, *b);
-                z[k] = if self.net.modes[m] { (d - vf) / ron } else { d - vf };
+                z[k] = if modes[m] { (d - vf) / ron } else { d - vf };
             }
         }
     }
@@ -583,6 +620,12 @@ pub fn ports_of(kind: &str) -> Option<&'static [PortSpec]> {
         "HardStop" => &[("flange", Trans, false)],
         "RackPinion" => &[("pinion", Rot, false), ("rack", Trans, false)],
         "LeadScrew" => &[("screw", Rot, false), ("nut", Trans, false)],
+        // Electrical (0.5.3)
+        "Resistor" | "Capacitor" | "Inductor" | "DCVoltage" | "DCCurrent" | "VoltageSource" | "CurrentSource" | "IdealSwitch" | "VoltageSensor" | "CurrentSensor" => &[("p", Elec, false), ("n", Elec, false)],
+        "Diode" => &[("anode", Elec, false), ("cathode", Elec, false)],
+        "Ground" => &[("p", Elec, false)],
+        "Transformer" => &[("p1", Elec, false), ("n1", Elec, false), ("p2", Elec, false), ("n2", Elec, false)],
+        "OpAmp" => &[("in+", Elec, false), ("in−", Elec, false), ("out", Elec, false)],
         _ => return None,
     })
 }
@@ -615,9 +658,9 @@ fn pos(p: &crate::rt::Pv, k: &str) -> Result<f64, String> {
 /// The signal ports of a part kind: (inputs, outputs).
 pub fn signals_of(kind: &str) -> (usize, usize) {
     match kind {
-        "TorqueSource" | "SpeedSource" | "ForceSource" | "VelocitySource" => (1, 0),
+        "TorqueSource" | "SpeedSource" | "ForceSource" | "VelocitySource" | "VoltageSource" | "CurrentSource" | "IdealSwitch" => (1, 0),
         "RotSensor" | "PosSensor" => (0, 2),
-        "TorqueSensor" | "ForceSensor" => (0, 1),
+        "TorqueSensor" | "ForceSensor" | "VoltageSensor" | "CurrentSensor" => (0, 1),
         _ => (0, 0),
     }
 }
@@ -711,6 +754,57 @@ pub fn part(kind: &str, p: &crate::rt::Pv, name: &str) -> Result<Part, String> {
                 return Err("the radius or lead must not be 0 and the efficiency must be in (0, 1]".into());
             }
             pt.links.push(Link { a: 0, b: 1, r: 1.0 / r, eta, what: name.into() });
+        }
+        // ---- electrical: voltage V and current i.
+        "Resistor" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Lin(1.0 / pos(p, "R")?), mode: 0 }),
+        "Capacitor" => {
+            pt.prims.push(Prim::CapF { a: 0, b: 1, c: pos(p, "C")?, x: 0, j: 0 });
+            pt.xs.push(num(p, "v0")?);
+            pt.nj = 1;
+        }
+        "Inductor" => {
+            pt.prims.push(Prim::Ind { a: 0, b: 1, l: pos(p, "L")?, x: 0 });
+            pt.xs.push(num(p, "i0")?);
+        }
+        "Ground" => pt.links.push(Link { a: 0, b: GROUND, r: 0.0, eta: 1.0, what: name.into() }),
+        "DCVoltage" => {
+            pt.prims.push(Prim::ASrc { a: 0, b: 1, u: None, v: num(p, "V")?, j: 0 });
+            pt.nj = 1;
+        }
+        "VoltageSource" => {
+            pt.prims.push(Prim::ASrc { a: 0, b: 1, u: Some(0), v: 1.0, j: 0 });
+            pt.nj = 1;
+        }
+        // A current source drives its current from n to p through itself (out of p).
+        "DCCurrent" => pt.prims.push(Prim::FSrc { a: 0, b: 1, u: None, v: num(p, "I")? }),
+        "CurrentSource" => pt.prims.push(Prim::FSrc { a: 0, b: 1, u: Some(0), v: 1.0 }),
+        "IdealSwitch" => pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Switch { ron: pos(p, "Ron")?, goff: num(p, "Goff")?.max(0.0), u: 0 }, mode: 0 }),
+        "Diode" => {
+            let (ron, goff, vf) = (pos(p, "Ron")?, num(p, "Goff")?.max(0.0), num(p, "Vf")?);
+            if p.txt("model") == "smooth" {
+                pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::SoftDiode { ron, goff, vf, s: pos(p, "s")? }, mode: 0 });
+            } else {
+                pt.prims.push(Prim::Res { a: 0, b: 1, law: Law::Diode { ron, goff, vf }, mode: 0 });
+                pt.nmodes = 1;
+            }
+        }
+        // (v1) = n·(v2); the currents in the ratio 1/n.
+        "Transformer" => {
+            let n = num(p, "n")?;
+            if n == 0.0 {
+                return Err("the turns ratio must not be 0".into());
+            }
+            pt.prims.push(Prim::Tdx { a: 0, b: 1, c: 2, d: 3, k: n, j: 0 });
+            pt.nj = 1;
+        }
+        "OpAmp" => {
+            pt.prims.push(Prim::OpAmp { p: 0, m: 1, o: 2, gain: pos(p, "A")?, vsat: pos(p, "Vsat")?, j: 0 });
+            pt.nj = 1;
+        }
+        "VoltageSensor" => pt.prims.push(Prim::MeasA { a: 0, b: 1, y: 0, x: None, yx: 0 }),
+        "CurrentSensor" => {
+            pt.prims.push(Prim::MeasF { a: 0, b: 1, y: 0, j: 0 });
+            pt.nj = 1;
         }
         k => return Err(format!("'{k}' is not a physical part")),
     }
@@ -843,6 +937,7 @@ pub fn build(plan: &Plan, kinds: &[&str], names: &[&str], pvs: &[&crate::rt::Pv]
                 Prim::MeasF { a, b, y, j } => { *a = map(*a); *b = map(*b); *y += ny; *j += nj; }
                 Prim::Lash { a, b, x, .. } => { *a = map(*a); *b = map(*b); *x += nx; }
                 Prim::Stop { a, x, .. } | Prim::Pos { a, x, .. } => { *a = map(*a); *x += nx; }
+                Prim::OpAmp { p, m, o, j, .. } => { *p = map(*p); *m = map(*m); *o = map(*o); *j += nj; }
             }
             prims.push(p);
         }

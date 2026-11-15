@@ -324,9 +324,15 @@ impl Rt for Periodic {
     fn out(&self, c: &Ctx, _: &[f64], _: &[f64], y: &mut [f64]) {
         // The square wave jumps: inside a step it uses the step's start time, as Pulse does.
         let t = if matches!(self.wave, Wave::Square { .. }) { c.tq() } else { c.t };
-        let ph = t.rem_euclid(self.per);
+        let mut ph = t.rem_euclid(self.per);
+        // Snapped at the period's end, as in Pulse: an edge reached a rounding error early must
+        // not hold the old level through the next step.
+        let eps = 1e-9 * self.per;
+        if self.per - ph < eps {
+            ph = 0.0;
+        }
         y[0] = match &self.wave {
-            Wave::Square { duty } => self.bias + if ph < duty * self.per { self.amp } else { -self.amp },
+            Wave::Square { duty } => self.bias + if ph < duty * self.per - eps { self.amp } else { -self.amp },
             Wave::Triangle => {
                 let f = ph / self.per;
                 let tri = if f < 0.25 { 4.0 * f } else if f < 0.75 { 2.0 - 4.0 * f } else { 4.0 * f - 4.0 };

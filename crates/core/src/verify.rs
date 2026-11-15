@@ -371,6 +371,199 @@ mod tests {
         }
     }
 
+    /// Electrical parts (0.5.3): RC and RLC step responses against their closed forms; a
+    /// half-wave rectifier whose ideal diode switches at the exact instants; a buck converter's
+    /// average output D·V_in; an ideal transformer's ratios; an inverting op-amp amplifier.
+    #[test]
+    fn electrical_parts() {
+        // RC: 10 V through 1 kΩ into 1 µF.
+        let mut m = Mk::new(0.005, "rk45");
+        m.d.m.sim.rtol = 1e-10;
+        m.d.m.sim.atol = 1e-12;
+        let v = m.add("DCVoltage", &[("V", "10")]);
+        let r = m.add("Resistor", &[("R", "1000")]);
+        let c = m.add("Capacitor", &[("C", "1e-6")]);
+        let g = m.add("Ground", &[]);
+        let vs = m.add("VoltageSensor", &[]);
+        let sc = m.add("Scope", &[]);
+        m.link(v, 0, r, 0);
+        m.link(r, 1, c, 0);
+        m.link(c, 1, g, 0);
+        m.link(v, 1, g, 0);
+        m.link(vs, 0, c, 0);
+        m.link(vs, 1, g, 0);
+        m.wire(vs, 0, sc, 0);
+        let res = m.run();
+        let e = max_err(&res, 0, |t| 10.0 * (1.0 - (-t / 1e-3).exp()));
+        assert!(e < 1e-6, "RC {e}");
+        // Series RLC to a 1 V step: i = V/(L ωd)·e^{−αt}·sin(ωd t).
+        let mut m = Mk::new(0.05, "rk45");
+        m.d.m.sim.rtol = 1e-10;
+        m.d.m.sim.atol = 1e-12;
+        let v = m.add("DCVoltage", &[("V", "1")]);
+        let r = m.add("Resistor", &[("R", "10")]);
+        let l = m.add("Inductor", &[("L", "0.1")]);
+        let c = m.add("Capacitor", &[("C", "1e-4")]);
+        let a = m.add("CurrentSensor", &[]);
+        let g = m.add("Ground", &[]);
+        let sc = m.add("Scope", &[]);
+        m.link(v, 0, a, 0);
+        m.link(a, 1, r, 0);
+        m.link(r, 1, l, 0);
+        m.link(l, 1, c, 0);
+        m.link(c, 1, g, 0);
+        m.link(v, 1, g, 0);
+        m.wire(a, 0, sc, 0);
+        let res = m.run();
+        let (al, w0) = (10.0 / 0.2, 1.0 / (0.1f64 * 1e-4).sqrt());
+        let wd = (w0 * w0 - al * al).sqrt();
+        let e = max_err(&res, 0, |t| 1.0 / (0.1 * wd) * (-al * t).exp() * (wd * t).sin());
+        assert!(e < 1e-6, "RLC {e}");
+        // Half-wave rectifier: 10 V, 50 Hz through an ideal diode (Vf 0.7 V) into 100 Ω.
+        let mut m = Mk::new(0.02, "rk45");
+        m.d.m.sim.rtol = 1e-9;
+        m.d.m.sim.atol = 1e-12;
+        let s = m.add("Sine", &[("amp", "10"), ("freq", "50")]);
+        let v = m.add("VoltageSource", &[]);
+        let dd = m.add("Diode", &[("Vf", "0.7")]);
+        let r = m.add("Resistor", &[("R", "100")]);
+        let g = m.add("Ground", &[]);
+        let vs = m.add("VoltageSensor", &[]);
+        let sc = m.add("Scope", &[]);
+        m.wire(s, 0, v, 0);
+        m.link(v, 0, dd, 0);
+        m.link(dd, 1, r, 0);
+        m.link(r, 1, g, 0);
+        m.link(v, 1, g, 0);
+        m.link(vs, 0, r, 0);
+        m.link(vs, 1, g, 0);
+        m.wire(vs, 0, sc, 0);
+        let res = m.run();
+        let w = std::f64::consts::TAU * 50.0;
+        let want = |t: f64| ((10.0 * (w * t).sin() - 0.7) * 100.0 / (100.0 + 1e-3)).max(0.0);
+        let e = max_err(&res, 0, want);
+        assert!(e < 1e-4, "half-wave {e}");
+        // The diode turns on at sin(ωt) = 0.07 and off at the mirror instant, exactly: the run
+        // has a time point at each.
+        let (ton, toff) = ((0.07f64).asin() / w, (std::f64::consts::PI - (0.07f64).asin()) / w);
+        for tk in [ton, toff] {
+            let near = res.t.iter().map(|t| (t - tk).abs()).fold(f64::MAX, f64::min);
+            assert!(near < 1e-9, "switching instant {tk}: nearest point {near}");
+        }
+        // Buck converter: 24 V, 10 kHz, duty 50 %, L 1 mH, C 100 µF, 10 Ω → about 12 V.
+        // (Stiff solver: with the switch and the diode both off, the inductor sees only their
+        // leakage, a time constant of nanoseconds.)
+        let mut m = Mk::new(0.03, "stiff");
+        m.d.m.sim.rtol = 1e-6;
+        m.d.m.sim.atol = 1e-9;
+        let vin = m.add("DCVoltage", &[("V", "24")]);
+        let pu = m.add("Pulse", &[("period", "1e-4"), ("width", "50")]);
+        let sw = m.add("IdealSwitch", &[]);
+        let dd = m.add("Diode", &[("Vf", "0")]);
+        let l = m.add("Inductor", &[("L", "1e-3")]);
+        let c = m.add("Capacitor", &[("C", "1e-4")]);
+        let r = m.add("Resistor", &[("R", "10")]);
+        let g = m.add("Ground", &[]);
+        let vs = m.add("VoltageSensor", &[]);
+        let sc = m.add("Scope", &[]);
+        m.wire(pu, 0, sw, 0);
+        m.link(vin, 0, sw, 0);
+        m.link(sw, 1, l, 0);
+        m.link(dd, 1, sw, 1);
+        m.link(dd, 0, g, 0);
+        m.link(l, 1, c, 0);
+        m.link(c, 0, r, 0);
+        m.link(c, 1, g, 0);
+        m.link(r, 1, g, 0);
+        m.link(vin, 1, g, 0);
+        m.link(vs, 0, c, 0);
+        m.link(vs, 1, g, 0);
+        m.wire(vs, 0, sc, 0);
+        let res = m.run();
+        // The mean over the last 5 ms (50 periods), by the trapezoidal rule.
+        let (mut area, mut span) = (0.0, 0.0);
+        for i in 1..res.t.len() {
+            if res.t[i - 1] >= 0.025 {
+                let dt = res.t[i] - res.t[i - 1];
+                area += 0.5 * (res.y[0][i] + res.y[0][i - 1]) * dt;
+                span += dt;
+            }
+        }
+        let mean = area / span;
+        assert!((mean - 12.0).abs() < 0.01, "buck mean {mean}");
+        // Ideal transformer, n = 10: 100 V on the primary, 10 Ω on the secondary.
+        let mut m = Mk::new(0.01, "rk45");
+        let v = m.add("DCVoltage", &[("V", "100")]);
+        let tr = m.add("Transformer", &[("n", "10")]);
+        let r = m.add("Resistor", &[("R", "10")]);
+        let a1 = m.add("CurrentSensor", &[]);
+        let vs = m.add("VoltageSensor", &[]);
+        let g1 = m.add("Ground", &[]);
+        let g2 = m.add("Ground", &[]);
+        let sc = m.add("Scope", &[("n", "2")]);
+        m.link(v, 0, a1, 0);
+        m.link(a1, 1, tr, 0);
+        m.link(tr, 1, g1, 0);
+        m.link(v, 1, g1, 0);
+        m.link(tr, 2, r, 0);
+        m.link(r, 1, g2, 0);
+        m.link(tr, 3, g2, 0);
+        m.link(vs, 0, r, 0);
+        m.link(vs, 1, g2, 0);
+        m.wire(vs, 0, sc, 0);
+        m.wire(a1, 0, sc, 1);
+        let res = m.run();
+        assert!((last(&res, 0) - 10.0).abs() < 1e-9 && (last(&res, 1) - 0.1).abs() < 1e-9, "transformer {} V, {} A", last(&res, 0), last(&res, 1));
+        // Inverting amplifier: 1 V, Rin 1 kΩ, Rf 10 kΩ → −10·A/(A + 11).
+        let mut m = Mk::new(0.01, "rk45");
+        let v = m.add("DCVoltage", &[("V", "1")]);
+        let ri = m.add("Resistor", &[("R", "1000")]);
+        let rf = m.add("Resistor", &[("R", "10000")]);
+        let op = m.add("OpAmp", &[]);
+        let g = m.add("Ground", &[]);
+        let vs = m.add("VoltageSensor", &[]);
+        let sc = m.add("Scope", &[]);
+        m.link(v, 0, ri, 0);
+        m.link(ri, 1, op, 1);
+        m.link(rf, 0, op, 1);
+        m.link(rf, 1, op, 2);
+        m.link(op, 0, g, 0);
+        m.link(v, 1, g, 0);
+        m.link(vs, 0, op, 2);
+        m.link(vs, 1, g, 0);
+        m.wire(vs, 0, sc, 0);
+        let res = m.run();
+        // out = Vsat·tanh(A·(0 − v−)/Vsat), v− = (Rf·1 + Rin·out)/(Rin + Rf): solved by Newton.
+        let f = |o: f64| o - 15.0 * (1e5 * -((1e4 + 1e3 * o) / 1.1e4) / 15.0).tanh();
+        let mut want = -10.0;
+        for _ in 0..50 {
+            let d = (f(want + 1e-9) - f(want - 1e-9)) / 2e-9;
+            want -= f(want) / d;
+        }
+        assert!((want + 10.0).abs() < 2e-3, "close to the ideal gain −10");
+        assert!((last(&res, 0) - want).abs() < 1e-6, "op-amp {} vs {want}", last(&res, 0));
+    }
+
+
+    /// Pulse and square-wave edges at a high frequency with a variable-step solver (0.5.3 bug:
+    /// an edge reached a rounding error early held the old level through the next step, and a
+    /// 10 kHz pulse train lost about one pulse in three). The mean of a 50 % pulse over 300
+    /// periods is 0.5, and of a ±1 square wave 0.
+    #[test]
+    fn fast_pulse_edges() {
+        for (kind, params, want) in [("Pulse", vec![("period", "1e-4"), ("width", "50")], 0.5), ("Square", vec![("freq", "1e4")], 0.0)] {
+            let mut m = Mk::new(0.03, "rk45");
+            let p = m.add(kind, &params);
+            let i = m.add("Integrator", &[]);
+            let sc = m.add("Scope", &[]);
+            m.wire(p, 0, i, 0);
+            m.wire(i, 0, sc, 0);
+            let r = m.run();
+            let mean = last(&r, 0) / 0.03;
+            assert!((mean - want).abs() < 1e-6, "{kind}: mean {mean}");
+        }
+    }
+
     /// A network with no reference for a node, or fighting sources, is a clear model error.
     #[test]
     fn physical_errors() {

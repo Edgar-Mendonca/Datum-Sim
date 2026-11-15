@@ -250,7 +250,15 @@ struct Pulse {
 impl Rt for Pulse {
     fn out(&self, c: &Ctx, _: &[f64], _: &[f64], y: &mut [f64]) {
         let t = c.tq() - self.delay;
-        y[0] = if t >= 0.0 && t.rem_euclid(self.per) < self.on { self.a } else { 0.0 };
+        // The phase within the period, snapped at the edges: an edge time computed by
+        // next_hit can land a rounding error before the edge, and the value holds through the
+        // next step, so a missed rising edge would lose a whole pulse.
+        let eps = 1e-9 * self.per;
+        let mut r = t.rem_euclid(self.per);
+        if self.per - r < eps {
+            r = 0.0;
+        }
+        y[0] = if t >= -eps && r < self.on - eps { self.a } else { 0.0 };
     }
     fn feed(&self) -> bool {
         false

@@ -93,6 +93,8 @@ const check = (name, ok, info = "") => { console.log(`${ok ? "ok  " : "FAIL"} ${
   check("library lists categories with planned blocks dimmed", (await p.$$(".libc")).length >= 8 && (await p.$$(".libi.off")).length >= 3);
   // 0.5.2: the translational parts are in the library, ready to use (not dimmed).
   check("the library has the translational parts", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("Translational") && t.includes("Rack and pinion") && t.includes("Hard stop"); }) && fix.library.blocks.filter(b => b.cat === "Translational" && !b.planned).length === 12);
+  // 0.5.3: the electrical parts.
+  check("the library has the electrical parts", await p.evaluate(() => { const t = document.querySelector(".lib").textContent; return t.includes("Electrical") && t.includes("Diode") && t.includes("Op-amp") && t.includes("Ideal transformer"); }) && fix.library.blocks.filter(b => b.cat === "Electrical" && !b.planned).length === 14);
 
   // 2b. Dragging a block from the library onto the diagram adds it there (0.1.0 bug on Windows: HTML drag and drop never reached the diagram).
   const libItem = await p.$('.libi:has-text("Gain")');

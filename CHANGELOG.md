@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.3 — 2026-11-15
+
+Physical parts, step 3: **electrical circuits**.
+
+- **New parts** (Library › Electrical):
+  - resistor, capacitor, inductor and ground;
+  - DC voltage and current sources, and sources driven by a signal;
+  - a **switch** driven by a signal (from a pulse or PWM block);
+  - a **diode**: ideal, switching at the exact instants, or smooth, with no switching events;
+  - an **ideal transformer**, an **op-amp** (with output limits, so it also works as a comparator), and voltage and current sensors.
+- A diode is never solved in the wrong state: each evaluation settles every diode to on (forward current) or off (below its forward voltage).
+- Checked against known answers:
+  - RC and RLC step responses (exact);
+  - a half-wave rectifier, with the diode switching at the exact instants;
+  - a buck converter's average output, D·V_in, to within 0.01 V;
+  - a transformer's voltage and current ratios;
+  - an inverting amplifier.
+
+**Fixed:** the Pulse and Square wave blocks could lose a pulse at a fast edge with a variable-step solver. A 10 kHz pulse train averaged 0.435 instead of 0.5; it now gives 0.5 exactly. A test checks it.
+
+Next: thermal parts and heat ports (0.5.4).
+
 ## 0.5.2 — 2026-11-15
 
 Physical parts, step 2: **translational mechanics**.
